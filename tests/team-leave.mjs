@@ -62,6 +62,13 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const SCRATCH = path.join(ROOT, "scratch", "team-leave");
 const nodeRequire = createRequire(import.meta.url);
+/* THE PROJECTS FOLDER'S HOLD IS THE STUDIO'S OWN PRESENCE, NOT A WRITE BY A VERB. A Studio takes a hold file in a projects folder that can be
+   shared (src/root-hold.cjs), and a folder on a disk other than the system's is taken as one: a checkout on D: with the system on C:, as a
+   hosted Windows runner has it, holds every scratch projects folder, where a desk's checkout on its system disk holds none. So a snapshot
+   that judges "nothing written" leaves the hold file out (its probe, lock and temporary names included), and a shell a leg is done with
+   quits as Studio quits, letting the hold go, so that the next shell in this one process is not refused as another copy of Studio. */
+const HOLD_NAME = nodeRequire("../src/root-hold.cjs").HOLD_FILE;
+const isHoldPath = (rel) => String(rel).split("/").some((n) => n === HOLD_NAME || n.startsWith(HOLD_NAME + "."));
 const NL = "\n";
 const PASS = "harbour-lamp-passphrase";
 const ONLY = process.env.TEAM_LEAVE_ONLY || "";
@@ -202,7 +209,7 @@ async function relayWorld(tag, o) {
 async function loadShell(ud, thread, more) {
   const Module = nodeRequire("node:module");
   const main = path.join(ROOT, "shell", "main.js"), ui = path.join(ROOT, "ui", "index.html");
-  const got = { handlers: {}, windows: [] };
+  const got = { handlers: {}, windows: [], appOn: {} };
   class Win {
     constructor() { this.webContents = { id: 1, on() {}, once() {}, send() {}, setWindowOpenHandler() {}, getURL: () => pathToFileURL(ui).href }; got.windows.push(this); }
     on() {} once() {} isDestroyed() { return false; } isMaximized() { return false; } isMinimized() { return false; }
@@ -210,7 +217,8 @@ async function loadShell(ud, thread, more) {
   }
   const electron = {
     app: { commandLine: { appendSwitch() {}, hasSwitch: () => false, removeSwitch() {} }, getPath: () => ud, getVersion: () => "0.0.0",
-      getLocale: () => "en-GB", requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), on() {}, quit() {}, exit() {} },
+      getLocale: () => "en-GB", requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(),
+      on: (t, fn) => { (got.appOn[t] = got.appOn[t] || []).push(fn); }, quit() {}, exit() {} },
     BrowserWindow: Object.assign(Win, { fromWebContents: () => got.windows[0] || null, getAllWindows: () => got.windows }),
     Menu: { setApplicationMenu() {}, buildFromTemplate: () => ({ popup() {} }) },
     dialog: { showMessageBox: () => Promise.resolve({ response: 0 }), showOpenDialog: () => Promise.resolve({ canceled: true, filePaths: [] }),
@@ -250,7 +258,16 @@ async function loadShell(ud, thread, more) {
     const shell = nodeRequire(main);
     const event = { senderFrame: { parent: null, url: pathToFileURL(ui).href }, sender: got.windows[0] && got.windows[0].webContents };
     return { shell, ask: async (ch, ...a) => { const fn = got.handlers[ch]; if (!fn) throw new Error("no handler for " + ch); return fn(event, ...a); },
-      done: async () => { try { if (shell.endRelay) await Promise.race([shell.endRelay(), new Promise((r) => setTimeout(r, 3000))]); } catch { /* exit stops it */ } restore(); } };
+      /* Done is Studio's quit: its will-quit handlers let the projects folder's hold go and end the relay (was: endRelay alone, which left
+         the hold taken, so on a runner's D: the next shell met "Another copy of Etiuda Studio" in 962s6b). */
+      done: async () => {
+        const quits = got.appOn["will-quit"] || [];
+        try {
+          if (quits.length) { for (const fn of quits) await Promise.race([Promise.resolve().then(fn), new Promise((r) => setTimeout(r, 3000))]); }
+          else if (shell.endRelay) await Promise.race([shell.endRelay(), new Promise((r) => setTimeout(r, 3000))]);
+        } catch { /* exit stops it */ }
+        restore();
+      } };
   } catch (err) { restore(); throw err; }
 }
 const studioThread = (verb, ...a) => { if (typeof Studio[verb] === "function") return Studio[verb](...a); throw new Error("no verb " + verb); };
@@ -610,7 +627,7 @@ const lookAt = (w, s, skip) => {
   const all = JSON.parse(snap({ ud: w.ud, old: path.dirname(path.dirname(s.old)) }));
   /* The licence record (licence-service.json) is the shell's own, kept as soon as it has seen the licence file (the seen record, a
      coalescing chain since fold 97, no longer a 2 s delay that outlived these legs); a team's let-go never writes it. */
-  for (const k of Object.keys(all)) if ((skip && skip.test(k)) || /licence-service\.json$/.test(k)) delete all[k];
+  for (const k of Object.keys(all)) if ((skip && skip.test(k)) || /licence-service\.json$/.test(k) || isHoldPath(k)) delete all[k];
   return JSON.stringify(all);
 };
 const noMark = (p) => { const q = Object.assign({}, p); delete q.sealedTeam; delete q.relay; return q; };

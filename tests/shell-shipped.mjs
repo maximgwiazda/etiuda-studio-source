@@ -12,8 +12,6 @@ export const SHELL_SHIPPED = [
   { file: "engine/pinned/shell/win-proxy.cjs", reader: "shell/main.js", reads: 'require("../engine/pinned/shell/win-proxy.cjs")' },
   { file: "engine/pinned/shell/tray.cjs", reader: "shell/main.js", reads: 'require("../engine/pinned/shell/tray.cjs")' },
   { file: "engine/pinned/shell/proxy-net.cjs", reader: "src/wire.cjs", reads: 'require("../engine/pinned/shell/proxy-net.cjs")' },
-  { file: "engine/pinned/shell/folder/syncer.cjs", reader: "src/engine.mjs", reads: 'require(at("shell", "folder", "syncer.cjs"))' },
-  { file: "engine/pinned/shell/folder/syncer-worker.cjs", reader: "src/engine.mjs", reads: 'worker: at("shell", "folder", "syncer-worker.cjs")' },
   { file: "engine/pinned/shell/relay/channel.cjs", reader: "src/engine.mjs", reads: 'at("shell", "relay", "channel.cjs")' },
   { file: "engine/pinned/shell/relay/blob.cjs", reader: "src/engine.mjs", reads: 'at("shell", "relay", "blob.cjs")' },
   { file: "engine/pinned/shell/policy/etiuda.admx", reader: "src/engine.mjs", reads: 'at("shell", "policy", "etiuda.admx")' },

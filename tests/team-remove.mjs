@@ -499,6 +499,9 @@ async function main() {
       const mid = { epoch: fs.existsSync(at) ? readJson(at).epoch : null, oldOpens: openAt(at, key1) != null,
         team: readJson(path.join(SHARE, "etiuda-team.json")).epoch };
       const published = fs.readdirSync(SHARE).filter((n) => /\.ec$/i.test(n)).sort().join();
+      /* A pass that holds another key at number 1 (one set aside, say) cannot open that edition: it is owed, never skipped as done. */
+      const wrong = typeof S.resealBehind === "function"
+        ? await S.resealBehind(SHARE, keyAt, { teamKeys: { [TEAM]: { 1: crypto.randomBytes(32), 2: nextKey } } }) : null;
       const pass = await resealPass(SHARE);
       const after = newestFour.map((n) => ({ n, epoch: readJson(path.join(SHARE, n)).epoch,
         newOnly: openAt(path.join(SHARE, n), nextKey) != null && openAt(path.join(SHARE, n), key1) == null }));
@@ -510,9 +513,10 @@ async function main() {
         olderStays: readJson(path.join(SHARE, "north-lamp-old.ec")).epoch === 1
           && openAt(path.join(SHARE, "north-lamp-old.ec"), key1) === JSON.stringify(lampOld),
         answered: !!pass && Array.isArray(pass.resealed) && pass.resealed.indexOf(first) >= 0,
+        unopenedOwed: !!wrong && wrong.owed === true && Array.isArray(wrong.resealed) && wrong.resealed.indexOf(first) < 0,
       };
       const ok = Object.keys(f).every((k) => f[k] === true);
-      if (!ok) process.stderr.write("  rmC2 " + JSON.stringify({ f, first, said: said.slice(0, 80), mid, after }) + NL);
+      if (!ok) process.stderr.write("  rmC2 " + JSON.stringify({ f, first, said: said.slice(0, 80), mid, after, wrong }) + NL);
       return ok;
     } finally {
       putBack();

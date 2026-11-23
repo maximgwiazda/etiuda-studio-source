@@ -215,6 +215,7 @@
  *        Join elsewhere does not keep the admission (the test architect's read of ff35a9e5, findings 3, 2 and 5)
  *   si125 a removal the thread refuses sends no unplace and owes none; si127 a
  *        service that never answers holds Remove for the unplace's three seconds at most, and Remove does wait for it (the test architect's read of the relay door, D)
+ *   si128 a removal that waits (refused as a fork, the relay not holding the move) tells the service of nothing and owes nothing; the person stays as they were
  *
  * si44 to si47's controls (a fault planted in the worktree, the named leg red, restored) are in the lead engineer's report of
  * 2026-11-12 on A6.
@@ -2092,7 +2093,9 @@ async function removeWorld(rosters, fail, reread) {
     }
     return Promise.resolve({});
   };
-  const sh = await shellOn({ thread });
+  /* The teams are on the relay and no relay is reached here: the catch-up counts as run and the move as held (a Remove on a relay team
+     waits otherwise, and the service is told only of a removal that stands). Was: a Remove went ahead and told the service at once. */
+  const sh = await shellOn({ thread, env: { STUDIO_TEST_RELAY_CAUGHT_UP: "1" } });
   const shares = [path.join(A5_SCRATCH, "share-d27-" + shells + "-a"), path.join(A5_SCRATCH, "share-d27-" + shells + "-b")];
   shares.forEach((s) => fs.mkdirSync(s, { recursive: true }));
   await sh.ask("studio:key-make");
@@ -6019,7 +6022,9 @@ const run120 = async (root) => {
   const DESK_KIT = "k-c3c3c3c3c3c3c3c3", OTHER = "t-5a5a5a5a5a5a5a5a";
   const thread = (verb) => Promise.resolve(verb === "teamFacts" ? { team: { id: TEAM_ID, epoch: 1, roster: [{ id: DESK_KIT }] } }
     : verb === "removeMember" ? { removed: true, team: { id: TEAM_ID, epoch: 1 } } : {});
-  const sh = await shellOn({ thread, root });
+  /* No relay is reached here: the catch-up counts as run, so the Remove goes ahead in step (a removal waits otherwise, Claude alpha's
+     ruling of 2026-11-23 00:37). */
+  const sh = await shellOn({ thread, root, env: { STUDIO_TEST_RELAY_CAUGHT_UP: "1" } });
   const was = answer, sent = [];
   answer = async (url, init) => {
     const route = String(url).replace(/^.*\/v1\//, "");
@@ -6140,7 +6145,8 @@ const removeKit = async (root, people, o = {}) => {
   const thread = (verb) => { if (verb === "removeMember") removals++;
     if (verb === "removeMember" && o.refuses) return Promise.reject(new Error("This member is not on the team's list, so nothing changed."));
     return Promise.resolve(verb === "teamFacts" ? { team: { id: TEAM_ID, epoch: 1, roster: [{ id: DESK }] } } : verb === "removeMember" ? { removed: true, team: { id: TEAM_ID, epoch: 1 } } : {}); };
-  const sh = await shellOn({ thread, root });
+  /* As run120: the catch-up counts as run, so the Remove goes ahead in step; `o.env` may change that (si128's "race"). */
+  const sh = await shellOn({ thread, root, env: Object.assign({ STUDIO_TEST_RELAY_CAUGHT_UP: "1" }, o.env || {}) });
   const was = answer, sent = [];
   answer = async (url, init) => {
     const route = String(url).replace(/^.*\/v1\//, "");
@@ -6272,6 +6278,31 @@ await leg("si127", async () => {
   out.planted = JSON.stringify(planted);
   check(Object.values(out).filter((v) => typeof v === "boolean").every(Boolean),
     "si127 a service that never answers holds Remove for the unplace's three seconds and no longer, and the removal stands: " + Object.entries(out).map(([k, v]) => k + "=" + v).join(" "));
+});
+
+/* ---- si128, fold 100: the unplace and the removal that waits compose --------------------------------------------------------------------- */
+/* Main's unplace is told only of a removal that landed; the removals piece's first press on a relay team stands only once the relay holds the
+   move. A press the relay refuses (a fork) is a removal that waits, applied again by keysAndRemovals: until then the person is still on the team,
+   so the service is told nothing and nothing is owed. The control is si122 and si123, the same press with the move held. */
+const run128 = async (root) => {
+  const o = { env: { STUDIO_TEST_RELAY_CAUGHT_UP: "race", STUDIO_MOVE_SETTLE_MS: "50" } };
+  const r = await removeKit(root, plain122, o);
+  return { waits: !!o.answer && o.answer.removed === null && o.answer.pending === "k-c3c3c3c3c3c3c3c3", nothingSent: r.sent.length === 0,
+    entryKept: !!r.after && JSON.stringify(r.after) === JSON.stringify(KIT_ENTRY) };
+};
+await leg("si128", async () => {
+  const out = await run128(ROOT);
+  const planted = process.env.ETIUDA_PLANTS === "off" ? { off: "skipped" } : {};
+  if (!planted.off) {
+    /* The deciding line: told whenever the thread says removed, as before the race, the person is unplaced although the removal waits. */
+    const t = plantedTree("jd-shell-race", [[path.join("shell", "main.js"), "    if (r && r.removed && !racing) { /* plant:jd-shell-race */", "    if (r && r.removed) {"]]);
+    planted["jd-shell-race"] = !t ? "anchor" : !(await run128(t)).nothingSent ? "red" : "held";
+  }
+  out.plants = !!planted.off || Object.values(planted).every((v) => v === "red");
+  out.planted = JSON.stringify(planted);
+  check(Object.values(out).filter((v) => typeof v === "boolean").every(Boolean),
+    "si128 on a relay team, a removal the relay does not hold (refused as a fork) waits and tells the service of nothing: the reply says it waits, nothing is sent"
+    + " and Kit's entry is as it was: " + Object.entries(out).map(([k, v]) => k + "=" + v).join(" "));
 });
 
 dropScratch(A5_SCRATCH, "sign-in");

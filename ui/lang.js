@@ -3934,6 +3934,18 @@
       "Przekaźnik nie przyjął ostatniej wysyłki z tego komputera, bo nie zgadzała się z bieżącym stanem zespołu. Na tym komputerze nic nie przepadło, a Studio wyśle ją ponownie przy następnym sprawdzeniu; nic nie trzeba robić.",
     "The relay has refused this computer's uploads three times in a row as out of step with the team. Nothing on this computer is lost, but the relay's copy does not yet have this computer's latest. A newer version of Studio may set this right: look on etiuda.dev, and if it continues after that, write to us there.":
       "Przekaźnik już trzy razy z rzędu odrzucił wysyłki z tego komputera, bo nie zgadzały się z bieżącym stanem zespołu. Na tym komputerze nic nie przepadło, ale kopia na przekaźniku nie ma jeszcze najnowszych zmian z tego komputera. Pomóc może nowsza wersja Studia: warto zajrzeć na etiuda.dev, a jeśli i z nią to się powtarza, prosimy o wiadomość przez tę stronę.",
+    "This computer cannot open the team's newest file yet, and is fetching what it needs. Until then it cannot publish or change the team's members; nothing is lost.":
+      "Ten komputer nie może jeszcze otworzyć najnowszego pliku zespołu i pobiera to, czego potrzebuje. Do tego czasu nie może publikować ani zmieniać członków zespołu; nic nie przepada.",
+    "Removal waiting":
+      "Usunięcie czeka",
+    "Removal waiting: {NAME}. It happens as soon as this computer is in step with the team: connected, and holding the latest member list. Until then, they can still read the team's catalog.":
+      "Usunięcie czeka: {NAME}. Nastąpi, gdy ten komputer będzie zgodny z zespołem, czyli połączony i z najnowszą listą członków. Do tego czasu ta osoba nadal może czytać katalog zespołu.",
+    "The member list was changed on another computer this team is led from, and Studio is bringing that change here. The removal waiting here is applied on top of it once it has arrived.":
+      "Listę członków zmieniono na innym komputerze, z którego prowadzony jest ten zespół, a Studio właśnie przenosi tu tę zmianę. Oczekujące tu usunięcie zostanie zastosowane po jej nadejściu.",
+    "The member list that stands lacks people added on one of the computers this team is led from; they wait to be admitted again: {NAMES}.":
+      "Na obowiązującej liście członków brakuje osób dodanych na jednym z komputerów, z których prowadzony jest ten zespół; czekają na ponowne przyjęcie: {NAMES}.",
+    "This computer cannot open the team's newest file until Studio's signing key is restored here from its backup copy: in the Menu, under Settings, then Signing key, “Restore it from a backup copy…”. Until then it cannot publish or change the team's members; nothing is lost.":
+      "Ten komputer nie może otworzyć najnowszego pliku zespołu, dopóki klucz podpisu Studia nie zostanie tu przywrócony z kopii zapasowej: w menu, w Ustawieniach, w części Klucz podpisu, polecenie „Przywróć go z kopii zapasowej…”. Do tego czasu nie może publikować ani zmieniać członków zespołu; nic nie przepada.",
     "The relay is taking fewer uploads for a moment, as there were many in a short time. Nothing is lost, and Studio sends again shortly by itself; nothing needs doing.":
       "Przekaźnik chwilowo przyjmuje mniej wysyłek, bo w krótkim czasie było ich wiele. Nic nie przepadło, a Studio wkrótce samo wyśle je ponownie; nic nie trzeba robić.",
     "This team is on Etiuda's test service, made there by the Test Service build; this build does not reach it, so it will not answer here.":

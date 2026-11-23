@@ -35,7 +35,31 @@ const EXPECTED = 4 + 7;
    the erased-desks rule stands: nothing of erasing reaches that block. WAS: 98abcc357ece221a9f54c647def195ee1e32b90be075e179ba52119c6b3649b3 */
 /* Fold 98: the relay door piece moved the service to after a removal that landed (the unplace pass, waited last), and the code door
    left with the folder join; the erased-desks rule stands: nothing of erasing reaches that block. WAS: 2db00c8af634dbf2d59971a0d6ab843103ced3d1fa7d1668e451783649a09abe */
-const REMOVE_SHA = "5c8bfa6e0ee17e66d051b3e0bd978fb2b3ff95a96d6eb22f898b6072ce8ef749";
+/* Moved again for removals that survive (Claude alpha's ruling of 2026-11-23 00:37), merged over fold 97: removeDeskNow is now a
+   wrapper that counts a removal being made, and its body, removeDeskOnce, keeps the lead's intent first, catches up, and moves the
+   epoch only in step; the block now runs on to the end of removeDeskOnce, so the body is still read. Nothing of erasing reaches
+   the block. WAS (fold 97):
+   2db00c8af634dbf2d59971a0d6ab843103ced3d1fa7d1668e451783649a09abe; WAS (this build alone):
+   432481d9a4250ca981343138bc3d7c4a4e99a9a1cc3763e0ecf80c3375e4e354 */
+/* Moved again, removals that survive meeting Remove of a person: a pressed desk whose removal waits puts the person's other desks to
+   wait with it. Nothing of erasing reaches the block. WAS (the merge, 39518c7b):
+   d3f51b928e8f02ea3e9ed512b598864a49153641183980107b903b073496eca3 */
+/* Moved again (the test architect tau's re-read and Claude alpha's word of 2026-11-23): the waiting person's reply is the list as it
+   stands, every computer of theirs waiting; the intent keeps the row's key print; a removal that stood lets its intent go. Nothing of
+   erasing reaches the block. WAS (cd03c46c): abd8d8460cfd2a83a53e28a8816a2f747656953d5a7124e2ab9d750bfe1ebb82 */
+/* Moved again: a harness with no relay counts the catch-up as run (STUDIO_TEST_RELAY_CAUGHT_UP, never in a packaged Studio), for the
+   sign-in legs of Remove on a relay team. WAS (be3db915): 8b0274bd29fd3a6107e88d97fec938aed4ef0f84fa7d76024f022248d5e771d0 */
+/* Fold 100, the removals piece merged over fold 98: the block below is the removals' (removeDeskNow a counting wrapper over removeDeskOnce, the
+   intent kept first, a person's other desks waiting with theirs) with fold 98's unplace pass, waited last, composed into removeDeskOnce
+   (a removal that landed unplaces the service; a removal that waits unplaces nothing). Nothing of erasing reaches the block. WAS (fold 98):
+   5c8bfa6e0ee17e66d051b3e0bd978fb2b3ff95a96d6eb22f898b6072ce8ef749; WAS (the removals piece, before the merge):
+   9ef71a5940727dd1ab696ac90688e07d30a57d1d8747b75e9ab28a5bf29c122c */
+/* Moved again at fold 100, the sign-in legs of Remove on a relay team: the harness's no-relay switch also counts the move the Remove writes
+   as held by the relay, so those legs' removals stand and the service is told of them. Nothing of erasing reaches the block. WAS (the
+   merge, before that switch): bc45939f7942547e44720b722ac6ed73d1c85062993ae35ec9179cea40ce8298 */
+/* Moved again at fold 100, si128: the switch's value "race" leaves the move not held, and a plant marker sits on the line that tells the service
+   of a removal that stands. Nothing of erasing reaches the block. WAS (the switch alone): 0c4b7e3c572ad0dae8f5a73b2996ebfa942896ee58afe707b22bf422396d396b */
+const REMOVE_SHA = "e8825b1ab037e6dcd7aa26bd2cac68abf00bd6caf5cad47efc5f3e9e43b8edc7";
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -60,7 +84,8 @@ function between(text, from, to) {
   const a = text.indexOf(from), b = a < 0 ? -1 : text.indexOf(to, a + from.length);
   return a < 0 || b < 0 ? "" : text.slice(a, b + to.length);
 }
-const removeBlock = t => { const a = t.indexOf('answer("studio:member-remove"'); const r = t.indexOf("async function removeDeskNow(", a); const e = t.indexOf("\n}\n", r);
+const removeBlock = t => { const a = t.indexOf('answer("studio:member-remove"'); const r = t.indexOf("async function removeDeskNow(", a);
+  const o = t.indexOf("async function removeDeskOnce(", r); const e = o < 0 ? -1 : t.indexOf("\n}\n", o);
   return a < 0 || r < 0 || e < 0 ? "" : t.slice(a, e + 3); };
 
 async function legs(E, shellText) {

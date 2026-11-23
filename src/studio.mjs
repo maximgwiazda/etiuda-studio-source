@@ -39,8 +39,8 @@ import { auditFor, writePack } from "./audit.mjs";
 import { readKeyFile, defaultKeyFile, keyIdFor, unlockKey, pairOf, passphraseFile, openLeadBox, statsKeysOf, signCatalog, signatureHolds, ensureLeadBox, keepLeadBox, recoverySecret } from "./sign.mjs";
 import { openLeadBook, sealLeadBook } from "./lead-book.mjs";
 import { readTeam, heldTeam, heldCopy, newTeam, withSealed, withCatalog, withoutCatalog, withExportsSealed, withSharing, withSignin, withChannel, withHandover, writeTeam, teamPath, newEpoch, withRecovery, openRecovery, recoveryOf,
-  rosterName, revsFile, conflictSiblingName, revFloor, raiseRevFloor } from "./team.mjs";
-import { HEAD_NAME, headOf, editionsLed } from "./relay.mjs";
+  rosterName, revsFile, conflictSiblingName, revFloor, raiseRevFloor, forkRevFloor } from "./team.mjs";
+import { HEAD_NAME, headOf, headGone, editionsLed } from "./relay.mjs";
 import { RING_KIND, RING_FORMAT, readRingFile, ringPath, addToRing, entryFor } from "./ring.mjs";
 import { listJoins, refuseJoin, admitWaiting, inviteSightings, closeRequest, seatAsked } from "./join.mjs";
 import { endInvite, invitesOf, liveInvitesOf, relayInvitesOf, markRelayInvite, markRemoved, clearKeyPending, teamsFile, folderHere, placeFor, askedOf, noteFirstSeen, noticesOf, noteTried, clearTried,
@@ -5718,6 +5718,29 @@ async function teamKeyBack(dir, keyFile, secret, o) {
   return key ? { id: h.team.id, epoch: h.team.epoch, key, sealed: h.team.sealed === true, folder: h.shown,
                  written: JSON.parse(JSON.stringify(h.team)) } : null;
 }
+/** THE KEY OF THE TEAM FILE A RELAY MIRROR HOLDS, out of that file's recovery copy under the signing key (Claude alpha's ruling of
+ *  2026-11-23 00:37): how the lead's other computer, which reached the newest team file through a remaining desk's copy, takes its
+ *  key. {id, epoch, key, aside}: `aside` true where this Studio keeps a different key under that number (one it made in a fork,
+ *  to be set aside); null where it holds that key already, the file is not its own, or the copy does not open. */
+async function teamKeyFromFile(folder, keyFile, secret, o) {
+  let held = null;
+  try { held = await heldTeam(String(folder || ""), { key: keyFile }); } catch { held = null; }
+  /* A fork: the relay's file, at an epoch or rev below one this Studio wrote and never sent, stands. Its floor comes down to it. */
+  if (held && held.older && o && o.fork === true) {
+    try {
+      const raw = (await readTeam(String(folder || ""))).team;
+      if (raw && forkRevFloor(keyFile, raw)) held = await heldTeam(String(folder || ""), { key: keyFile }); /* plant:rmo-fork-floor */
+    } catch { held = null; }
+  }
+  const team = held && held.team;
+  if (!team || !team.lead || !Number.isInteger(team.epoch)) return null;
+  let key = null;
+  try { key = openRecovery(team, recoveryOf(keyFile, secret)); } catch { key = null; }
+  if (!key) return null;
+  const have = teamKeyOf(o && o.teamKeys, team.id, team.epoch);
+  if (have && Buffer.from(have).equals(key)) return null;
+  return { id: team.id, epoch: team.epoch, key, aside: !!have };
+}
 /** Whether a desk's Export of the team's sealed catalog stays sealed or goes out in the clear (23b-B): the team file's
  *  `exportsSealed`, which the desk's shell reads. Signed with the key `secret` opens; `written` is as writeTeam gives it. */
 async function setTeamExports(dir, keyFile, sealed, secret, o) {
@@ -6080,7 +6103,7 @@ function seatHeld(doc, o) {
  * `o.skipUnopened` (resealBehind, which no person is waiting on) it is left out instead, as nothing here could seal it. */
 function editionsToReseal(folder, team, teamKeys, targetKey, targetEpoch, o) {
   const lenient = !!(o && o.skipUnopened);
-  if (!team || team.sealed !== true) return { plan: [], all: [] };
+  if (!team || team.sealed !== true) return { plan: [], all: [], unopened: [] };
   const S = Engine.sealRules();
   let entries = [];
   try { entries = fs.readdirSync(folder, { withFileTypes: true }); }
@@ -6097,7 +6120,12 @@ function editionsToReseal(folder, team, teamKeys, targetKey, targetEpoch, o) {
     if (!Number.isFinite(sealedEpoch) || sealedEpoch > targetEpoch) continue;
     current.push({ at, name: ent.name, doc, sealedEpoch, raw });
   }
-  if (!current.length) return { plan: [], all: [] };
+  if (!current.length) return { plan: [], all: [], unopened: [] };
+  /* A file the lenient pass holds the key of its number for and still cannot open (sealed under a key this Studio set aside, or
+     torn) is named in `unopened`, so its caller counts it owed and looks again, never as done. One at a number whose key this
+     Studio never held (an older revision on the lead's other computer) is left out as before: nothing here would reseal it, and
+     counting it would keep every look of the watch owed for good. */
+  const unopened = [];
   const opened = current.map((f) => {
     const key = f.sealedEpoch === targetEpoch ? targetKey
       : (teamKeyOf(teamKeys, team.id, f.sealedEpoch) || (f.sealedEpoch === team.epoch ? targetKey : null));
@@ -6105,7 +6133,7 @@ function editionsToReseal(folder, team, teamKeys, targetKey, targetEpoch, o) {
     if (!key) throw refuse("This Studio does not hold the team's current key, so nobody was removed."); /* plant:txrw-rw1-5 */
     let text = null;
     try { text = S.openSealed(key, f.doc); } catch (e) { if (!lenient) throw e; }
-    if (text == null && lenient) return null;
+    if (text == null && lenient) { unopened.push(f.name); return null; } /* plant:rmo-unopened-owed */
     if (text == null) throw refuse("A file sealed for the team does not open with the key this Studio holds, so nobody was removed.");
     return { at: f.at, name: f.name, text, sealedEpoch: f.sealedEpoch, raw: f.raw };
   }).filter(Boolean);
@@ -6133,7 +6161,7 @@ function editionsToReseal(folder, team, teamKeys, targetKey, targetEpoch, o) {
       if (x.sealedEpoch < targetEpoch) plan.push(x);
     }
   }
-  return { plan, all };
+  return { plan, all, unopened };
 }
 
 /* The team file is written before any edition is sealed again. Once the team file lands, a later failure rolls forward,
@@ -6213,10 +6241,11 @@ async function resealBehind(folder, keyFile, o) {
   const team = { id: h.team.id, epoch: h.team.epoch };
   const key = teamKeyOf(opts.teamKeys, h.team.id, h.team.epoch);
   if (!key) return Object.assign(none, { team, needKey: true, owed: true });
-  const plan = editionsToReseal(h.folder, h.team, opts.teamKeys, key, h.team.epoch, { skipUnopened: true }).plan;
+  const behind = editionsToReseal(h.folder, h.team, opts.teamKeys, key, h.team.epoch, { skipUnopened: true }), plan = behind.plan;
   const S = Engine.sealRules(), resealed = [];
   const skip = new Set((Array.isArray(opts.skip) ? opts.skip : []).map(String));
-  let owed = false;
+  /* A file that does not open here is owed, not finished: the watch keeps looking (resealOwed) until it opens or goes. */
+  let owed = behind.unopened.length > 0;
   for (const item of plan) {
     let left = false;
     left = skip.has(item.name); /* plant:c3-reseal-left */
@@ -6228,6 +6257,37 @@ async function resealBehind(folder, keyFile, o) {
     } catch { owed = true; }
   }
   return { folder: named, team, resealed: resealed.sort(), owed };
+}
+
+/** AN EDITION SEALED UNDER A KEY SET ASIDE (Claude alpha's ruling of 2026-11-23 06:44, the key this Studio made under a number a fork
+ *  gave to the other computer's file): each catalog file in `folder` sealed for team `teamId` at key number `epoch` that does not open
+ *  with the key that stands there (`newKey`) and does open with the one set aside (`oldKey`) is sealed again under `newKey`, at the same
+ *  number, so a member holding only the standing key reads it, and a removal's reseal opens it. A file that opens with neither is left
+ *  as it is. {resealed: [names]}. */
+function resealAside(folder, teamId, epoch, oldKey, newKey) {
+  const S = Engine.sealRules(), named = path.resolve(String(folder || "")), resealed = [];
+  const was = oldKey ? Buffer.from(oldKey) : null, now = newKey ? Buffer.from(newKey) : null;
+  if (!was || !now || !Number.isSafeInteger(Number(epoch))) return { resealed };
+  let entries = [];
+  try { entries = fs.readdirSync(named, { withFileTypes: true }); } catch { return { resealed }; }
+  for (const ent of entries) {
+    if (!ent.isFile() || !/\.ec$/i.test(ent.name)) continue;
+    const at = path.join(named, ent.name);
+    let raw = null, doc = null;
+    try { raw = fs.readFileSync(at, "utf8"); doc = JSON.parse(raw.replace(/^\uFEFF/, "")); } catch { doc = null; }
+    if (!doc || doc.kind !== S.SEALED_KIND || +doc.format !== 2 || String(doc.team) !== String(teamId) || Number(doc.epoch) !== Number(epoch)) continue;
+    let opensNow = null, text = null;
+    try { opensNow = S.openSealed(now, doc); } catch { opensNow = null; }
+    if (opensNow != null) continue;
+    try { text = S.openSealed(was, doc); } catch { text = null; }
+    if (text == null) continue;
+    try {
+      if (fs.readFileSync(at, "utf8") !== raw) continue;
+      writeWhole(at, json(S.sealCatalog(now, String(teamId), Number(epoch), text))); /* plant:rmo-reseal-aside */
+      resealed.push(ent.name);
+    } catch { /* left as it was; the next pass that sets the key aside finds it again */ }
+  }
+  return { resealed: resealed.sort() };
 }
 
 /** Moves the team at the project's folder to a new key and removes nobody. The newest sealed edition of each catalog at
@@ -6633,7 +6693,7 @@ export { listProjects, openProject, newProject, discardUntouched, saveCard, setP
          addLang, moveLang, removeLang, setCommentLang, langState, langUses,
          builtLangs, agreementText, MIN_ENGINE,
          auditEdition, exportAuditPack,
-         desksFor, refuseDeskJoin, removeMember, moveEpoch, moveEpoch as moveTeamKey, resealBehind, setTeamExports, setTeamSharing, teamKeyBack,
+         desksFor, refuseDeskJoin, removeMember, moveEpoch, moveEpoch as moveTeamKey, resealBehind, resealAside, setTeamExports, setTeamSharing, teamKeyBack, teamKeyFromFile,
          inviteTarget, watchAdmit, seatProofs, savePolicy, policyValues,
          backupKey, readBackup, openBackup,
          dismissLikely, dismissPair, dismissEnd, leaveFinding, dismissChangedNumber, alsoOf,

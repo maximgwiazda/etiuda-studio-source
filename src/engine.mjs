@@ -489,13 +489,17 @@ function joinRules() {
  * with them (the folder rule went from the engine with the folder join, engine fold 131): an invitation Studio makes is read back by the desk's own reader before anyone is given it, so
  * Studio never hands out a blob a desk would refuse, and keeps no second copy of what a desk will take. A pin without any
  * of them is refused, naming the declaration. */
-/* The engine's inviteRead keeps an invitation's place through placeKept since engine 9a6db052 (board 945 item 4), so the
-   invitation's slice carries placeKept and the two pure rules it calls. */
+/* A PIN BEFORE THE ENGINE'S FOLDER REMOVAL (its P2) reads an invitation that names a folder: its inviteRead calls inviteFolder,
+   and for a folder invitation placeKept with the two pure rules that one calls. A pin after it reads relay invitations only and
+   has no inviteFolder (it keeps the place rules for its own use, and Studio's place slice below carries them). So the slice asks
+   for those four of a pin whose text has inviteFolder and of no other, and one list slices on both. The four lines go with the
+   last pin that carries inviteFolder. */
 const INVITE_DECLS = ["const SEALED_TEAM_RE =", "const INVITE_HIDDEN_RE =", "function memberProof(",
-  "function inviteIdOf(", "function inviteRead(", "function inviteRelay(", "function teamChannelOf(",
-  "function placeKindOk(", "function placeSlash(", "function placeKept("]; /* plant:invite-place */
+  "function inviteIdOf(", "function inviteRead(", "function inviteRelay(", "function teamChannelOf("]; /* plant:invite-place */
+const INVITE_FOLDER_DECLS = ["function inviteFolder(", "function placeKindOk(", "function placeSlash(", "function placeKept("];
+const inviteDeclsFor = (src) => (String(src).indexOf("function inviteFolder(") >= 0 ? INVITE_DECLS.concat(INVITE_FOLDER_DECLS) : INVITE_DECLS); /* plant:fsg-invite-folder */
 function inviteRulesFrom(src, where) {
-  return rulesFrom(src, INVITE_DECLS, { where, file: "shell/main.js", inject: NODE(),
+  return rulesFrom(src, inviteDeclsFor(src), { where, file: "shell/main.js", inject: NODE(),
     names: ["memberProof", "inviteIdOf", "inviteRead", "INVITE_HIDDEN_RE"] });
 }
 let INVITE = null;
@@ -516,8 +520,7 @@ const PLACE_DECLS = ["function placeKindOk(", "function driveTops(", "function p
   "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
   "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
   "async function driveSeen("];
-const PLACE_NAMES = ["placeOf", "placeResolve", "syncRootsFrom", "readSyncRecords", "placeKept", "placeJoin",
-  "placeCandidates", "driveSeen"];
+const PLACE_NAMES = ["placeOf", "placeResolve", "syncRootsFrom", "readSyncRecords", "driveSeen"];
 function placeRulesFrom(src, where) {
   return rulesFrom(src, PLACE_DECLS, { where, file: "shell/main.js",
     inject: Object.assign(NODE(), { liveSyncIo: syncIo }),
@@ -708,7 +711,7 @@ const FOLDER_TRUST_DECLS = ["const SPKI_ED25519 =", "function canonJson(", "func
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "function handedPath(", "function forkIn("];
 const SHELL_RULES = [
   { decls: DESK_DECLS }, { decls: COUNT_DECLS, constByLine: true }, { decls: HPKE_DECLS.concat(WRAP_DECLS) },
-  { decls: SEAL_DECLS }, { decls: JOIN_DECLS }, { decls: INVITE_DECLS }, { decls: PLACE_DECLS },
+  { decls: SEAL_DECLS }, { decls: JOIN_DECLS }, { decls: INVITE_DECLS, declsFor: inviteDeclsFor }, { decls: PLACE_DECLS },
   { decls: STATS_SPAN_DECLS }, { decls: STATS_LEAD_DECLS }, { decls: STATS_ANSWER_DECLS },
   { decls: TEAMFILE_DECLS }, { decls: FOLDER_TRUST_DECLS }, { decls: ANSWER_LEAD_DECLS },
   { decls: BRANCH_LEAD_DECLS },
@@ -783,9 +786,11 @@ function installerHooksFrom(src, pin) {
 }
 function shellSlicesFrom(src, pin) {
   const where = "the pinned engine " + String(pin || "").slice(0, 7);
-  const cut = (text, r) => slicesOf(text, r.decls, where, "shell/main.js", r.constByLine);
+  /* A rule whose list depends on the pin (declsFor) is asked of the text it is cut from, so the file and the shell cut alike. */
+  const declsOf = (r, text) => (r.declsFor ? r.declsFor(text) : r.decls);
+  const cut = (text, r) => slicesOf(text, declsOf(r, text), where, "shell/main.js", r.constByLine);
   const kept = new Map();
-  for (const r of SHELL_RULES) cut(src, r).forEach((s, i) => { if (!kept.has(r.decls[i])) kept.set(r.decls[i], s); });
+  for (const r of SHELL_RULES) cut(src, r).forEach((s, i) => { const d = declsOf(r, src)[i]; if (!kept.has(d)) kept.set(d, s); });
   const text = "/* Cut from the engine's shell/main.js at " + String(pin || "an unnamed pin") + " by Studio's"
     + " tools/engine-fetch.mjs, for src/engine.mjs; never edited (board 865). */\n"
     + [...kept.values()].join("\n") + "\n";
@@ -939,22 +944,21 @@ function v2BodyTools() {
   return new Function(body + "\nreturn { v2Unmark, v2PartText, V2_MARKER_RE };")();
 }
 
-/* THE DESK'S FOLDER SYNCER AND THE CHECKS IT JUDGES WITH (board 945 stage 3 (b), Studio's mirror and outbox). The syncer is
- * the pinned shell/folder/syncer.cjs, required as it stands; the checks are the desk's own, cut from its shell/main.js with
- * node's crypto as the desk file's rule is: a team file whole under its lead (teamWhole), a catalog's signature under one key
+/* THE CHECKS THE DESK JUDGES A TEAM'S FILES WITH (board 945 stage 3 (b)), the desk's own, cut from its shell/main.js with node's
+ * crypto as the desk file's rule is: a team file whole under its lead (teamWhole), a catalog's signature under one key
  * (catalogSigValid, asked with the key), a lead handed on one genuine step at a time (handedTo, handedPath) and a lead key
- * shown in two hands (forkIn). So a file Studio's mirror takes from the share is one a desk's mirror takes, by the same lines. */
+ * shown in two hands (forkIn). So a team file Studio follows is one a desk follows, by the same lines (src/member.mjs). The folder
+ * syncer that these once served went out of the engine with the shared folder and Studio runs none: nothing of the engine's
+ * folder directory is fetched, required or shipped. */
 function folderRulesFrom(src, where) {
   return rulesFrom(src, FOLDER_TRUST_DECLS, { where, file: "shell/main.js", inject: NODE(),
     names: ["teamWhole", "catalogSigValid", "handedTo", "handedPath", "forkIn"] });
 }
 let FOLDER = null;
-/** The desk's folder checks as the PINNED engine states them, its syncer module, and the paths of the syncer and its worker. */
+/** The desk's folder checks as the PINNED engine states them. */
 function folderRules() {
-  if (!FOLDER) FOLDER = Object.assign(folderRulesFrom(shellText(), "the pinned engine"),
-    { syncer: require(at("shell", "folder", "syncer.cjs")),
-      paths: { syncer: at("shell", "folder", "syncer.cjs"), worker: at("shell", "folder", "syncer-worker.cjs") } });
-  return FOLDER;
+  if (!FOLDER) FOLDER = folderRulesFrom(shellText(), "the pinned engine");
+  return FOLDER; /* plant:fsg-syncer */
 }
 
 /* THE BODY'S MARKERS AS THE PINNED ENGINE WRITES THEM (the Replies block, the Studio batch of 2026-10-12): v2Mark and the

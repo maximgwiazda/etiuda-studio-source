@@ -1379,7 +1379,9 @@ async function main() {
     { const doc = JSON.parse(fs.readFileSync(at, "utf8")); doc.teams[TEAM].relay = { rt: "6d".repeat(16), url: "https://etiuda.dev" }; fs.writeFileSync(at, JSON.stringify(doc, null, 1) + String.fromCharCode(10)); }
     const readEnv = (file) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
     const opens = (file, k) => { try { return k ? Engine.sealRules().openSealed(k, readEnv(file)) : null; } catch { return null; } };
-    const s = await loadShell(name, { thread: realThread, env: projectsBeside(opened.dir) });
+    /* The team is on the relay and no relay is reached: the switch counts the catch-up as run and the move as held, so the removal goes ahead
+       and stands, as it did on the shared folder this leg was written on (a Remove on a relay team waits otherwise). */
+    const s = await loadShell(name, { thread: realThread, env: Object.assign({ STUDIO_TEST_RELAY_CAUGHT_UP: "1" }, projectsBeside(opened.dir)) });
     const realOpen = fs.openSync;
     let refusedAt = "";
     fs.openSync = function (p, ...a) {
@@ -1482,7 +1484,8 @@ async function main() {
     const revOf = (text) => { try { return JSON.parse(text).rev; } catch { return null; } };
     /* Waited on the condition itself, up to ninety seconds (a load's allowance; a fixed twenty-five went red once for 2ze, the same watch). */
     const waitFor = async (done) => { for (let i = 0; i < 1800 && !done(); i++) await new Promise((r) => setTimeout(r, 50)); return done(); };
-    const s = await loadShell(name, { thread: realThread, env: projectsBeside(opened.dir) });
+    /* As 2ze: no relay is reached, the removal stands. */
+    const s = await loadShell(name, { thread: realThread, env: Object.assign({ STUDIO_TEST_RELAY_CAUGHT_UP: "1" }, projectsBeside(opened.dir)) });
     const removed = await s.ask("studio:member-remove", opened.dir, TEAM, ivo.id, true);
     const settledFirst = await waitFor(() => (readEnv(path.join(share, EC)) || {}).epoch === 2
       && (readEnv(path.join(share, "etiuda-team.json")) || {}).epoch === 2);

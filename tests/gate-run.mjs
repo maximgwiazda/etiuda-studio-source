@@ -44,11 +44,17 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 delete process.env.ETIUDA_PLANTS;
 delete process.env.ETIUDA_PROFILE;
+/* The same for an area's own words: run inside a hosted shard, this file would inherit the shard, the desk-only list and
+   a resume switched off, and its own area legs (26c's resume among them) would then read the runner's plan, not their lab's.
+   The legs that need one pass it themselves. */
+delete process.env.ETIUDA_AREA_RESUME;
+delete process.env.ETIUDA_AREA_SHARD;
+delete process.env.ETIUDA_AREA_DESK_ONLY;
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 156;  /* 126 with the cap's own shapes (16o2, 2026-11-17): 125, +1 its child gone read through a stand-in for /proc (25a2), +4 the gate wall and the area lane (25a to 25d), +5 an area run carrying on after a test-only fix (24a to 24e), +3 what a test reads or starts by name (24f to 24h), +1 the relay-studio split, +3 run-record (fold 9), +1 studio-edges (closePlan's release-only filter), +2 each step's own scratch (23a, 23b), +2 a customer's roots (23c, 23d), +1 a walled gate's node arm (16k2), +1 the same tree carries its own greens (24i), +3 the same outside carries the floor and a single argument gate (24j to 24l), +3 a leg's own wall (25e to 25g) */
+const EXPECTED = 163;  /* +1 a shard whose only red is a flake (27a), +6 the local area going on past a red (26a to 26f); 126 with the cap's own shapes (16o2, 2026-11-17): 125, +1 its child gone read through a stand-in for /proc (25a2), +4 the gate wall and the area lane (25a to 25d), +5 an area run carrying on after a test-only fix (24a to 24e), +3 what a test reads or starts by name (24f to 24h), +1 the relay-studio split, +3 run-record (fold 9), +1 studio-edges (closePlan's release-only filter), +2 each step's own scratch (23a, 23b), +2 a customer's roots (23c, 23d), +1 a walled gate's node arm (16k2), +1 the same tree carries its own greens (24i), +3 the same outside carries the floor and a single argument gate (24j to 24l), +3 a leg's own wall (25e to 25g) */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -904,6 +910,31 @@ function wallAndLaneLegs() {
     "25d control: with the lane free the same narrow area run takes it and runs green: exit " + free.exit);
 }
 
+/* 27a. A SHARD'S FLAKE HOLDS NOTHING. A shard (ETIUDA_AREA_SHARD) whose only red is a gate red once and green at its one rerun
+   exits 0, names the flake in its output, its summary and its chain line, holds no red, and the gate's own entry keeps its first
+   exit so no resume lends it as a green. The marker sits outside the lab's tree, so writing it moves no tree. */
+function shardFlakeLeg() {
+  const OK = 'console.log("  ok   leg");\nprocess.exit(0);\n';
+  const l = makeLab("shard-flake", { a: OK, b: OK }, { git: true, gatesFor: true });
+  const marker = path.join(l.root, "ran-once");
+  const g = (...args) => spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid"].concat(args), { cwd: l.lab, encoding: "utf8", timeout: 30000 });
+  g("add", "."); g("commit", "-q", "-m", "base");
+  fs.writeFileSync(path.join(l.lab, "tests", "a.mjs"), 'import fs from "node:fs";\nconst m = ' + JSON.stringify(marker) + ';\n'
+    + 'if (!fs.existsSync(m)) { fs.writeFileSync(m, "1"); console.log("  FAIL leg"); process.exit(1); }\n' + OK);
+  g("add", "."); g("commit", "-q", "-m", "a test changed");
+  const r = run(l, ["area", "HEAD~1...HEAD"], null, { ETIUDA_LOCK_PATH: path.join(l.root, "machine.lock"), ETIUDA_AREA_RESUME: "off", ETIUDA_AREA_SHARD: "1/1" });
+  let c = null;
+  try { c = JSON.parse(fs.readFileSync(path.join(l.root, "chains.jsonl"), "utf8").trim().split(/\r?\n/).pop()); } catch (e) { c = null; }
+  const summary = (r.out.split(/\r?\n/).filter(x => /^gate-run: \d+ of \d+ gate/.test(x)).pop() || "no summary");
+  const holdReds = c && Array.isArray(c.reds) ? c.reds.filter(x => x.class !== "warn").map(x => x.gate) : null;
+  const flakes = c && Array.isArray(c.flakes) ? c.flakes.map(x => x.gate + ":" + x.exit) : null;
+  const entry = c && Array.isArray(c.gates) ? c.gates.find(x => x.gate === "tests-a") : null;
+  check(r.exit === 0 && /gate-run: FLAKE tests-a: red \(exit 1\) then green at its one rerun/.test(r.out) && /FLAKE tests-a/.test(summary)
+    && !!c && c.holds === false && !!holdReds && holdReds.length === 0 && JSON.stringify(flakes) === '["tests-a:1"]' && !!entry && entry.exit === 1,
+    "27a a shard whose only red is a flake exits 0, names the flake and holds nothing: exit " + r.exit + ", " + summary + ", holds "
+    + JSON.stringify(c && c.holds) + ", hold reds " + JSON.stringify(holdReds) + ", flakes " + JSON.stringify(flakes) + ", its gate entry " + JSON.stringify(entry));
+}
+
 function areaResumeLegs() {
   const OK = "process.exit(0);\n";
   const l = makeLab("area-resume", { a: OK, c: OK, d: OK, w: 'import fs from "node:fs";\nfs.readdirSync(".");\n' + OK, "ipc-coerce": OK }, {
@@ -1033,6 +1064,94 @@ function areaResumeByNameLegs() {
     "24g a changed test started by path reaches the step that starts it: sp runs, fx and ok are carried: " + said(f2));
   check(f1.carried && f2.carried && f1.carried.indexOf("tests-ar") < 0 && f2.carried.indexOf("tests-ar") < 0,
     "24h a step that lists a folder with the async readdir is never carried: " + said(f1) + " | " + said(f2));
+}
+
+/* ---- 26 (a to f). THE LOCAL AREA GOES ON PAST A RED -----------------------------------------------------------------------------
+   A lab repository whose second commit touches three tests, so the area plans them and the floor. 26a the first red, the third
+   green: all three run, the exit is the first red's, and the summary and the chain line name the red, with no stop. 26b the build
+   gate (tests/drift.mjs, in BUILD_GATES) red: the run stops after it, names the stop, and runs nothing after. 26c the test-only fix
+   of 26a's red, resumed: only the red reruns, the greens carry, the last green among them. 26d a gate that refused goes on.
+   26e a green gate that touched the (stand-in) real profile: the run stops at once after it, exit 78. 26f a line that stopped
+   after a green gate lends every green but that one; a line with no stop (written before) keeps the old rule. */
+function pastRedLegs() {
+  const RED = 'console.log("  FAIL leg 0");\nprocess.exit(1);\n', OK = 'console.log("  ok   leg 0");\nprocess.exit(0);\n';
+  const floorFiles = { "tests/ipc-coerce.mjs": OK, "tests/leak-hunt.mjs": OK, "tests/no-model.mjs": OK };
+  const lab = (kind, chain, files) => {
+    const l = makeLab(kind, {}, { git: true, gatesFor: true, files: Object.assign({}, floorFiles, files) });
+    fs.writeFileSync(path.join(l.lab, "package.json"), JSON.stringify({ name: "etiuda-studio", version: "0.0.0",
+      scripts: { test: chain.map(n => "node tests/" + n + ".mjs").join(" && ") } }, null, 2) + "\n");
+    l.g = (...args) => spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid"].concat(args), { cwd: l.lab, encoding: "utf8", timeout: 30000 });
+    l.g("add", "."); l.g("commit", "-q", "-m", "base");
+    for (const n of chain) fs.appendFileSync(path.join(l.lab, "tests", n + ".mjs"), "// touched\n");
+    l.g("add", "."); l.g("commit", "-q", "-m", "touch");
+    l.standIn = path.join(l.root, "stand-in-profile");
+    fs.mkdirSync(path.join(l.standIn, "etiuda"), { recursive: true });
+    l.env = { ETIUDA_LOCK_PATH: path.join(l.root, "machine.lock"), ETIUDA_REAL_PROFILE_OVERRIDE: l.standIn, ETIUDA_INSTALLED_APP_RUNNING: "0" };
+    return l;
+  };
+  const lastChain = l => { try { return JSON.parse(fs.readFileSync(path.join(l.root, "chains.jsonl"), "utf8").trim().split(/\r?\n/).pop()); } catch (e) { return null; } };
+  const summary = r => (String(r.out).split(/\r?\n/).filter(x => /^gate-run: \d+ of \d+ gate/.test(x)).pop() || "no summary");
+  const ran = r => Object.keys(r.byGate).sort().join(",");
+
+  const a = lab("past-red", ["g1", "g2", "g3"], { "tests/g1.mjs": RED, "tests/g2.mjs": OK, "tests/g3.mjs": OK });
+  const ra = run(a, ["area", "HEAD~1"], null, a.env), ca = lastChain(a);
+  check(ra.exit === 1 && !!ra.byGate["tests-g1"] && !!ra.byGate["tests-g2"] && !!ra.byGate["tests-g3"]
+    && /tests-g1 \(exit 1\)/.test(summary(ra)) && !!ca && ca.stop === null
+    && Array.isArray(ca.reds) && ca.reds.length === 1 && ca.reds[0].gate === "tests-g1" && ca.reds[0].exit === 1,
+    "26a the local area goes on past a red: the first red and the third green all run, the exit is the first red's, the summary and the"
+    + " chain line name the red and no stop: exit " + ra.exit + ", ran [" + ran(ra) + "], " + summary(ra) + ", stop " + JSON.stringify(ca && ca.stop));
+
+  const b = lab("past-red-build", ["drift", "g2", "g3"], { "tests/drift.mjs": RED, "tests/g2.mjs": OK, "tests/g3.mjs": OK });
+  const rb = run(b, ["area", "HEAD~1"], null, b.env), cb = lastChain(b);
+  check(rb.exit === 1 && !!rb.byGate["tests-drift"] && !rb.byGate["tests-g2"] && !rb.byGate["tests-g3"]
+    && /STOPPED after tests-drift: a build gate red/.test(summary(rb)) && !!cb && !!cb.stop && cb.stop.gate === "tests-drift",
+    "26b a build gate red stops the area after it, every later leg reading a stale build: exit " + rb.exit + ", ran [" + ran(rb) + "], "
+    + summary(rb) + ", stop " + JSON.stringify(cb && cb.stop));
+
+  fs.writeFileSync(path.join(a.lab, "tests", "g1.mjs"), OK + "// fixed\n");
+  a.g("add", "."); a.g("commit", "-q", "-m", "g1 fixed");
+  for (const f of fs.readdirSync(a.runs)) fs.unlinkSync(path.join(a.runs, f));
+  const rc = run(a, ["area", "HEAD~2"], null, a.env), cc = lastChain(a);
+  check(rc.exit === 0 && !!rc.byGate["tests-g1"] && !rc.byGate["tests-g2"] && !rc.byGate["tests-g3"]
+    && !!cc && Array.isArray(cc.carried) && cc.carried.indexOf("tests-g2") >= 0 && cc.carried.indexOf("tests-g3") >= 0,
+    "26c the resume after a run that went past its red reruns only the red, its greens carried: exit " + rc.exit + ", ran [" + ran(rc)
+    + "], carried " + JSON.stringify(cc && cc.carried));
+
+  const d = lab("past-refused", ["g1", "g2"], { "tests/g1.mjs": 'console.log("#refused lab-guard");\nprocess.exit(78);\n', "tests/g2.mjs": OK });
+  const rd = run(d, ["area", "HEAD~1"], null, d.env);
+  check(rd.exit === 78 && !!rd.byGate["tests-g1"] && !!rd.byGate["tests-g2"] && /tests-g1 \(exit 78/.test(summary(rd)),
+    "26d a gate that refused (no verdict) is named and the area goes on: exit " + rd.exit + ", ran [" + ran(rd) + "], " + summary(rd));
+
+  const e = lab("past-profile", ["g1", "g2"], { "tests/g2.mjs": OK, "tests/g1.mjs": [
+    'import fs from "node:fs";', 'import path from "node:path";',
+    'fs.writeFileSync(path.join(process.env.ETIUDA_REAL_PROFILE_OVERRIDE, "etiuda", "window.json"), "touched\\n");', OK].join("\n") });
+  const re = run(e, ["area", "HEAD~1"], null, e.env), ce = lastChain(e);
+  check(re.exit === 78 && !!re.byGate["tests-g1"] && !re.byGate["tests-g2"] && /STOPPED after tests-g1: the real profile changed/.test(summary(re))
+    && !!ce && !!ce.stop && ce.stop.gate === "tests-g1",
+    "26e a gate that touched the real profile stops the area at once, a floor breach: exit " + re.exit + ", ran [" + ran(re) + "], "
+    + summary(re));
+
+  const f = lab("past-resume-rule", ["g1", "g2", "g3"], { "tests/g1.mjs": OK, "tests/g2.mjs": OK, "tests/g3.mjs": OK });
+  const chains = path.join(f.root, "chains.jsonl");
+  const head = f.g("rev-parse", "--short", "HEAD").stdout.trim(), tree = f.g("rev-parse", "HEAD^{tree}").stdout.trim();
+  const STEPS = ["g1", "g2", "g3"].map(n => ({ file: "tests/" + n + ".mjs", cmd: "node tests/" + n + ".mjs", args: [] }));
+  const gates = [{ gate: "tests-g1", exit: 1 }, { gate: "tests-g2", exit: 0 }, { gate: "tests-g3", exit: 0 }];
+  const ask = extra => {
+    fs.writeFileSync(chains, JSON.stringify(Object.assign({ gate: "area", tree: f.lab, head, gitTree: tree, counts: { exitCode: 1 }, gates }, extra)) + "\n");
+    const driver = path.join(f.root, "ask.mjs");
+    fs.writeFileSync(driver, "import { pathToFileURL } from 'node:url';\n"
+      + "const m = await import(pathToFileURL(" + JSON.stringify(path.join(f.lab, "tools", "gate-run.mjs")) + ").href);\n"
+      + "const r = m.planAreaResume(" + JSON.stringify(f.lab) + ", " + JSON.stringify(STEPS) + ", process.argv[2], " + JSON.stringify(chains) + ");\n"
+      + "console.log(JSON.stringify({ reason: r.reason || '', carried: r.carried || null }));\n");
+    const r = spawnSync(process.execPath, [driver, tree], { cwd: f.lab, encoding: "utf8", timeout: 30000,
+      env: Object.assign({}, process.env, { ETIUDA_RUNS: f.runs, ETIUDA_CHAINS_PATH: chains }) });
+    try { return JSON.parse(String(r.stdout).trim().split(/\r?\n/).pop()); } catch (x) { return { reason: "no answer: " + String(r.stderr).slice(-200), carried: null }; }
+  };
+  const ranOn = ask({ stop: null }), stopped = ask({ stop: { gate: "tests-g3", why: "the real profile changed" } }), old = ask({});
+  check(JSON.stringify(ranOn.carried) === '["tests-g2","tests-g3"]' && JSON.stringify(stopped.carried) === '["tests-g2"]'
+    && JSON.stringify(old.carried) === '["tests-g2"]',
+    "26f a run that went on past its red lends every green, its last included; one that stopped lends all but the gate it stopped after;"
+    + " a line with no stop keeps the old rule: " + JSON.stringify(ranOn.carried) + ", " + JSON.stringify(stopped.carried) + ", " + JSON.stringify(old.carried));
 }
 
 function areaInheritCoverageLegs() {
@@ -2877,9 +2996,15 @@ async function main() {
   areaResumeLegs();
   areaResumeByNameLegs();
 
+  /* ---- 26. THE LOCAL AREA GOES ON PAST A RED (see pastRedLegs) ------------------------------------ */
+  pastRedLegs();
+
   /* ---- 25. THE WALL-CLOCK LIMIT ON ONE GATE, AND AN AREA RUN TAKING A LANE (see wallAndLaneLegs) ---- */
   zombieReaderLeg();
   wallAndLaneLegs();
+
+  /* ---- 27. A SHARD'S FLAKE HOLDS NOTHING (see shardFlakeLeg; 26 is the local area past a red) ---- */
+  shardFlakeLeg();
 
   /* ---- 22. FINGERPRINT METHOD AND RETRY (see fingerprintGapsLegs) -------------------------- */
   fingerprintGapsLegs();

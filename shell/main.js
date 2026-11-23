@@ -28,6 +28,13 @@ const { app, BrowserWindow, Menu, Notification, Tray, clipboard, dialog, nativeI
  * to the other, and tests/licence-studio.mjs ls13c holds wire.cjs's copy of the licence override. */
 const PACKAGED = /[\\/]app\.asar([\\/]|$)/i.test(__dirname);
 const testOnly = name => (PACKAGED ? "" : String(process.env[name] || ""));
+/* A harness with no relay to reach counts a relay team's catch-up as run, and the move a Remove writes as held by the relay, so a
+   Remove there goes ahead in step, and stands (the service is told of it), rather than waiting (the sign-in legs of Remove on a
+   relay team, written before removals waited). The value "race" counts the catch-up as run and leaves the move not held, as a
+   removal refused as a fork is, for the leg that reads what a waiting removal does not tell the service (si128). Read at the shell's
+   start; never in a packaged Studio. */
+const RELAY_TEST = testOnly("STUDIO_TEST_RELAY_CAUGHT_UP");
+const RELAY_CAUGHT_UP_TEST = RELAY_TEST === "1" || RELAY_TEST === "race", RELAY_HELD_TEST = RELAY_TEST === "1";
 /* THE SIGN-IN PREVIEW, read here once and never from the page; an installed Studio takes it too, since tools/signin-preview.cmd
    starts the installed one. It changes only what is drawn while no provider has a client id (signInOffer). */
 const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW === "1";
@@ -280,6 +287,13 @@ const HOLD_AT = "Etiuda Studio on {COMPUTER} already has {ROOT} open, and one St
 const HOLD_SAME = "Another copy of Etiuda Studio on this computer already has {ROOT} open, and one Studio works in a projects folder at a time, so nothing was opened from it here. Quit that copy, or choose another projects folder, then try again.";
 const HOLD_TROUBLE = "Studio cannot tell whether another copy has {ROOT} open, because it cannot read or replace {FILE}, so nothing was opened from it. Once that file is deleted, try again.";
 let rootHold = null;
+/* QUIT SETS THIS BEFORE IT LETS THE HOLD GO, AND NO HOLD IS TAKEN AFTER IT (fold 100; the public runner's relay-studio b984c, "left interval
+   10000 running"). Electron does not wait for will-quit's promise, and a check already in flight (the waiting check, a look of the page)
+   runs holdCheck after the hold is let go: it took the hold again, rewrote the hold file and armed the beat, so the file outlived the quit
+   and a Studio on another computer was refused the folder for up to 45 s. Letting go only after those checks settle would hold the hold
+   past the quit; a flag costs nothing and leaves the hold dropped at once. A quit takes no more refusals either: nothing is working in the
+   folder any more. */
+let holdQuitting = false;
 function holdError(frame, vars) {
   const e = new Error(frame.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)));
   e.said = { frame, vars };
@@ -299,6 +313,7 @@ function holdOtherError(where, by) {
  *  disk again; otherwise a refused look is not repeated inside two seconds, and a folder that holds nothing (not there, or nobody may
  *  write to it) is looked at again after half a minute. */
 function holdCheck(root, fresh) {
+  if (holdQuitting) return; /* plant:hold-quit */
   const where = path.resolve(root);
   const now = Date.now();
   /* Only a folder that can be shared has a hold (a synced folder, a share, a disk that may be a mapped share): a local one is this computer's alone. */
@@ -322,7 +337,7 @@ function holdCheck(root, fresh) {
     if (r.state !== "other" && !timer) { /* plant:hold-beat */
       rootHold.timer = setInterval(() => {
         const was = rootHold;
-        if (!was || was.state === "other") return;
+        if (!was || was.state === "other" || holdQuitting) return;
         const again = RootHold.take(was.root, was.me);
         was.state = again.state; was.r = again; was.at = Date.now();
       }, Number(testOnly("STUDIO_HOLD_BEAT_MS")) || RootHold.BEAT_MS);
@@ -2940,6 +2955,13 @@ async function withLapse(facts) {
   const withHit = Object.assign(withLicence, { lapse: hit }); /* plant:g2s-desks */
   const noted = (await teamStore()).relayTeams(await teamsAt()).find((t) => t.team === withLicence.team.id);
   withHit.syncNote = noted && noted.syncNote ? noted.syncNote : ""; /* plant:rs932-desks */
+  if (noted) {
+    const K = await teamStore(), at = await teamsAt(), team = withLicence.team.id;
+    withHit.removalsWaiting = K.removalsOf(at, team).map((w) => ({ desk: w.desk, name: w.name || w.desk, key: w.key })); /* plant:rmo-shown */
+    withHit.team = waitingShown(withHit.team, withHit.removalsWaiting); /* plant:rmo-row-shown */
+    withHit.behind = teamBehindNow(team);
+    withHit.addedElsewhere = addedElsewhereOnce(team, K.removedOf(at, team), withHit.removalsWaiting.map((w) => w.desk));
+  }
   /* Desks an erasure took off this team (erasedStep), said once with how many. */
   const told = (await erasedLib()).leftTaken(readStore().erasedLeft, withLicence.team.id);
   if (told.count) { const was = readStore(); was.erasedLeft = told.rest; writeStore(was); withHit.erasedLeft = told.count; } /* plant:erased-told */
@@ -2954,6 +2976,21 @@ async function withLapse(facts) {
   }
   return withReinvite(withHit);
 }
+/* THE MEMBERS ADDED ON THE LEAD'S OTHER COMPUTER that the team file standing lacks (the channel's clash record, `dropped`), said once:
+   each desk the passed-over file named that the standing one does not, less those this Studio removed or is removing. */
+function addedElsewhereOnce(team, gone, waiting) {
+  const ch = relayRunner && typeof relayRunner.channel === "function" ? relayRunner.channel(team) : null;
+  const prog = ch && ch.program;
+  if (!prog || typeof prog.rootClash !== "function") return [];
+  const clash = prog.rootClash().find((c) => c && c.path === "etiuda-team.json");
+  /* Only those the passed-over side added since the file both computers held (`added`): a member the standing side took off is no
+     one waiting to be admitted again (the test architect zeta's finding 1). A record without it says nothing. */
+  if (!clash || !Array.isArray(clash.added)) return [];
+  const out = clash.added.filter((d) => !Object.prototype.hasOwnProperty.call(gone || {}, d) && (waiting || []).indexOf(d) < 0); /* plant:rmo-added-only */
+  if (typeof prog.rootClashSeen === "function") prog.rootClashSeen("etiuda-team.json");
+  return out;
+}
+
 /* THE DESKS A HANDOVER FOR A KEY IN OTHER HANDS LEFT BEHIND (Max's ruling of 2026-11-01 06:13), named on the Desks screen once
    the team's keys have changed since that handover: those admitted at the handover, still on the roster, whose own in-use file
    is not sealed under a key from that change on (src/catalog-use.mjs notTaken). Where every one has taken it, the screen says
@@ -2982,6 +3019,11 @@ answer("studio:desks", async (e, dir) => guard(async () => withLapse(await desks
 async function desksFor(project) {
   await bringBack(project);
   const facts = await desksNow(project);
+  /* THE SIGNING KEY TO BE RESTORED HERE (Claude alpha's ruling of 2026-11-23 00:37, the restore route of 04:41): a project sealed to a
+     relay team, on a computer whose signing key does not open (its backup copy put in the key's place, not restored), follows the
+     team only once the key is restored; the restore asks the backup's passphrase that one time, and the catch-up then runs by itself.
+     The Desks screen says so. */
+  if (facts && await keyToRestoreFor(project)) facts.keyToRestore = true; /* plant:rmo-key-restore */
   /* A REQUEST THAT PROVES A LIVE INVITATION IS LET IN WHEN STUDIO NEXT SEES IT (Claude alpha's ruling of 2026-10-13 11:30),
      and the screen's read is a sight of it: where one is asking, the watch looks at this folder now, and the screen is read
      again after it. */
@@ -3049,6 +3091,14 @@ answer("studio:member-remove", async (e, dir, team, member, confirm) => guard(as
     if (await leadStays(named, first)) throw (await refusal()).refuse(LEAD_STAYS);
     const others = desksOfPerson(named, first);
     let reply = await removeDeskNow(project, named, first);
+    /* The pressed desk's removal waits (removals that survive): each of the person's other desks is put to wait with it, by the
+       same removal, and the reply stays the waiting one. One that the relay lets through meanwhile is simply made. */
+    if (reply && reply.pending) {
+      for (const other of others) {
+        try { await removeDeskNow(project, named, other); } catch { /* the waiting removal is kept; the pass applies it later */ }
+      }
+      return others.length ? await removalWaits(project, named, first) : reply; /* plant:rmo-person-waits */
+    }
     if (!reply || !reply.removed) return reply;
     const gone = [first], stillOn = [];
     let refused = null;
@@ -3082,11 +3132,41 @@ async function deskStillOn(project, named, desk, reply) {
     return facts.team.roster.some((m) => m && m.id === desk); /* plant:si57r-roster */
   } catch { return true; } /* plant:si57r-reread-fails */
 }
+/* A removal being made: the pass after each sync does not apply removals meanwhile (keysAndRemovals), so it never makes this one
+   underneath it. */
+let removingNow = 0;
 async function removeDeskNow(dir, named, who) {
+  removingNow += 1;
+  try { return await removeDeskOnce(dir, named, who); }
+  finally { removingNow -= 1; }
+}
+async function removeDeskOnce(dir, named, who, again) {
     const at = await teamsAt(), K = await teamStore(), keyFile = await keyFileNow();
+    const onRelay = K.relayTeams(at).some((w) => w.team === named);
+    /* A REMOVAL THAT WAITS (Claude alpha's ruling of 2026-11-23 00:37). On the relay the lead's intent is kept at once, and the
+       epoch moves only where this Studio then holds the relay's current team file: offline, or behind, no key is made, and the
+       removal waits, said on the Desks screen, until keysAndRemovals applies it on top of the newest file by itself. */
+    if (onRelay) {
+      let before = null;
+      try { before = await thread.call("teamFacts", projectDir(dir), withHere({ key: keyFile })); } catch { before = null; }
+      const row = before && before.team && Array.isArray(before.team.roster) ? before.team.roster.find((m) => m && m.id === who) : null;
+      K.addRemoval(at, named, who, row && typeof row.name === "string" ? row.name : "", Date.now(), row && typeof row.key === "string" ? row.key : ""); /* plant:rmo-intent */
+    }
+    let catchUpSaid = "";
+    if (onRelay) {
+      try { await relayOnceLent(); }
+      catch (err) { process.stderr.write("studio  the relay could not be caught up before the removal: " + String(err && err.message || err) + "\n"); }
+      const up = await (await relayLib()).catchUpBeforeMove(relayRunner, named); /* plant:rs-catch-shell */
+      if (up && up.offline && up.said) catchUpSaid = up.said;
+      let inStep = true;
+      inStep = RELAY_CAUGHT_UP_TEST || (!!up && up.ok === true && teamInStepNow(named)); /* plant:rmo-in-step */
+      if (!inStep) return await removalWaits(dir, named, who);
+    }
     const facts = await thread.call("teamFacts", projectDir(dir), withHere({ key: keyFile }));
     const cur = facts && facts.team && facts.team.id === named && Number.isInteger(facts.team.epoch)
       && (facts.team.roster || []).some((m) => m && m.id === who) ? facts.team.epoch : 0;
+    /* Not on the file the relay holds: nothing to remove, and nothing waits. */
+    if (onRelay && !cur) { K.dropRemoval(at, named, who); return withLapse(await desksNow(dir)); }
     let nextKey = null;
     if (cur >= 1) {
       const held = (K.teamKeysOf(at, vault)[named] || {})[cur + 1];
@@ -3099,22 +3179,16 @@ async function removeDeskNow(dir, named, who) {
     }
     const ask = withHere({ confirm: true, teamKeys: (await teamsNow()).teamKeys, invites: await inviteBook(), teamsFile: at });
     if (nextKey) { ask.nextKey = nextKey; ask.nextEpoch = cur + 1; }
-    /* Before the epoch moves, one catch-up of a relay mirror, waited out, so a file the desk stored while trusted is
-       taken first (board 911). Offline, the move goes ahead and the lead is told in the reply. */
-    let catchUpSaid = "";
-    const onRelay = K.relayTeams(at).some((w) => w.team === named);
-    if (onRelay) {
-      try { await relayOnceLent(); }
-      catch (err) { process.stderr.write("studio  the relay could not be caught up before the removal: " + String(err && err.message || err) + "\n"); }
-      const up = await (await relayLib()).catchUpBeforeMove(relayRunner, named); /* plant:rs-catch-shell */
-      if (up && up.offline && up.said) catchUpSaid = up.said;
-    }
+    /* The catch-up before the epoch moves (board 911) ran above, for a relay team: a file the desk stored while trusted is taken
+       first. */
     /* THE SERVICE IS TOLD ONLY OF A REMOVAL THAT LANDED (the test architect's read of the relay door, D). It was told before the removal
        (their read of ff35a9e5, finding 2), so that a computer that lost the service after the removal had still told it; but a removal
        that then did not land (a team file that cannot be written, or a desk a stale page names that is no longer on the roster) had already
        taken a person who is still on the team off it at the service, unmarked, and only a Join of theirs puts them back. Now the owed mark
        is written first (forgetAdmitted, below) and the pass that sends it started at once, waited out UNPLACE_WAIT_MS at most before Remove
-       answers; a computer that goes in between has the mark, and the pass at the next look sends it. */
+       answers; a computer that goes in between has the mark, and the pass at the next look sends it. On a relay team the first press is
+       also a removal that may wait (the race, below): its mark is written, and the pass started, only once the relay holds the move, and a
+       removal that waits is applied again by keysAndRemovals, which writes the mark when it lands. */
     let r;
     try {
       r = await thread.call("removeMember", projectDir(dir), keyFile, named, who, await keySecret(), ask);
@@ -3134,7 +3208,10 @@ async function removeDeskNow(dir, named, who) {
     /* Remove undoes an admission by code (the handoff's section 6): the removed desk's person is let in by the watch no more, and
        the service's admission by name is withdrawn, not awaited (night decision 22). */
     let told = null;
-    if (r && r.removed) {
+    /* The first press on a relay team stands only once the relay holds it (the race, below): the service is told then, not before. A
+       removal applied again by keysAndRemovals, a team not on the relay, and one that landed with a reseal owed are told here. */
+    const racing = onRelay && !!r && !!r.removed && !r.error && !again;
+    if (r && r.removed && !racing) { /* plant:jd-shell-race */
       await forgetAdmitted(named, who);
       told = withdrawOwed();
     }
@@ -3161,7 +3238,21 @@ async function removeDeskNow(dir, named, who) {
     if (r && r.team && r.folder) await publishLead(r.team.id, r.folder);
     if (r) delete r.written;
     if (r && catchUpSaid) r.catchUpSaid = catchUpSaid; /* plant:rs-catch-hand */
-    relaySync();
+    /* THE RACE (Claude alpha's ruling on pZeta run 7): written here, the move is done only once the relay holds it. Refused, as a fork
+       is, the removal is shown waiting, never done, and keysAndRemovals applies it again at the next sync by itself. */
+    if (racing) {
+      let up = true;
+      up = RELAY_HELD_TEST || await teamWriteSettled(named, true).catch(() => false); /* plant:rmo-up-or-waiting */
+      if (up) {
+        K.dropRemoval(at, named, who); /* plant:rmo-stands-drop */
+        await forgetAdmitted(named, who);
+        told = withdrawOwed();
+      }
+      if (!up) {
+        const waiting = K.removalsOf(at, named).map((w) => ({ desk: w.desk, name: w.name || w.desk, key: w.key }));
+        Object.assign(r, { removed: null, pending: who, removalsWaiting: waiting, team: waitingShown(r.team, waiting) }); /* plant:rmo-race-null */
+      }
+    } else relaySync();
     /* The unplace's pass, started above, is waited on a bounded time last, once the record, the key and the publish are kept. */
     if (told && onRelay) {
       let stop;
@@ -3169,6 +3260,151 @@ async function removeDeskNow(dir, named, who) {
       clearTimeout(stop); /* no timer is left running behind a pass that answered (tests/relay-studio.mjs reads leftovers after each leg) */
     }
     return withKept(r);
+}
+
+/* Whether the project at `project` is sealed to a relay team and the signing key here does not open: a key file that is there and is
+   not kept by the operating system, which this Studio cannot sign with until it is restored. */
+async function keyToRestoreFor(project) {
+  let p = null;
+  try { p = JSON.parse(fs.readFileSync(path.join(projectDir(project), "project.json"), "utf8")); } catch { p = null; }
+  if (!p || !p.relay || !/^[0-9a-f]{32}$/.test(String(p.relay.rt || ""))) return false;
+  const S = await signLib();
+  let read = null;
+  try { read = S.readKeyFile(await keyFileNow()); } catch { read = null; }
+  if (!read || read.kept === S.OS_WRAP) return false;
+  return !(await keySecret("probe"));
+}
+/* Whether the team's relay channel holds the relay's current team file (the pinned channel's teamInStep). A channel pinned before
+   it has no such word, and a removal goes ahead there as before. */
+function teamInStepNow(team) {
+  const ch = relayRunner && typeof relayRunner.channel === "function" ? relayRunner.channel(team) : null;
+  const prog = ch && ch.program;
+  if (prog && typeof prog.teamInStep !== "function") return true;
+  return !!prog && prog.teamInStep() === true;
+}
+/* Whether the team's mirror holds a team file this computer cannot yet use: a newer epoch's, through a remaining desk's copy, or one
+   the relay holds that it cannot open (the pinned channel's teamBehind). */
+function teamBehindNow(team) {
+  const ch = relayRunner && typeof relayRunner.channel === "function" ? relayRunner.channel(team) : null;
+  const prog = ch && ch.program;
+  return !!prog && typeof prog.teamBehind === "function" && prog.teamBehind() === true;
+}
+/* A PERSON WHOSE REMOVAL WAITS STAYS IN THE MEMBER LIST SHOWN, MARKED WAITING (Claude alpha's word of 2026-11-23, relayed by Claudius
+   at 13:51), on every look and in the reply, until the removal stands at the relay: until then they can still read. A row the list
+   holds is marked; a desk the list written here no longer names (the race: this computer's own file, refused) is shown again from
+   what the waiting removal kept. */
+function waitingShown(team, waiting) {
+  if (!team || !Array.isArray(team.roster) || !Array.isArray(waiting) || !waiting.length) return team;
+  const by = new Map(waiting.map((w) => [w.desk, w]));
+  const roster = team.roster.map((m) => (m && by.has(m.id) ? Object.assign({}, m, { waiting: true }) : m));
+  for (const w of waiting) {
+    if (roster.some((m) => m && m.id === w.desk)) continue;
+    roster.push({ id: w.desk, name: w.name || w.desk, own: "", rosterName: null, said: "", invite: "", key: w.key || "", admitted: true,
+      kind: "desk", door: "", version: "", below: false, waiting: true });
+  }
+  return Object.assign({}, team, { roster });
+}
+/* The reply to a Remove that waits: the Desks screen as it stands, with the removal among those waiting. */
+async function removalWaits(dir, named, who) {
+  const facts = await withLapse(await desksNow(dir));
+  return Object.assign(facts || {}, { removed: null, pending: who });
+}
+/* THE LEAD'S OTHER COMPUTER, AND THE REMOVALS THAT WAIT (Claude alpha's ruling of 2026-11-23 00:37), after each sync. A team whose
+   mirror holds a team file this computer has no key for, which a remaining desk's copy brought, takes the key from that file's
+   recovery copy under the signing key, setting aside one this Studio made under the same number; the channel then opens the
+   relay's own file and is in step. A team in step applies, on top of the file the relay holds, each removal still waiting, as the
+   next epoch, and lets go of each the file no longer names. One pass at a time. */
+let removalsBusy = false, removalFollow = 0, resealRetry = 0;
+const REMOVAL_FOLLOW = 4;
+async function keysAndRemovals() {
+  if (removalsBusy || !relayRunner || typeof relayRunner.channel !== "function") return;
+  removalsBusy = true;
+  try {
+    const K = await teamStore(), at = await teamsAt();
+    let made = false, resealFailed = false;
+    for (const t of K.relayTeams(at)) {
+      const ch = relayRunner.channel(t.team);
+      if (!ch || !ch.program || typeof ch.program.teamInStep !== "function") continue;
+      if (!ch.program.teamInStep()) {
+        const secret = await keySecret("open");
+        if (!secret) continue;
+        let r = null;
+        /* A fork the channel recorded (the relay's file standing over this computer's): its floor may come down to it. */
+        const clash = typeof ch.program.rootClash === "function" ? ch.program.rootClash().find((c) => c && c.path === "etiuda-team.json") : null;
+        const fork = !!clash && clash.kept === "team" && typeof ch.program.teamBehind === "function" && ch.program.teamBehind() === true;
+        try { r = await thread.call("teamKeyFromFile", t.folder, await keyFileNow(), secret, { teamKeys: (await teamsNow()).teamKeys, fork }); } catch { r = null; }
+        if (r && r.key && r.id === t.team) {
+          const aside = [];
+          try {
+            /* A key this Studio made apart under that number is set aside. */
+            if (r.aside) aside.push(r.epoch);
+            for (const e of aside) K.setAsideTeamKey(at, r.id, e); /* plant:rmo-aside */
+            K.keepTeamKey(at, vault, r.id, r.epoch, Buffer.from(r.key)); /* plant:rmo-key-back */
+          } catch (err) { process.stderr.write("studio  the key of team " + t.team + "'s newest file could not be kept: " + String(err && err.message || err) + "\n"); continue; }
+          /* What went under the key set aside goes again, under the key that stands (Claude alpha's ruling of 06:44). */
+          if (typeof ch.program.resendEpoch === "function") for (const e of aside) ch.program.resendEpoch(e); /* plant:rmo-resend */
+          ch.kick(); await ch.idle();
+        }
+      }
+      /* WHAT A KEY SET ASIDE SEALED IS SEALED AGAIN, from the keys the store keeps aside, on every pass and not only the one that set
+         the key aside (the test architect san's re-read, upheld by Claude alpha): a catalog this computer sealed under such a key is
+         sealed again under the key that stands at that number, so a member holding only that key reads it and a removal's reseal
+         opens it. A reseal that failed (a quit, a write refused, a folder away) is done at the next pass. It does nothing to a file
+         that already opens with the standing key, so it is idempotent; it waits while a Remove is being made here. */
+      if (removingNow === 0) {
+        const kept = (typeof K.asideTeamKeysOf === "function" ? K.asideTeamKeysOf(at, vault) : {})[t.team] || {};
+        const standing = (K.teamKeysOf(at, vault) || {})[t.team] || {};
+        let resealed = 0;
+        for (const e of Object.keys(kept)) { /* plant:rmo-aside-reseal */
+          if (!standing[e]) continue;
+          for (const was of kept[e]) {
+            try {
+              const done = await thread.call("resealAside", t.folder, t.team, Number(e), Buffer.from(was), Buffer.from(standing[e]));
+              resealed += done && Array.isArray(done.resealed) ? done.resealed.length : 0;
+            } catch (err) {
+              resealFailed = true;
+              process.stderr.write("studio  the catalogs sealed under team " + t.team + "'s key set aside could not be sealed again: " + String(err && err.message || err) + "\n");
+            }
+          }
+        }
+        if (resealed) { ch.kick(); await ch.idle(); }
+      }
+      if (!ch.program.teamInStep() || removingNow > 0) continue;
+      const waiting = K.removalsOf(at, t.team);
+      if (!waiting.length) continue;
+      const held = (await (await teamLib()).heldTeam(t.folder, { key: await keyFileNow() }).catch(() => ({ team: null }))).team;
+      const roster = held && Array.isArray(held.roster) ? held.roster.map((e) => e && e.desk && e.desk.id).filter(Boolean) : null;
+      if (!roster) continue;
+      const dir = await projectOfTeam(t.team, t.folder);
+      for (const w of waiting) {
+        if (roster.indexOf(w.desk) < 0) { K.dropRemoval(at, t.team, w.desk); continue; }
+        if (!dir) continue;
+        /* Made inside this sync: no reply waits on it, and the sync's next turn sends it and lets the removal go. */
+        try { await removeDeskOnce(dir, t.team, w.desk, true); made = true; } /* plant:rmo-again */
+        catch (err) { process.stderr.write("studio  a removal waiting for team " + t.team + " could not be made: " + String(err && err.message || err) + "\n"); }
+        break;
+      }
+    }
+    /* SEVERAL REMOVALS WAITING (a person on several computers, or presses while offline) are applied one per pass, each moving the
+       epoch; the sync after each sends it and the next pass takes the next. A pass that made one asks for a sync more at once, and a few
+       follow while any still waits, so they all stand without waiting for the team watch; never more than REMOVAL_FOLLOW in a row that
+       made none, so a computer that cannot get in step stops asking. */
+    if (made) removalFollow = REMOVAL_FOLLOW;
+    else if (removalFollow > 0) removalFollow -= 1;
+    /* A reseal refused asks for a sync more at once too, so it is tried again within seconds; never more than REMOVAL_FOLLOW in a
+       row, after which the passes that come (the team watch's among them) still try it. */
+    resealRetry = resealFailed ? resealRetry + 1 : 0;
+    const retryNow = resealFailed && resealRetry <= REMOVAL_FOLLOW; /* plant:rmo-reseal-retry */
+    if (retryNow || (removalFollow > 0 && K.relayTeams(at).some((t) => K.removalsOf(at, t.team).length))) relaySync(); /* plant:rmo-follow */
+  } finally { removalsBusy = false; }
+}
+/* The project of this Studio that publishes through team `team`: by the team it is sealed to, or by its folder. */
+async function projectOfTeam(team, folder) {
+  let list = [];
+  try { const l = await thread.call("listProjects", projectsRoot(), { userData: app.getPath("userData") }); list = l && Array.isArray(l.projects) ? l.projects : []; }
+  catch { list = []; }
+  const hit = list.find((p) => p && p.dir && (p.sealedTeam === team || (p.folder && folder && pathsSame(p.folder, folder))));
+  return hit ? hit.dir : "";
 }
 
 /* ---- invitations and auto-admit (board 885, S2) -------------------------------------------------------------------------
@@ -3785,6 +4021,8 @@ async function relayOnce() {
     }
     return synced;
   });
+  try { await keysAndRemovals(); } /* plant:rmo-after-sync */
+  catch (err) { process.stderr.write("studio  the removals waiting could not be looked at: " + String(err && err.message || err) + "\n"); }
   await lapseNudge();
   return out;
 }
@@ -8603,6 +8841,7 @@ function endRelay() {
   return relayEnding;
 }
 app.on("will-quit", () => {
+  holdQuitting = true;
   try { holdLetGo(); } catch {}
   try { if (studioTray && typeof studioTray.destroy === "function") studioTray.destroy(); } catch {}
   closeUseWatchers();

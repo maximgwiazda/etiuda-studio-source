@@ -138,6 +138,20 @@ jobs:
           }
           echo "#hosted shard=${{ matrix.shard }} engine-fetch-s=$(( $(date +%s) - s ))"
 
+      # EVERY LEG PARSES, the ones no shard runs included. A leg left to the desk, or one that skips here for want of a fixture,
+      # is otherwise first read by the local area, so an edit that does not parse escapes every hosted check. One shard reads them
+      # all with node --check; a file that does not parse is named.
+      - name: every leg parses
+        if: matrix.shard == 1
+        shell: bash
+        run: |
+          bad=0
+          for f in tests/*.js tests/*.mjs tests/*.cjs tools/*.mjs tools/*.js tools/runner/*.mjs; do
+            [ -f "$f" ] || continue
+            if ! node --check "$f" 2>"$RUNNER_TEMP/parse.err"; then echo "FAIL does not parse: $f"; sed 's/^/       /' "$RUNNER_TEMP/parse.err" | head -5; bad=1; fi
+          done
+          exit $bad
+
       # A clean checkout plus the fetched pin (engine/pinned/, ignored) and node_modules (ignored) is a clean commit, as gate-run
       # reads one (gitTree: git status --porcelain, then no skip-worktree or assume-unchanged entry). Anything else here is the
       # runner's or this file's, never the tree under test's, so it stops the shard before a gate and names the paths.
@@ -164,6 +178,9 @@ jobs:
           ETIUDA_RUNS: ${{ runner.temp }}\hosted\etiuda-runs
           ETIUDA_AREA_SHARD: ${{ matrix.shard }}/${{ env.SHARDS }}
           ETIUDA_AREA_DESK_ONLY: ${{ env.DESK_ONLY }}
+          # A dispatch input is text anyone who may dispatch types, so it reaches the script as an environment variable and is
+          # never interpolated into it: an expression inside a run block is pasted into the shell before the shell reads it.
+          PRIVATE_SHA: ${{ inputs.private_sha }}
           # The whole plan every time: a shard's records carry no shard mark, so a resume could read another shard's greens as
           # this one's.
           ETIUDA_AREA_RESUME: 'off'
@@ -175,10 +192,15 @@ jobs:
           # nothing: gate-run then reads no changed file and plans only the floor.
           log="$HOSTED_LOGS/shard.log"
           mkdir -p "$HOSTED_LOGS" "$ETIUDA_RUNS"
+          # The private commit is empty (a push) or a full commit id: 40 hex characters, and nothing else is run or echoed.
+          if [ -n "$PRIVATE_SHA" ] && ! printf '%s' "$PRIVATE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "#hosted private_sha is not 40 hex characters; refused" | tee "$log"
+            exit 1
+          fi
           base=$(git merge-base origin/main HEAD 2>/dev/null || true)
           if [ "$base" = "$(git rev-parse HEAD)" ]; then base=$(git rev-parse -q --verify 'HEAD^' || true); fi
           if [ -z "$base" ]; then base=$(git hash-object -t tree /dev/null); echo "#hosted no tree before this one: the base is the empty tree, so the plan is the whole tree"; fi
-          [ -n "${{ inputs.private_sha }}" ] && echo "#hosted published from ${{ inputs.private_sha }}"
+          [ -n "$PRIVATE_SHA" ] && echo "#hosted published from $PRIVATE_SHA"
           echo "#hosted shard=${{ matrix.shard }} base=$base head=$(git rev-parse HEAD) tree=$(git rev-parse 'HEAD^{tree}') cores=$(nproc)" | tee "$log"
           s=$(date +%s)
           set +e

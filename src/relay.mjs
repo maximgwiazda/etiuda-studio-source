@@ -1060,6 +1060,12 @@ function relayRunner(d) {
     const n = looks.get(team);
     if (!n || !n.open) return;
     n.open = false;
+    /* THE LEAD'S OTHER COMPUTER BEHIND (Claude alpha's ruling of 2026-11-23 00:37): its mirror holds a team file it has no key for
+       yet, or the relay holds one it cannot open. That is what its uploads were refused for, so the line is the copywriter's true
+       one (behind), not the out-of-step lines, and it clears once the channel holds the relay's file. */
+    let behind = false;
+    behind = behindOf(team); /* plant:rmo-behind-note */
+    if (behind) { writeSyncNote(team, "behind", n.streak); return; }
     if (n.kinds.size === 0) {
       if (n.succeeded) { n.streak = 0; writeSyncNote(team, "", 0); }
       return;
@@ -1074,6 +1080,17 @@ function relayRunner(d) {
       for (const k of n.kinds) { kind = k; break; }
     }
     if (kind) writeSyncNote(team, kind, n.streak);
+  }
+  /* Behind the relay's team file: the pinned channel's teamBehind (a newer epoch's blob waits for its key, or the mirror's file came
+     through a desk's copy), or a blob of the lead's own key at the epoch of the file it holds that it cannot open, its key minted
+     apart on the other computer (a fork). A file written here and not yet sent is not behind. */
+  function behindOf(team) {
+    const c = channels.get(team), p = c && c.ch && c.ch.program;
+    if (!p || typeof p.teamBehind !== "function") return false;
+    if (p.teamBehind() === true) return true;
+    const pin = typeof p.pinned === "function" ? p.pinned() : null, st = typeof p.state === "function" ? p.state() : null;
+    const top = typeof p.teamEpoch === "function" ? p.teamEpoch() : 0;
+    return top > 0 && !!pin && !!st && Array.isArray(st.pending) && st.pending.some((x) => x && x.writer === pin.lead.keyId && x.epoch >= top);
   }
   function armFinish(team, ch) {
     const n = lookOf(team);
@@ -1400,6 +1417,19 @@ function relayRunner(d) {
       const newest = await relayTeamIn(t);
       if (newest) { team = newest; keys = devicesOf(team); enrolled = sha256(JSON.stringify(keys)); }
     }
+    /* NO DEVICE LIST FROM A FILE BEHIND THE RELAY'S (Claude alpha's ruling of 2026-11-23 00:37): never one read from a team file the
+       relay holds a newer one over, or a fork of, so a desk taken off on the lead's other computer is never enrolled again from this
+       one; nor the invitations' wraps of that file's key. One cycle first, so the newest file is read; behind still, it waits for
+       the key. A file written here and not yet taken (an offline move, a lapsed grant) is not behind, and its list goes as before. */
+    let listOk = true;
+    listOk = !behindOf(t.team); /* plant:rmo-list-in-step */
+    if (!listOk) {
+      await caughtUp(t);
+      const newest = await relayTeamIn(t);
+      if (newest) { team = newest; keys = devicesOf(team); enrolled = sha256(JSON.stringify(keys)); }
+      listOk = !behindOf(t.team);
+    }
+    if (!listOk) return { ok: true, team: true, waits: "behind" };
     if (enrolled !== t.enrolled) {
       let rev = Math.max(t.devicesRev + 1, call.t);
       let r = await enrol(call, keys, rev, fileOf(team)); /* plant:rs-enrol */

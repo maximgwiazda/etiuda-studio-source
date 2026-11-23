@@ -117,12 +117,6 @@ relay/test/stand-ins.cjs
 relay/test/grant-kit.cjs
 relay/test/grant-vector.json
 
-# THE DESK'S FOLDER SYNCER (board 945 stage 3 (b)): the program that judges what a shared folder holds with the desk's own
-# checks, its worker that stages whole files off the main thread, and the outbox that takes this program's writes to the share
-# with its rev floors. Studio runs it for every folder team it leads (src/folder-sync.cjs), so the share is read and written by
-# the same rules a desk's mirror is, and the package ships it.
-shell/folder/
-
 # THE SAMPLES THE SERVICE AND THE DESK ARE BOTH HELD TO, as the engine holds them: the door relays (decision 31; s98e compares
 # tests/fixtures/door-relays.json with this copy), every answer the licence service gives the desk's sign-in (s110c compares
 # tests/fixtures/signin-answers.json, which tests/licence-service.mjs --write-answers writes from the service's core, with this

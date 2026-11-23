@@ -266,8 +266,8 @@ function heed(teamsFile, vault, me) {
   const judged = judgeTeam(doc, f.team, f.lead);
   if (!judged) { Store.markFollowing(teamsFile, f.team, "not-reached"); return "not-reached"; }
   /* THE FLOOR: the highest team file heeded is kept in the sealed record, so after a mirror lost or a restore an older genuine
-     file (one that still lists this member, say) is not heeded again, as the desk's syncer keeps its own (Argon's V2 review,
-     finding 4). The syncer is handed the same floor; this is the read's own check. */
+     file (one that still lists this member, say) is not heeded again, as the desk keeps its own (Argon's V2 review,
+     finding 4). */
   const rev = Engine.teamFileRules().teamRevOf(doc);
   if (rev === null) return f.state;
   let older = false;

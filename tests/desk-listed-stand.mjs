@@ -20,7 +20,7 @@ const PINNED = path.join(ROOT, "engine", "pinned");
 const nodeRequire = createRequire(import.meta.url);
 const PASS = "a passphrase for the lead's key in this gate";
 const CARD = "The quay lamp is wrapped for the crossing.";
-const EXPOSE = ["wrapTeamKey", "offerFile", "teamUse", "deskTrustChecks", "askSignedBytes", "signedSha", "teamListedDoc", "chainListed",
+const EXPOSE = ["wrapTeamKey", "offerFile", "teamUse", "askSignedBytes", "signedSha", "teamListedDoc", "chainListed",
   "branchGate", "idListedHere", "lineageOf", "deskDocNow", "catalogDocIn", "privateHere", "catalogMarkedPrivate"];
 const J = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
 const pubHex = (k) => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");

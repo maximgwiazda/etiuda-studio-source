@@ -147,6 +147,20 @@ function teamKeysOf(file, vault) {
   return out;
 }
 
+/** The keys set aside (setAsideTeamKey), opened: {team: {epoch: [key, ...]}}, each a 32-byte Buffer; a key the vault does not open
+ *  is left out. */
+function asideTeamKeysOf(file, vault) {
+  const doc = readTeams(file, false), out = {};
+  Object.keys(doc.teams).forEach(t => {
+    const aside = doc.teams[t] && doc.teams[t].aside && typeof doc.teams[t].aside === "object" && !Array.isArray(doc.teams[t].aside) ? doc.teams[t].aside : {};
+    Object.keys(aside).forEach(ep => {
+      const keys = (Array.isArray(aside[ep]) ? aside[ep] : []).map((k) => openOne(vault, k)).filter(Boolean);
+      if (keys.length) (out[t] = out[t] || {})[ep] = keys;
+    });
+  });
+  return out;
+}
+
 /* A key kept before the team file moves (a removal keeps the next epoch's key, then asks the share to write). Until that
    write lands the epoch is pending: it still opens what is sealed for it, and it is not treated as the current epoch. */
 function pendingList(e) {
@@ -892,6 +906,56 @@ function markRemoved(file, team, desk, at, epoch, files) {
   return true;
 }
 
+/* A REMOVAL THAT WAITS (Claude alpha's ruling of 2026-11-23 00:37): Remove records the lead's intent at once, and the epoch moves only
+   when this Studio holds the relay's current team file. The intent stays until the team file the relay holds no longer names the
+   desk, so a removal made offline, behind, or in a fork is applied again on top of the newest file, by itself. {desk id: {name, at}}. */
+function addRemoval(file, team, desk, name, at, key) {
+  if (!DESK_ID.test(String(desk))) throw new Error("a removal is named by the desk's id");
+  const doc = readTeams(file, true), e = entry(doc, String(team));
+  const was = e.removals && typeof e.removals === "object" && !Array.isArray(e.removals) ? e.removals : {};
+  if (Object.prototype.hasOwnProperty.call(was, String(desk))) return false;
+  was[String(desk)] = { name: String(name || "").slice(0, 200), at: Number.isSafeInteger(at) ? at : Date.now() };
+  if (typeof key === "string" && key) was[String(desk)].key = key.slice(0, 200);
+  e.removals = was;
+  putTeams(file, doc);
+  return true;
+}
+/** The removals waiting for `team`: [{desk, name, at, key}], oldest first; `key` is the desk's key print where it was kept, else "". */
+function removalsOf(file, team) {
+  const doc = readTeams(file, false), e = Object.prototype.hasOwnProperty.call(doc.teams, String(team)) ? doc.teams[String(team)] : null;
+  const was = e && e.removals && typeof e.removals === "object" && !Array.isArray(e.removals) ? e.removals : {};
+  return Object.keys(was).filter((d) => DESK_ID.test(d) && was[d] && typeof was[d] === "object")
+    .map((d) => ({ desk: d, name: typeof was[d].name === "string" ? was[d].name : "", at: Number(was[d].at) || 0,
+      key: typeof was[d].key === "string" ? was[d].key : "" }))
+    .sort((a, b) => a.at - b.at);
+}
+/** The removal of `desk` is done: the team file the relay holds no longer names it. */
+function dropRemoval(file, team, desk) {
+  const doc = readTeams(file, true);
+  if (!Object.prototype.hasOwnProperty.call(doc.teams, String(team))) return false;
+  const e = doc.teams[String(team)];
+  if (!e || !e.removals || typeof e.removals !== "object" || !Object.prototype.hasOwnProperty.call(e.removals, String(desk))) return false;
+  delete e.removals[String(desk)];
+  if (!Object.keys(e.removals).length) delete e.removals;
+  putTeams(file, doc);
+  return true;
+}
+/* A KEY SET ASIDE, never lost: the one this Studio made for an epoch whose team file the relay holds under another key (a fork, the
+   other computer's file standing). It moves from the team's keys to `aside`, so the key the relay's file carries can be kept under
+   that number, and stays there sealed as it was. */
+function setAsideTeamKey(file, team, epoch) {
+  const doc = readTeams(file, true);
+  if (!Object.prototype.hasOwnProperty.call(doc.teams, String(team))) return false;
+  const e = doc.teams[String(team)], at = String(epoch);
+  if (!e || !e.keys || !Object.prototype.hasOwnProperty.call(e.keys, at)) return false;
+  const aside = e.aside && typeof e.aside === "object" && !Array.isArray(e.aside) ? e.aside : {};
+  aside[at] = (Array.isArray(aside[at]) ? aside[at] : []).concat([e.keys[at]]);
+  e.aside = aside;
+  delete e.keys[at];
+  putTeams(file, doc);
+  return true;
+}
+
 /** The desks taken off `team`, by id: {key, at, epoch, files}. */
 function removedOf(file, team, opts) {
   const strict = !!(opts && opts.strict);
@@ -1277,7 +1341,8 @@ function followBackupRow(file, vault) {
     chain: f.chain, keys, floor: f.floor };
 }
 
-export { TEAMS_FILE, teamsFile, teamsNewer, keepTeamKey, markKeyPending, clearKeyPending, pendingEpochsOf, epochRowsOf, forgetTeam, endTeam, chooseSealed, teamKeysOf, unsealedOf, keptTeam, teamHeldBy, teamForFolder, admittedOf, studioTeammates,
+export { TEAMS_FILE, teamsFile, teamsNewer, keepTeamKey, markKeyPending, clearKeyPending, pendingEpochsOf, epochRowsOf, forgetTeam, endTeam, chooseSealed, teamKeysOf, asideTeamKeysOf, unsealedOf, keptTeam, teamHeldBy, teamForFolder, admittedOf, studioTeammates,
   keepInvite, invitesOf, liveInvitesOf, inviteBookOf, inviteSecretOf, noteFirstSeen, noticesOf, noteTried, dismissTried, clearTried, endInvite, reviveInvite, forgetInviteSecret, watchedTeams,
   relayMirror, folderHere, folderSaid, placeFor, placeForLooked, keepRelay, relayTeams, markRelay, markAsked, askedOf, relayInvitesOf, markRelayInvite, markRemoved, removedOf, removedOfStrict,
+  addRemoval, removalsOf, dropRemoval, setAsideTeamKey,
   keepFollowing, followingOf, markFollowing, retargetFollowing, resealFollowing, keepFollowKey, forgetFollowing, followBackupRow };

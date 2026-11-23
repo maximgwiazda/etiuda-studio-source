@@ -9437,6 +9437,9 @@
     if (kind === "out-of-step") return T("The relay did not take this computer's latest upload, because it arrived out of step with the team. Nothing on this computer is lost, and Studio sends it again at its next look; nothing needs doing.");
     if (kind === "out-of-step-3") return T("The relay has refused this computer's uploads three times in a row as out of step with the team. Nothing on this computer is lost, but the relay's copy does not yet have this computer's latest. A newer version of Studio may set this right: look on etiuda.dev, and if it continues after that, write to us there.");
     if (kind === "rate") return T("The relay is taking fewer uploads for a moment, as there were many in a short time. Nothing is lost, and Studio sends again shortly by itself; nothing needs doing.");
+    /* The lead's other computer behind (Claude alpha's ruling of 2026-11-23 00:37): the copywriter's words of 2026-11-23, in place
+       of the out-of-step line for this case. */
+    if (kind === "behind") return T("This computer cannot open the team's newest file yet, and is fetching what it needs. Until then it cannot publish or change the team's members; nothing is lost."); /* plant:rmo-behind-words */
     /* A team the Test Service build made on Etiuda's test service, held by a build that does not reach it (src/relay.mjs
        relayReached): Claudette's sentence and her second line, 2026-11-13. */
     if (kind === "elsewhere") return T("This team is on Etiuda's test service, made there by the Test Service build; this build does not reach it, so it will not answer here.") + " " + T("Its data is kept, and nothing is sent."); /* plant:rts-elsewhere-words */
@@ -11982,7 +11985,8 @@
     };
     /* Free seat only where the service would free it (decision 46): the shell's `free`, the owner's for every desk, another lead's
        for a person it admitted by code. */
-    const removeCell = (r) => "<td>" + (seatOf(r.id) && seatOf(r.id).held && seatOf(r.id).free === true ? act("seat-free", r.id, T("Free seat"), "") + " " : "")
+    /* A member whose removal waits is not offered Remove again: it is already pressed, and happens once this computer is in step. */
+    const removeCell = (r) => r.waiting === true ? "<td></td>" : "<td>" + (seatOf(r.id) && seatOf(r.id).held && seatOf(r.id).free === true ? act("seat-free", r.id, T("Free seat"), "") + " " : "")
       + act("member-remove", r.id, T("Remove"), "") + "</td>";
     const head = '<tr><th>' + esc(T("Teammate")) + "</th><th>" + esc(T("Key")) + "</th><th>" + esc(T("Status")) + "</th><th></th></tr>";
     /* EACH MEMBER'S ETIUDA VERSION (the version policy, point 5), as the desk itself reports it in its statistics answer and
@@ -12019,7 +12023,10 @@
           + t.roster.map((r) => "<tr" + deskAt(r, r.key) + "><td>" + esc(r.name)
             + (r.own ? '<div class="n">' + esc(T("its own name: {NAME}", { NAME: r.own })) + "</div>" : "")
             + useNote(r.id)
-            + "</td><td class=\"kcell\">" + keyHtml("desk", r.key) + "</td><td>" + esc(r.admitted ? T("admitted") : T("named"))
+            + "</td><td class=\"kcell\">" + keyHtml("desk", r.key) + "</td><td>"
+            /* Shown, and marked, while its removal waits (Claude alpha's word of 2026-11-23); the words are the copywriter's line (3)'s own. */
+            + (r.waiting === true ? '<span data-member-waiting="' + esc(r.id) + '">' + esc(T("Removal waiting")) + "</span>" /* plant:rmo-row-page */
+              : esc(r.admitted ? T("admitted") : T("named")))
             + cameBy(r.kind, r.door) + seatNote(r.id) + "</td>" + versionCell(r) + removeCell(r) + "</tr>").join("") + "</table>"
           : '<div class="dashed">' + esc(T("No teammate is on the roster yet.")) + "</div>")
       : '<div class="dashed">' + esc(T("No teammate is on the roster yet.")) + "</div>";
@@ -12146,6 +12153,9 @@
           + '<button class="btn sm" data-act="policy-copy">' + esc(T("Copy the values")) + "</button></div></div>" : "")
       + "</div></div>";
     return ""
+      /* The signing key to be restored here before this computer follows the team: the copywriter's words of 2026-11-23, the
+         restore variant of the line above. */
+      + (d.keyToRestore ? '<p class="lede alert" data-key-restore>' + esc(T("This computer cannot open the team's newest file until Studio's signing key is restored here from its backup copy: in the Menu, under Settings, then Signing key, “Restore it from a backup copy…”. Until then it cannot publish or change the team's members; nothing is lost.")) + "</p>" : "") /* plant:rmo-key-restore-page */
       + (d.admitPaused && asks.length ? '<p class="lede alert" data-admit-paused>' + esc(T("Teammates are waiting to join, and this Studio cannot let them in while its licence is paused. Signing in with an account that holds a licence, from the Menu, under Settings, then Account, ends the pause, and they are let in by themselves.")) + "</p>" : "") /* copywriter, 2026-10-30 00:20; plant:f9-page-banner */ /* plant:txcu-945f9b */
       + (d.limitSkipped ? '<p class="lede alert" data-limit-skipped>' + esc(T("A teammate is waiting to join, but this Studio already has 30, open invitations included. Its request waits until a place frees.")) + "</p>" : "")
       + (d.folder
@@ -12155,6 +12165,14 @@
             + "</p>"
             + (d.lapse && d.lapse.step ? '<p class="lede" data-lapse="' + esc(d.lapse.step) + '">' + esc(lapseSaid(d.lapse, true)) + "</p>" : "") /* plant:g2s-page-desks */
             + (d.syncNote ? '<p class="lede" data-sync-note="' + esc(d.syncNote) + '">' + esc(syncNoteSaid(d.syncNote)) + "</p>" : "") /* plant:rs932-page */
+            /* REMOVALS THAT WAIT, and the members the standing list lacks (Claude alpha's ruling of 2026-11-23 00:37); the
+               copywriter's words, 2026-11-23, the addendum's (1), (2) and (4). */
+            + (Array.isArray(d.removalsWaiting) ? d.removalsWaiting.map((w) => '<p class="lede" data-removal-waiting="' + esc(w.desk) + '">'
+              + esc(T("Removal waiting: {NAME}. It happens as soon as this computer is in step with the team: connected, and holding the latest member list. Until then, they can still read the team's catalog.", { NAME: w.name || w.desk })) + "</p>").join("") : "") /* plant:rmo-waiting-page */
+            + (d.behind && Array.isArray(d.removalsWaiting) && d.removalsWaiting.length ? '<p class="lede" data-removal-behind>'
+              + esc(T("The member list was changed on another computer this team is led from, and Studio is bringing that change here. The removal waiting here is applied on top of it once it has arrived.")) + "</p>" : "")
+            + (Array.isArray(d.addedElsewhere) && d.addedElsewhere.length ? '<p class="lede" data-added-elsewhere>'
+              + esc(T("The member list that stands lacks people added on one of the computers this team is led from; they wait to be admitted again: {NAMES}.", { NAMES: d.addedElsewhere.join(", ") })) + "</p>" : "")
             + (d.handoverEnded ? '<p class="lede" data-handover-ended>' + esc(T(d.handoverEnded)) + "</p>" : "")
             /* Desks an erasure took off (section 13; Claude alpha's ruling of 2026-11-13 22:32). The copywriter's words, 2026-11-13. */
             + (d.erasedLeft ? '<p class="lede" data-erased-left>' + esc(T("A person on this team asked for their data to be deleted from Etiuda, so their desks were taken off the team: {N}.", { N: d.erasedLeft })) + "</p>" : "")
@@ -20225,6 +20243,16 @@
       }
       if (!r || r.error) { S.err = errOf(r); paintCover(); return; }
       if (r.removed === false) { S.err = r.said || r.refused || null; paintCover(); return; }
+      /* The removal waits (offline, this computer behind, or its move refused as a fork): the Desks screen says so, by name, until it
+         is applied; never "no longer on the team" before the relay holds it. */
+      if (r.pending) {
+        S.cover = null; S.err = null; S.teamWant = ""; S.memberGoing = "";
+        S.dkNote = [];
+        S.desks = r; S.desksLoadedFor = dir;
+        paint();
+        teamsRead();
+        return;
+      }
       S.cover = null; S.err = null; S.teamWant = ""; S.memberGoing = "";
       S.dkNote = [T("{NAME} is no longer on the team.", { NAME: name })];
       if (typeof r.catchUpSaid === "string" && r.catchUpSaid) S.dkNote.push(T(r.catchUpSaid)); /* plant:rs-catch-said */

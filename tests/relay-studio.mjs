@@ -85,6 +85,11 @@
  *   rs2l the shell's own landDue, driven by the window's focus, lands an answer a removed desk stored while trusted;
  *        the removal record is what makes that answer due
  *   rs911h the member-remove reply carries the catch-up sentence when that catch-up did not run
+ *   rs911p offline, Remove of a person on two computers keeps both removals waiting, not only the pressed desk's
+ *   rsro8 a person on two computers removed offline: both wait, both shown waiting, and both come off once online; rsro8c, the
+ *        same press online
+ *   rsro9 an edition sent under the computer's own key, set aside after a fork, goes again under the key that stands; rsro9f,
+ *        its first reseal refused, ends the same, and a later removal on that team goes through
  *   rs914a a join sealed under a spent, withdrawn or expired invitation is not opened; one sealed under a live
  *        invitation still is (board 914). A spent invitation's key opens only what its own desk sends (E4, below)
  *   rs914b on a relay team a request that names no invitation, or one that is not live, is not admitted, automatic
@@ -2771,18 +2776,20 @@ LEGS.rs2l = async () => {
     + (shell.said.length ? " (" + shell.said.slice(0, 4).join(" | ") + ")" : ""));
 };
 
-/* Board 911: with no signing key the relay channel is never opened, the catch-up is the offline sentence, and the
-   member-remove reply is where the lead reads it. Nothing is asked of the network. */
+/* Board 911: with no signing key the relay channel is never opened and the catch-up is the offline sentence. Since Claude alpha's
+   ruling of 2026-11-23 00:37 a removal does not move the epoch offline: the member-remove reply is a removal that waits, no key is
+   made and the thread is never asked to remove, and the Desks screen names it (moved from: the removal went ahead and the reply
+   carried the catch-up sentence). Nothing is asked of the network. */
 LEGS.rs911h = async () => {
   const lab = labDir("relay-rs911h"), ud = path.join(lab, "ud");
   fs.mkdirSync(ud, { recursive: true });
   const teamsFile = K.teamsFile(ud), vault = shellVault(), teamId = "t-" + hex(8), D = deskKeys();
   K.keepTeamKey(teamsFile, vault, teamId, 1, crypto.randomBytes(32));
   fs.mkdirSync(K.keepRelay(teamsFile, teamId, Relay.relayId(), Relay.RELAY_URL), { recursive: true });
-  /* The shell keeps the next epoch's key itself and hands it to the thread. Returning another would be refused,
-     and the refusal lands before the sentence is copied onto the reply. */
+  const asked = [];
   const shell = await loadStudioShell(ud, { thread: (verb) => {
-    if (verb === "teamFacts") return { team: { id: teamId, epoch: 1, roster: [{ id: D.keyId }] }, file: "share" };
+    asked.push(verb);
+    if (verb === "teamFacts") return { team: { id: teamId, epoch: 1, roster: [{ id: D.keyId, name: "Iga" }] }, file: "share" };
     if (verb === "removeMember") return { removed: D.keyId, team: { id: teamId, epoch: 2, roster: [] } };
     return {};
   } });
@@ -2790,11 +2797,51 @@ LEGS.rs911h = async () => {
   /* The project stands where this shell lists catalogs (a direct child of <userData>/Etiuda Studio). */
   try { reply = await shell.ask("studio:member-remove", path.join(ud, "Etiuda Studio", "project"), teamId, D.keyId, true); }
   finally { shell.done(); }
-  check(!!shell.win && !!reply && reply.error === null && reply.removed === D.keyId && reply.catchUpSaid === CATCH_UP_EN,
-    "rs911h the member-remove reply carries the catch-up sentence: window " + !!shell.win
-    + ", error " + (reply && JSON.stringify(reply.error)) + ", removed " + (reply && reply.removed === D.keyId)
-    + ", said " + (reply && reply.catchUpSaid === CATCH_UP_EN)
+  const keys = Object.keys((K.teamKeysOf(teamsFile, vault) || {})[teamId] || {});
+  const waiting = removalsOfAny(teamsFile, teamId).map((w) => w.desk + ":" + w.name);
+  check(!!shell.win && !!reply && !reply.error && reply.pending === D.keyId && !reply.removed && asked.indexOf("removeMember") < 0
+    && JSON.stringify(keys) === "[\"1\"]" && JSON.stringify(waiting) === JSON.stringify([D.keyId + ":Iga"])
+    && Array.isArray(reply.removalsWaiting) && reply.removalsWaiting.some((w) => w.desk === D.keyId && w.name === "Iga"),
+    "rs911h offline, the member-remove reply is a removal that waits: no key made, the thread not asked to remove, the removal kept with its name and on the Desks screen: window " + !!shell.win
+    + ", error " + (reply && JSON.stringify(reply.error || null)) + ", pending " + (reply && reply.pending === D.keyId) + ", keys " + JSON.stringify(keys)
+    + ", waiting " + JSON.stringify(waiting) + ", asked " + JSON.stringify(asked.filter((v) => v === "removeMember"))
     + (shell.said.length ? " (" + shell.said.slice(0, 3).join(" | ") + ")" : ""));
+};
+
+/* Removals that survive, merged over fold 97's Remove of a person on all their computers: offline, the pressed desk's removal waits,
+   and so does each other desk the seat book names for that person, so the pass after the next sync takes them all off. Nothing is
+   said to be refused (no REMOVAL_PARTIAL), no key is made and the thread is never asked to remove. */
+LEGS.rs911p = async () => {
+  const lab = labDir("relay-rs911p"), ud = path.join(lab, "ud");
+  fs.mkdirSync(ud, { recursive: true });
+  const teamsFile = K.teamsFile(ud), vault = shellVault(), teamId = "t-" + hex(8), D = deskKeys(), D2 = deskKeys(), O = deskKeys();
+  K.keepTeamKey(teamsFile, vault, teamId, 1, crypto.randomBytes(32));
+  fs.mkdirSync(K.keepRelay(teamsFile, teamId, Relay.relayId(), Relay.RELAY_URL), { recursive: true });
+  const person = crypto.randomBytes(32).toString("hex"), other = crypto.randomBytes(32).toString("hex");
+  const seated = (who) => ({ state: "seated", seat: who, code: "", until: Date.now() + 86400000, last: who });
+  fs.writeFileSync(path.join(ud, "desk-seats.json"),
+    JSON.stringify({ [teamId]: { desks: { [D.keyId]: seated(person), [D2.keyId]: seated(person), [O.keyId]: seated(other) } } }));
+  const asked = [];
+  const shell = await loadStudioShell(ud, { thread: (verb) => {
+    asked.push(verb);
+    if (verb === "teamFacts") return { team: { id: teamId, epoch: 1, roster: [{ id: D.keyId, name: "Iga" }, { id: D2.keyId, name: "Iga" },
+      { id: O.keyId, name: "Ola" }] }, file: "share" };
+    if (verb === "removeMember") return { removed: D.keyId, team: { id: teamId, epoch: 2, roster: [] } };
+    return {};
+  } });
+  let reply = null;
+  try { reply = await shell.ask("studio:member-remove", path.join(ud, "Etiuda Studio", "project"), teamId, D.keyId, true); }
+  finally { shell.done(); }
+  const keys = Object.keys((K.teamKeysOf(teamsFile, vault) || {})[teamId] || {});
+  const waiting = removalsOfAny(teamsFile, teamId).map((w) => w.desk).sort();
+  check(!!shell.win && !!reply && !reply.error && !reply.stillOn && reply.pending === D.keyId && !reply.removed
+    && asked.indexOf("removeMember") < 0 && JSON.stringify(keys) === "[\"1\"]"
+    && JSON.stringify(waiting) === JSON.stringify([D.keyId, D2.keyId].sort()),
+    "rs911p offline, Remove of a person on two computers keeps both removals waiting, the other teammate's desk left alone: window "
+    + !!shell.win + ", error " + (reply && JSON.stringify(reply.error || null)) + ", stillOn " + (reply && JSON.stringify(reply.stillOn || null))
+    + ", pending " + (reply && reply.pending === D.keyId) + ", keys " + JSON.stringify(keys) + ", waiting " + waiting.length + " of 2 ("
+    + waiting.map((d) => (d === D.keyId ? "pressed" : d === D2.keyId ? "second" : "other")).join(",") + "), asked to remove "
+    + asked.filter((v) => v === "removeMember").length + (shell.said.length ? " (" + shell.said.slice(0, 3).join(" | ") + ")" : ""));
 };
 
 /* Board 914. A seal the lead still holds for a spent invitation, or for one withdrawn or past its end, is not a key an
@@ -4997,6 +5044,17 @@ function treeOf(root) {
   walk(root);
   return out;
 }
+/* THE PROJECTS FOLDER'S HOLD IS THE STUDIO'S OWN PRESENCE, NOT A WRITE BY THE PRESS. A Studio takes a hold file in a projects folder that
+   can be shared (src/root-hold.cjs), and a folder on a disk other than the system's is taken as one: a checkout on D: with the system on
+   C:, as a hosted Windows runner has it, holds every lab's projects folder, where a desk's checkout on its system disk holds none. In
+   rs926e and rs935n's case a (no signing key) it was first taken inside the press, and read as the press writing. The trees a refused
+   press is judged by leave the hold file out, its probe, lock and temporary names included. */
+const HOLD_NAME = nodeRequire("../src/root-hold.cjs").HOLD_FILE;
+function treeOfButHold(root) {
+  const out = treeOf(root);
+  for (const k of Object.keys(out)) if (k.split("/").some((n) => n === HOLD_NAME || n.startsWith(HOLD_NAME + "."))) delete out[k];
+  return out;
+}
 /* A project that already has a team in one of the three ways, which `setup` makes, and nothing else: a second press is refused in
    the handler's frame, and everything the lab holds (the teams file and the keys in it, the signing key, the relay folder, the
    share, the project and its draft) is byte for byte what it was. `only` says which of the handler's facts the setup leaves set,
@@ -5023,7 +5081,7 @@ async function refusedWhole(name, setup, only) {
   };
   let reply = null, before = null, after = null;
   try {
-    if (teamRelayHandler(shell)) { await settleTree(); before = treeOf(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOf(lab); }
+    if (teamRelayHandler(shell)) { await settleTree(); before = treeOfButHold(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOfButHold(lab); }
   } finally { shell.done(); }
   const was = JSON.stringify(before), now = JSON.stringify(after);
   const set = { mark: !!facts.mark, kept: !!kept, file: facts.file !== "none" && facts.file !== "theirs" };
@@ -5445,7 +5503,7 @@ async function relayRefused(name, o, noKey) {
   };
   let reply = null, before = null, after = null;
   try {
-    if (teamRelayHandler(shell)) { await settleTree(); before = treeOf(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOf(lab); }
+    if (teamRelayHandler(shell)) { await settleTree(); before = treeOfButHold(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOfButHold(lab); }
   } finally { await shell.done(); }
   const spoke = shell.said.filter((l) => /relay of team|relay could not/.test(l));
   const wantFrame = noKey ? (Relay.GRANT_SAID ? Relay.GRANT_SAID.nokey : null)
@@ -5588,7 +5646,7 @@ LEGS.rs935n = async () => {
     const shell = await loadStudioShell(R.ud, { relay, env: Object.assign({}, R.env, noKey ? { STUDIO_KEY_PASSPHRASE: "" } : {}), thread: R.thread });
     let reply = null, before = null, after = null;
     try {
-      if (teamRelayHandler(shell)) { before = treeOf(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOf(lab); }
+      if (teamRelayHandler(shell)) { before = treeOfButHold(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOfButHold(lab); }
     } finally { await shell.done(); }
     /* Nothing sent: this case's own lab relay heard no call (the test architect's E1 on the combined run), and nothing was kept:
        no relay team, the project's place and seal untouched. The shell's said lines are not read: they gather every runner's
@@ -6121,23 +6179,26 @@ LEGS.rs920 = async () => {
   } });
   let marked = false, cleared = false, shellWhy = "";
   const shellProj = path.join(ud, "Etiuda Studio", "project");
+  /* Moved (Claude alpha's ruling of 2026-11-23 00:37). Old: this shell, with no relay to reach, kept the next key, marked it pending
+     when the write threw, and cleared the mark when the retry landed. New: offline, a removal moves no epoch, so no key is made and
+     none is marked; both presses wait, the removal kept once, and the thread is never asked to remove. The pending mark on a throw
+     is held by the thread's half above, where the move is made. */
   try {
     const first = await shell.ask("studio:member-remove", shellProj, teamId, member, true);
     const midKey = (K.teamKeysOf(teamsFile, vault)[teamId] || {})[2];
-    marked = !!(shell.win && first && first.error && Buffer.isBuffer(midKey) && handed && midKey.equals(handed)
-      && pendingOf(teamsFile, teamId).indexOf(2) >= 0);
+    marked = !!(shell.win && first && !first.error && first.pending === member && !midKey && !tried && pendingOf(teamsFile, teamId).length === 0);
     const second = await shell.ask("studio:member-remove", shellProj, teamId, member, true);
     const afterKey = (K.teamKeysOf(teamsFile, vault)[teamId] || {})[2];
-    cleared = !!(second && second.error === null && second.removed === member && Buffer.isBuffer(afterKey)
-      && handed && afterKey.equals(handed) && pendingOf(teamsFile, teamId).indexOf(2) < 0);
-    shellWhy = "pending " + JSON.stringify(pendingOf(teamsFile, teamId));
+    const waiting = typeof K.removalsOf === "function" ? K.removalsOf(teamsFile, teamId).map((w) => w.desk) : [];
+    cleared = !!(second && !second.error && second.pending === member && !afterKey && !tried && JSON.stringify(waiting) === JSON.stringify([member]));
+    shellWhy = "pending " + JSON.stringify(pendingOf(teamsFile, teamId)) + ", waiting " + JSON.stringify(waiting);
   } finally { shell.done(); }
 
   check(removeThrew && stayed && noNext && taken && published && retried && marked && cleared,
     "rs920 a failed removal keeps the next key pending: no blob at epoch 2 " + noNext + ", the desk's upload at epoch 1 taken "
     + taken + ", a sealed publish writes " + published + (pubWhy ? " (" + pubWhy.slice(0, 140) + ")" : "")
     + ", the removal retried at epoch 2 with the same key " + retried + (retryWhy ? " (" + retryWhy.slice(0, 120) + ")" : "")
-    + "; the shell marks the key pending when the write throws " + marked + " and clears it when the write lands " + cleared
+    + "; offline, the shell's removal waits with no key made or marked " + marked + ", and pressed again waits once more, kept once " + cleared
     + " (threw " + removeThrew + ", team file stayed " + stayed + ", " + shellWhy + ")");
 };
 
@@ -8437,6 +8498,454 @@ LEGS.h2d = async () => {
 
 /* Profile B, with its own user data, publishes a relay project. The edition is written into B's mirror and goes up the relay.
    A then publishes again, into A's own mirror. The shared project.json keeps the folder A wrote. */
+/* REMOVALS ON A LEAD'S TWO COMPUTERS (Claude alpha's ruling of 2026-11-23 00:37), driven through two shells on one signing key, kept by
+   the operating system, and one relay. A: a relay team made by the shell, desks D1 and D2 on its roster with wraps of key 1 and the
+   recovery copy. B: a second computer with that key and the project folder. Neither reads the other's mirror: each is moved aside
+   while the other runs, as two computers' own folders are. */
+/* The removals a Studio keeps waiting, or none where it keeps none (the red base). */
+const removalsOfAny = (file, team) => (typeof K.removalsOf === "function" ? K.removalsOf(file, team) : []);
+async function rsroWorld(tag, o) {
+  const third = !(o && o.third === false);
+  const world = await relayWorld(), lab = labDir("relay-" + tag);
+  const R = await leadAtRest(path.join(lab, "a"), "Lantern Quay");
+  signedIn(R.ud);
+  const verbs = ["teamFacts", "teamKeyBack", "teamKeyFromFile", "openProject", "startRelayTeam", "undoRelayTeam", "publishProject", "desksFor", "removeMember", "listProjects",
+    "backupKey", "readBackup", "openBackup", "resealAside"];
+  const failing = new Set((o && Array.isArray(o.failOnce)) ? o.failOnce : []), failed = [];
+  const threadOf = (verb, ...a) => {
+    if (failing.has(verb)) { failing.delete(verb); failed.push(verb); throw new Error("refused by the leg (" + verb + ", its first call)"); }
+    return verbs.includes(verb) && typeof R.S[verb] === "function" ? R.S[verb](...a) : {};
+  };
+  const tA = world.transport(tag + "-a"), tB = world.transport(tag + "-b");
+  const passB = !!(o && o.passB);
+  let shellA = await loadStudioShell(R.ud, { relay: tA, env: R.env, thread: threadOf });
+  let rec = null;
+  try {
+    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    rec = K.relayTeams(R.teamsFile)[0] || null;
+    if (rec) await until(() => !!world.store(rec.rt) && !!world.store(rec.rt).get("team"), 20000);
+    await shellSettled(shellA);
+  } finally { shellA.done(); }
+  if (!rec) throw new Error("profile A did not make the relay team");
+  const mirrorA = rec.folder, k1 = Buffer.from(K.teamKeysOf(R.teamsFile, R.vault)[rec.team][1]);
+  const D1 = deskKeys(), D2 = deskKeys(), D3 = deskKeys();
+  /* The roster: D1, D2 and D3, each with a wrap of key 1, the recovery copy kept, signed by the lead as a team write is. */
+  const h = await heldTeam(mirrorA, { key: R.keyAt });
+  let team = h.team;
+  for (const d of third ? [D1, D2, D3] : [D1, D2]) {
+    team = withDesk(team, { id: d.keyId, key: d.pub, box: d.box.pub });
+    team.roster.find((e) => e.desk.id === d.keyId).wrap = Engine.hpkeRules().wrapTeamKey(k1, d.box.pub, rec.team, team.epoch, d.keyId);
+  }
+  team = withRecovery(team, k1, recoveryOf(R.keyAt, labSecret(R.keyAt)));
+  await writeTeam(mirrorA, team, { key: R.keyAt, passphrase: labSecret(R.keyAt) });
+  shellA = await loadStudioShell(R.ud, { relay: tA, env: R.env, thread: threadOf });
+  try { await shellA.ask("studio:desks", R.proj); await shellSettled(shellA); } finally { shellA.done(); }
+  const udB = path.join(lab, "b", "ud");
+  fs.mkdirSync(udB, { recursive: true });
+  const keyAtB = path.join(udB, "signing-key.json");
+  /* `passB`: the first computer's backup copy, made now under a passphrase, put in the key's place on the second and not restored.
+     Otherwise the lead's key file as the first computer holds it now, its lead box included, as its backup copy carries it. */
+  const backupFile = path.join(lab, "etiuda-studio-key-backup.json");
+  if (passB) {
+    const sh = await loadStudioShell(R.ud, { relay: tA, env: Object.assign({}, R.env, { STUDIO_TEST_BACKUP: backupFile }), thread: threadOf });
+    try { await sh.ask("studio:key-backup", PASS, "t", "k"); } finally { sh.done(); }
+    fs.copyFileSync(backupFile, keyAtB);
+    /* Both passphrase files are made so on purpose (rsos). */
+    namePassphraseFile(backupFile); namePassphraseFile(keyAtB);
+  } else fs.copyFileSync(R.keyAt, keyAtB);
+  granted(keyAtB, R.made.public);
+  signedIn(udB);
+  const teamsFileB = K.teamsFile(udB);
+  const envB = Object.assign({ STUDIO_PROJECTS: path.dirname(R.proj), STUDIO_SIGNING_KEY: keyAtB, STUDIO_RELAY_ROOT: GRANT_ROOT_PUB },
+    passB ? { STUDIO_TEST_RESTORE: backupFile } : {});
+  /* B's first look, while it shares A's disk: it learns the team, its key 1 and its own mirror (rs2comp). */
+  let shellB = await loadStudioShell(udB, { relay: tB, env: envB, thread: threadOf });
+  try { await shellB.ask("studio:desks", R.proj); await shellSettled(shellB); } finally { shellB.done(); }
+  const recB = K.relayTeams(teamsFileB)[0] || null;
+  const mirrorB = recB ? recB.folder : "";
+  const mirrorBNow = () => { const r = K.relayTeams(teamsFileB)[0]; return r ? r.folder : ""; };
+  const away = (dir) => { if (fs.existsSync(dir)) fs.renameSync(dir, dir + "-away"); };
+  const back = (dir) => { if (fs.existsSync(dir + "-away")) fs.renameSync(dir + "-away", dir); };
+  const s = { teamId: rec.team, rt: rec.rt, lead: { keyId: R.made.keyId, public: R.made.public } };
+  const epochIn = async (dir, key) => { try { const t = (await heldTeam(dir, { key })).team; return t ? { epoch: t.epoch, ids: t.roster.map((e) => e.desk.id) } : null; } catch { return null; } };
+  const keysB = () => Object.keys((K.teamKeysOf(teamsFileB, shellVault()) || {})[rec.team] || {}).map(Number).sort();
+  const keysA = () => Object.keys((K.teamKeysOf(R.teamsFile, R.vault) || {})[rec.team] || {}).map(Number).sort();
+  const relayEpoch = () => { const t = world.store(rec.rt) && world.store(rec.rt).get("team"); return t ? t.epoch : null; };
+  const seqNow = () => (world.store(rec.rt).get("seq") || 0);
+  const uploadsAfter = (seq) => world.store(rec.rt).dump().map(([k, v]) => [k, JSON.parse(v)])
+    .filter(([k, v]) => k.startsWith("blob:") && v.seq > seq && !v.place).map(([, v]) => v.epoch);
+  /* A shell of A or B for one step, the other's mirror moved aside. */
+  const onA = async (fn) => { const mb = mirrorBNow(); if (mb) away(mb); const sh = await loadStudioShell(R.ud, { relay: tA, env: R.env, thread: threadOf });
+    try { return await fn(sh); } finally { sh.done(); if (mb) back(mb); } };
+  /* A's shell over another transport (a leg's wrap of tA). */
+  const onAWith = async (t, fn) => { const mb = mirrorBNow(); if (mb) away(mb); const sh = await loadStudioShell(R.ud, { relay: t, env: R.env, thread: threadOf });
+    try { return await fn(sh); } finally { sh.done(); if (mb) back(mb); } };
+  const onB = async (fn) => { away(mirrorA); const sh = await loadStudioShell(udB, { relay: tB, env: envB, thread: threadOf });
+    try { return await fn(sh); } finally { sh.done(); back(mirrorA); } };
+  return { failed, world, lab, R, rec, s, D1, D2, D3, k1, mirrorA, mirrorB, mirrorBNow, onAWith, teamsFileB, keyAtB, udB, tA, tB, epochIn, keysA, keysB, relayEpoch, seqNow, uploadsAfter, onA, onB };
+}
+/* The ordinary online removal: A removes D2; B, online, holding only key 1, reaches the epoch-2 file by D1's copy, takes key 2 from its
+   recovery copy by itself, and publishes at epoch 2. */
+LEGS.rsro1 = async () => {
+  let w = null;
+  try { w = await rsroWorld("rsro1"); } catch (e) { check(false, "rsro1 the lab did not stand: " + (e && e.stack || e)); return; }
+  const before = { b: await w.epochIn(w.mirrorB, w.keyAtB), keysB: w.keysB() };
+  const removed = await w.onA(async (sh) => { const r = await sh.ask("studio:member-remove", w.R.proj, w.rec.team, w.D2.keyId, true); await shellSettled(sh); return r; });
+  const atA = { a: await w.epochIn(w.mirrorA, w.R.keyAt), relay: w.relayEpoch(), keysA: w.keysA() };
+  const seq0 = w.seqNow();
+  const atB = await w.onB(async (sh) => {
+    await sh.ask("studio:desks", w.R.proj); await shellSettled(sh);
+    const out = { b: await w.epochIn(w.mirrorB, w.keyAtB), keysB: w.keysB() };
+    out.pub = await sh.ask("studio:publish", w.R.proj, { notes: "From the second computer after the removal." });
+    await shellSettled(sh);
+    out.said = sh.said.filter((l) => /waits|refused|epoch/i.test(l)).slice(-3);
+    return out;
+  });
+  const ups = w.uploadsAfter(seq0);
+  const ok = {
+    start: !!before.b && before.b.epoch === 1 && JSON.stringify(before.keysB) === "[1]",
+    moved: !!removed && !removed.error && removed.removed === w.D2.keyId && !!atA.a && atA.a.epoch === 2 && atA.relay === 2,
+    reached: !!atB.b && atB.b.epoch === 2 && atB.b.ids.indexOf(w.D2.keyId) < 0 && atB.keysB.indexOf(2) >= 0,
+    published: !!atB.pub && !atB.pub.error && !atB.pub.refused && ups.length >= 1 && ups.every((e) => e === 2),
+  };
+  check(Object.keys(ok).every((k) => ok[k]),
+    "rsro1 a lead removes a desk on one computer; the lead's other computer, online and holding only key 1, reaches the epoch-2 team file by a remaining desk's copy, takes key 2 from its recovery copy by itself, and publishes at epoch 2: "
+    + JSON.stringify({ ok, before, removed: removed && { removed: removed.removed, error: removed.error || null }, atA, atB: { b: atB.b, keysB: atB.keysB, pub: atB.pub && { error: atB.pub.error || null, refused: atB.pub.refused || null }, said: atB.said }, uploads: ups }));
+};
+/* A Remove pressed on a computer that is behind, or offline, waits: no key is made, the Desks screen names it, and once that computer is
+   in step it is applied on top of the newest file by itself, so both removals stand and nothing is undone. */
+/* rsro2 with D3 on the roster; rsro3 without it, so B's removal takes off the last desk and A has no desk's copy to open: it reaches
+   epoch 3 through the lead's own copy (Claude alpha's decision of 00:36). */
+LEGS.rsro2 = async () => rsroBehind("rsro2", true);
+LEGS.rsro3 = async () => rsroBehind("rsro3", false);
+async function rsroBehind(tag, third) {
+  let w = null;
+  try { w = await rsroWorld(tag, { third }); } catch (e) { check(false, tag + " the lab did not stand: " + (e && e.stack || e)); return; }
+  const left = third ? [w.D3.keyId] : [];
+  /* A removes D2 (epoch 2). */
+  await w.onA(async (sh) => { await sh.ask("studio:member-remove", w.R.proj, w.rec.team, w.D2.keyId, true); await shellSettled(sh); });
+  /* B, offline, removes D1: it waits. */
+  w.tB.down = true;
+  const offline = await w.onB(async (sh) => {
+    const r = await sh.ask("studio:member-remove", w.R.proj, w.rec.team, w.D1.keyId, true);
+    return { r: r && { pending: r.pending || null, removed: r.removed, error: r.error || null, waiting: r.removalsWaiting || null },
+      keysB: w.keysB(), b: await w.epochIn(w.mirrorB, w.keyAtB) };
+  });
+  w.tB.down = false;
+  /* B back: it catches up and applies the waiting removal by itself. */
+  const later = await w.onB(async (sh) => {
+    await sh.ask("studio:desks", w.R.proj); await shellSettled(sh);
+    await sh.ask("studio:desks", w.R.proj); await shellSettled(sh);
+    return { b: await w.epochIn(w.mirrorB, w.keyAtB), waiting: removalsOfAny(w.teamsFileB, w.rec.team).map((x) => x.desk),
+      keyPending: (typeof K.pendingEpochsOf === "function" ? K.pendingEpochsOf(w.teamsFileB)[w.rec.team] : null) || [] };
+  });
+  const relayFile = await w.onA(async (sh) => { await sh.ask("studio:desks", w.R.proj); await shellSettled(sh); return w.epochIn(w.mirrorA, w.R.keyAt); });
+  const ok = {
+    waited: !!offline.r && offline.r.pending === w.D1.keyId && !offline.r.error && Array.isArray(offline.r.waiting) && offline.r.waiting.some((x) => x.desk === w.D1.keyId)
+      && offline.keysB.every((e) => e <= 1),
+    applied: !!later.b && later.b.epoch === 3 && JSON.stringify(later.b.ids) === JSON.stringify(left) && later.waiting.length === 0 && later.keyPending.length === 0,
+    stands: !!relayFile && relayFile.epoch === 3 && JSON.stringify(relayFile.ids) === JSON.stringify(left) && w.relayEpoch() === 3,
+  };
+  check(Object.keys(ok).every((k) => ok[k]),
+    tag + " a Remove pressed while the computer is behind and offline waits, with no key made and the removal named on the Desks screen, and once in step it is applied on top of the other computer's removal as epoch 3, so the relay's file, read back on the first computer, names "
+    + (third ? "D3 alone" : "no desk, the first reaching it through the lead's own copy") + ": "
+    + JSON.stringify({ ok, offline, later, relayFile, relay: w.relayEpoch() }));
+}
+
+/* A second computer whose signing key is its backup copy put in place and not restored (the restore route, Claude alpha's ruling and
+   Claudius's of 04:41): it follows nothing, and its Desks screen says the key must be restored here; restored through
+   studio:key-restore, which asks the backup's passphrase that one time, it catches up by itself, through the lead's own copy, and
+   publishes at the new epoch, never at the old one. */
+LEGS.rsro4 = async () => {
+  let w = null;
+  try { w = await rsroWorld("rsro4", { passB: true }); } catch (e) { check(false, "rsro4 the lab did not stand: " + (e && e.stack || e)); return; }
+  await w.onA(async (sh) => { await sh.ask("studio:member-remove", w.R.proj, w.rec.team, w.D2.keyId, true); await shellSettled(sh); });
+  const before = await w.onB(async (sh) => {
+    const d = await sh.ask("studio:desks", w.R.proj); await shellSettled(sh);
+    return { restore: !!(d && d.keyToRestore), keysB: w.keysB(), mirror: !!w.mirrorBNow() };
+  });
+  const after = await w.onB(async (sh) => {
+    const r = await b984Restore(sh, PASS);
+    await sh.ask("studio:desks", w.R.proj); await shellSettled(sh);
+    await sh.ask("studio:desks", w.R.proj); await shellSettled(sh);
+    const m = w.mirrorBNow();
+    const out = { restored: !!r && !r.error && !r.refused, b: m ? await w.epochIn(m, w.keyAtB) : null, keysB: w.keysB() };
+    const seq0 = w.seqNow();
+    const pub = await sh.ask("studio:publish", w.R.proj, { notes: "From the second computer once its key is restored." });
+    await shellSettled(sh);
+    out.pub = pub && { error: pub.error || null, refused: pub.refused || null };
+    out.ups = w.uploadsAfter(seq0);
+    const d = await sh.ask("studio:desks", w.R.proj);
+    out.restoreAfter = !!(d && d.keyToRestore);
+    return out;
+  });
+  const ok = {
+    behind: before.restore === true && before.keysB.indexOf(2) < 0,
+    caughtUp: after.restored && !!after.b && after.b.epoch === 2 && after.b.ids.indexOf(w.D2.keyId) < 0 && after.keysB.indexOf(2) >= 0 && !after.restoreAfter,
+    published: !!after.pub && !after.pub.error && !after.pub.refused && after.ups.length >= 1 && after.ups.every((e) => e === 2),
+  };
+  check(Object.keys(ok).every((k) => ok[k]),
+    "rsro4 a second computer whose signing key is its backup copy, not restored, follows nothing and says the key must be restored here; restored once, it catches up to epoch 2 by itself and publishes at epoch 2, never at 1: "
+    + JSON.stringify({ ok, before, after }));
+};
+
+/* THE RACE (Claude alpha's ruling on the test architect zeta's pZeta run 7). B removes D1 and its file goes up; A, its catch-up not yet
+   showing B's file, removes D2 in step, and its move is refused as a fork. Until A's removal stands at the relay, D2 stays in the member
+   list A shows, marked waiting, in the reply (removed null, pending D2) and on a look (Claude alpha's word of 2026-11-23, relayed by
+   Claudius at 13:51). Then A's next start, left alone with no ask of any kind, re-applies the removal on top of B's file by itself
+   (the relay's file names D3 alone), and only then does D2 leave the list. Moved (the test architect tau's read): the syncs were up to
+   eight Desks asks, each bringing the removal back, so "no press" was not proved; the reply's removed and the list shown were not read. */
+LEGS.rsro5 = async () => {
+  let w = null;
+  try { w = await rsroWorld("rsro5"); } catch (e) { check(false, "rsro5 the lab did not stand: " + (e && e.stack || e)); return; }
+  const cut = w.seqNow();
+  await w.onB(async (sh) => { await sh.ask("studio:member-remove", w.R.proj, w.rec.team, w.D1.keyId, true); await shellSettled(sh); });
+  /* A's listing hides what the relay took after `cut` while `hide` holds: B's file arrives just after A's catch-up. */
+  let hide = true;
+  const tHide = Object.assign({}, w.tA, { request: async (method, url, headers, body) => {
+    const r = await w.tA.request(method, url, headers, body);
+    if (!hide || method !== "GET" || !/\/since\/\d+/.test(String(url)) || !r || r.status !== 200) return r;
+    let list = null;
+    try { list = JSON.parse(Buffer.from(r.bytes).toString("utf8")); } catch { return r; }
+    if (!Array.isArray(list)) return r;
+    return Object.assign({}, r, { bytes: Buffer.from(JSON.stringify(list.filter((e) => !(e && e.seq > cut))), "utf8") });
+  } });
+  const D2 = w.D2.keyId;
+  const shown = (t) => (t && Array.isArray(t.roster) ? t.roster.filter((m) => m && m.id === D2).map((m) => (m.waiting === true ? "waiting" : "plain")) : []);
+  const raced = await w.onAWith(tHide, async (sh) => {
+    const r = await sh.ask("studio:member-remove", w.R.proj, w.rec.team, D2, true);
+    const d = await sh.ask("studio:desks", w.R.proj);
+    return { reply: r && { removed: r.removed === undefined ? "absent" : r.removed, pending: r.pending || null, error: r.error || null,
+      waiting: (r.removalsWaiting || []).map((x) => x.desk), d2: shown(r.team) },
+      look: d && { waiting: (d.removalsWaiting || []).map((x) => x.desk), d2: shown(d.team) } };
+  });
+  hide = false;
+  /* A's next start: Studio's own sync, no ask, waited on until the relay's file moves and nothing waits; then one look. */
+  const after = await w.onA(async (sh) => {
+    const stood = await until(() => w.relayEpoch() === 3 && removalsOfAny(w.R.teamsFile, w.rec.team).length === 0, 30000).catch(() => false);
+    await shellSettled(sh).catch(() => {});
+    const a = await w.epochIn(w.mirrorA, w.R.keyAt);
+    const d = await sh.ask("studio:desks", w.R.proj);
+    return { stood: !!stood, a, waiting: removalsOfAny(w.R.teamsFile, w.rec.team).map((x) => x.desk),
+      look: d && { waiting: (d.removalsWaiting || []).map((x) => x.desk), d2: shown(d.team) } };
+  });
+  const ok = {
+    replyWaiting: !!raced.reply && raced.reply.removed === null && raced.reply.pending === D2 && !raced.reply.error
+      && raced.reply.waiting.indexOf(D2) >= 0 && JSON.stringify(raced.reply.d2) === "[\"waiting\"]",
+    lookWaiting: !!raced.look && raced.look.waiting.indexOf(D2) >= 0 && JSON.stringify(raced.look.d2) === "[\"waiting\"]",
+    reapplied: after.stood && !!after.a && after.a.epoch === 3 && JSON.stringify(after.a.ids) === JSON.stringify([w.D3.keyId])
+      && w.relayEpoch() === 3 && after.waiting.length === 0,
+    leftList: !!after.look && after.look.waiting.length === 0 && after.look.d2.length === 0,
+  };
+  check(Object.keys(ok).every((k) => ok[k]),
+    "rsro5 the race: A's removal refused as a fork keeps D2 in the member list, marked waiting, in the reply (removed null) and on a look; A's next start, with no ask, applies it again on top of B's file, the relay's file naming D3 alone, and only then D2 leaves the list: "
+    + JSON.stringify({ ok, raced, after, relay: w.relayEpoch() }));
+};
+/* A PERSON ON TWO COMPUTERS, REMOVED WHILE THIS ONE IS OFFLINE (the test architect tau's rstau3; Remove takes the person off on all
+   their computers, decision 27, and a removal waits until this computer is in step, Claude alpha's ruling of 00:37). The seat book names
+   D1 and D2 for one person; Remove of D1 offline keeps both waiting, both shown marked waiting, no key made; A's next start online,
+   with no ask, takes both off, and the relay's file names D3 alone. rsro8c, its control: the same press online takes both off at once. */
+LEGS.rsro8 = async () => rsroPerson("rsro8", true);
+LEGS.rsro8c = async () => rsroPerson("rsro8c", false);
+async function rsroPerson(tag, offline) {
+  let w = null;
+  try { w = await rsroWorld(tag); } catch (e) { check(false, tag + " the lab did not stand: " + (e && e.stack || e)); return; }
+  const seat = crypto.randomBytes(32).toString("hex"), D1 = w.D1.keyId, D2 = w.D2.keyId;
+  fs.writeFileSync(path.join(w.R.ud, "desk-seats.json"), JSON.stringify({ [w.rec.team]: { desks: { [D1]: { seat }, [D2]: { seat } } } }, null, 1) + "\n");
+  const both = JSON.stringify([D1, D2].sort());
+  const marked = (t) => (t && Array.isArray(t.roster) ? t.roster.filter((m) => m && m.waiting === true).map((m) => m.id).sort() : []);
+  if (offline) w.tA.down = true;
+  const pressed = await w.onA(async (sh) => {
+    const r = await sh.ask("studio:member-remove", w.R.proj, w.rec.team, D1, true);
+    await shellSettled(sh).catch(() => {});
+    return { reply: r && { removed: r.removed === undefined ? "absent" : r.removed, pending: r.pending || null, error: r.error || null,
+      waiting: (r.removalsWaiting || []).map((x) => x.desk).sort(), marked: marked(r.team) },
+      intents: removalsOfAny(w.R.teamsFile, w.rec.team).map((x) => x.desk).sort(), keysA: w.keysA(), relay: w.relayEpoch() };
+  });
+  w.tA.down = false;
+  const later = offline ? await w.onA(async (sh) => {
+    const stood = await until(() => w.relayEpoch() >= 2 && removalsOfAny(w.R.teamsFile, w.rec.team).length === 0, 30000).catch(() => false);
+    await shellSettled(sh).catch(() => {});
+    return { stood: !!stood, relay: w.relayEpoch(), intents: removalsOfAny(w.R.teamsFile, w.rec.team).map((x) => x.desk) };
+  }) : null;
+  const file = await w.epochIn(w.mirrorA, w.R.keyAt);
+  const onlyD3 = !!file && JSON.stringify(file.ids) === JSON.stringify([w.D3.keyId]);
+  const ok = offline ? {
+    waits: !!pressed.reply && pressed.reply.removed === null && pressed.reply.pending === D1 && !pressed.reply.error
+      && JSON.stringify(pressed.reply.waiting) === both && JSON.stringify(pressed.intents) === both && pressed.relay === 1
+      && pressed.keysA.every((e) => e <= 1),
+    bothShown: !!pressed.reply && JSON.stringify(pressed.reply.marked) === both,
+    bothOff: !!later && later.stood && later.intents.length === 0 && onlyD3 && w.relayEpoch() >= 2,
+  } : {
+    bothOff: !!pressed.reply && !pressed.reply.error && !pressed.reply.pending && !!pressed.reply.removed && pressed.intents.length === 0
+      && onlyD3 && w.relayEpoch() === 3,
+  };
+  check(Object.keys(ok).every((k) => ok[k]),
+    tag + (offline
+      ? " a person on two computers removed while this computer is offline: both removals wait, both shown marked waiting, no key made; once online, with no ask, both come off and the relay's file names D3 alone: "
+      : " (the control) the same press online takes both of the person's computers off at once, and the relay's file names D3 alone: ")
+    + JSON.stringify({ ok, pressed, later, file, relay: w.relayEpoch() }));
+}
+/* AN EDITION UNDER A KEY SET ASIDE GOES AGAIN (Claude alpha's ruling of 06:44, Studio's half: plant rmo-resend). A, in step, removes
+   D2: it makes key 2 and writes its epoch-2 file, which does not reach the relay (A's PUTs during the removal answered 503, so the
+   file stays owed and the removal waits). B removes D1 and its file stands. A then publishes while its catch-up does not yet show
+   B's file: in that pass the relay refuses A's team file, as the fork it is, and the edition goes up sealed under A's own key 2, as
+   the engine's rmo7a has it. A's next start, with no ask: A's key 2 is set aside and B's taken from the recovery copy, the edition
+   is sealed again under B's key 2 (the catalog inside the file, not only the blob), the ring A sent under its own key 2 goes again
+   under B's, and D2's removal is applied on top. A remaining desk (D3), with the keys its wraps give it and never A's key 2,
+   opens the newest copy of the edition and reads the catalog A published; the desk B removed (D1) does not. */
+LEGS.rsro9 = async () => rsroAside("rsro9", false);
+/* rsro9f: the same, with the first reseal of what the key set aside sealed refused (the worker's call throws, as a quit or a write
+   refused would end it): the next pass seals it again from the keys the store keeps aside, so everything ends as in rsro9, and a
+   later removal on that team (D3, pressed online once D2's stands) goes through. Before, nothing retried it: the edition stayed
+   unopenable, every later removal was refused, and the removed person read on (the test architect san's probe pFail). */
+LEGS.rsro9f = async () => rsroAside("rsro9f", true);
+/* A HOLD CHECK THAT RUNS AFTER QUIT TAKES NO HOLD (fold 100; the public runner's b984c, "left interval 10000 running"). A projects folder off the
+   system disk is held by the Studio working in it (src/root-hold.cjs): a hold file and a ten-second beat. will-quit lets the hold go; a
+   check already in flight (the waiting check, a look of the page) runs holdCheck after it, and took the hold again: the file outlived the
+   quit, so a Studio on another computer was refused the folder for up to 45 s, and the beat was left running. The system disk is set to a
+   drive the lab is not on, so the folder is one that is held wherever the checkout is. The control is the first ask, which takes the hold. */
+LEGS.rsq1 = async () => {
+  const lab = labDir("relay-rsq1"), ud = path.join(lab, "ud"), proj = path.join(lab, "projects");
+  fs.mkdirSync(ud, { recursive: true }); fs.mkdirSync(proj, { recursive: true });
+  const here = path.resolve(proj).slice(0, 2).toUpperCase(), sys = here === "Q:" ? "R:" : "Q:";
+  const holdFile = path.join(proj, HOLD_NAME);
+  const shell = await loadStudioShell(ud, { env: { STUDIO_PROJECTS: proj, SystemDrive: sys } });
+  const seen = {};
+  try {
+    await shell.ask("studio:projects").catch(() => {});
+    seen.taken = fs.existsSync(holdFile);
+    for (const fn of shell.appOn["will-quit"] || []) { try { await fn(); } catch { /* the stop is read below */ } }
+    seen.letGo = !fs.existsSync(holdFile);
+    await shell.ask("studio:projects").catch(() => {});
+    seen.noneAfter = !fs.existsSync(holdFile);
+    seen.noBeat = leftovers().filter((l) => /10000/.test(l)).length === 0;
+  } finally { await shell.done(); }
+  check(Object.keys(seen).every((k) => seen[k] === true),
+    "rsq1 a hold check that runs after quit takes no hold and arms no beat (the control: the first ask took it, quit let it go): " + JSON.stringify(seen));
+};
+async function rsroAside(tag, failOnce) {
+  let w = null;
+  try { w = await rsroWorld(tag, failOnce ? { failOnce: ["resealAside"] } : undefined); } catch (e) { check(false, tag + " the lab did not stand: " + (e && e.stack || e)); return; }
+  let hold = true, hide = false, cut = 0;
+  const tA2 = Object.assign({}, w.tA, { request: async (method, url, headers, body) => {
+    if (hold && method === "PUT") return { status: 503, bytes: Buffer.from("{\"error\":\"held by the leg\"}", "utf8"), header: () => null };
+    const r = await w.tA.request(method, url, headers, body);
+    if (!hide || method !== "GET" || !/\/since\/\d+/.test(String(url)) || !r || r.status !== 200) return r;
+    let list = null;
+    try { list = JSON.parse(Buffer.from(r.bytes).toString("utf8")); } catch { return r; }
+    if (!Array.isArray(list)) return r;
+    return Object.assign({}, r, { bytes: Buffer.from(JSON.stringify(list.filter((e) => !(e && e.seq > cut))), "utf8") });
+  } });
+  const store = () => w.world.store(w.rec.rt);
+  const rootsAfter = (seq) => store().dump().filter(([k]) => k.startsWith("blob:")).map(([, v]) => JSON.parse(v))
+    .filter((v) => v.seq > seq && !v.place && !v.del && v.writer === w.s.lead.keyId);
+  const opens = (m, key) => {
+    const ct = w.world.R.bucket.objects.get(m.obj);
+    const r = ct && key ? w.world.B.openBlob({ blob: { id: m.id, epoch: m.epoch, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter,
+      nonce: m.nonce, signature: m.sig, ciphertext: ct }, relayTeamId: w.rec.rt, epoch: m.epoch, teamKey: key,
+      trust: { lead: { keyId: w.s.lead.keyId, public: w.s.lead.public }, desks: [] }, counters: {} }) : null;
+    return r && r.ok ? r.path : null;
+  };
+  const ecs = (dir) => { try { return fs.readdirSync(dir).filter((f) => f.endsWith(".ec")).sort(); } catch { return []; } };
+  const removed = await w.onAWith(tA2, async (sh) => {
+    const r = await sh.ask("studio:member-remove", w.R.proj, w.rec.team, w.D2.keyId, true);
+    await shellSettled(sh).catch(() => {});
+    return r && { removed: r.removed === undefined ? "absent" : r.removed, pending: r.pending || null, error: r.error || null, relay: w.relayEpoch() };
+  });
+  hold = false;
+  cut = w.seqNow();
+  await w.onB(async (sh) => { await sh.ask("studio:member-remove", w.R.proj, w.rec.team, w.D1.keyId, true); await shellSettled(sh); });
+  const k2b = (K.teamKeysOf(w.teamsFileB, shellVault())[w.rec.team] || {})[2];
+  const seqP = w.seqNow();
+  hide = true;
+  const first = await w.onAWith(tA2, async (sh) => {
+    const before = ecs(w.mirrorA);
+    const pub = await sh.ask("studio:publish", w.R.proj, { notes: "Published after the move, before the move stands." });
+    await shellSettled(sh).catch(() => {});
+    const k2a = (K.teamKeysOf(w.R.teamsFile, w.R.vault)[w.rec.team] || {})[2];
+    const made = ecs(w.mirrorA).filter((f) => before.indexOf(f) < 0);
+    return { pub: pub && { error: pub.error || null, refused: pub.refused || null }, k2a: k2a ? Buffer.from(k2a) : null,
+      ec: made[0] || ecs(w.mirrorA)[0] || "" };
+  });
+  hide = false;
+  const bytes = first.ec ? read(w.mirrorA, first.ec) : null; /* as A published it, sealed under A's own key 2 */
+  const rootsA = rootsAfter(seqP).map((m) => ({ seq: m.seq, e: m.epoch, a: first.k2a ? opens(m, first.k2a) : null, b: k2b ? opens(m, Buffer.from(k2b)) : null }));
+  const underA = rootsA.filter((x) => x.e === 2 && x.a === first.ec).length;
+  const seqL = w.seqNow();
+  /* A's next start: no ask, waited on until the removal stands on top of B's file. */
+  const later = await w.onA(async (sh) => {
+    const stood = await until(() => w.relayEpoch() === 3 && removalsOfAny(w.R.teamsFile, w.rec.team).length === 0, 30000).catch(() => false);
+    await shellSettled(sh).catch(() => {});
+    const keys = (K.teamKeysOf(w.R.teamsFile, w.R.vault)[w.rec.team] || {});
+    return { stood: !!stood, key2IsB: !!keys[2] && !!k2b && Buffer.compare(Buffer.from(keys[2]), Buffer.from(k2b)) === 0,
+      waiting: removalsOfAny(w.R.teamsFile, w.rec.team).map((x) => x.desk), said: sh.said.slice(-12) };
+  });
+  const rootsLater = rootsAfter(seqL).map((m) => ({ seq: m.seq, e: m.epoch, b: k2b ? opens(m, Buffer.from(k2b)) : null }));
+  /* Each desk as it reads: the keys its wraps in the relay's team files give it (B's file at key number 2, A's at 3, both read from
+     their mirrors), key 1 as the roster gave it; then the newest live blob of the edition it can open, and the catalog inside. */
+  const wrapsOf = async (dir, key) => { try { return (await heldTeam(dir, { key })).team; } catch { return null; } };
+  const files = [await wrapsOf(w.mirrorBNow(), w.keyAtB), await wrapsOf(w.mirrorA, w.R.keyAt)].filter(Boolean);
+  const keysOf = (D) => {
+    const m = new Map([[1, w.k1]]);
+    for (const t of files) {
+      const e = t.roster.find((x) => x && x.desk && x.desk.id === D.keyId);
+      let k = null;
+      try { k = e && e.wrap ? Engine.hpkeRules().unwrapTeamKey(D.box.priv, e.wrap, w.rec.team, t.epoch, D.keyId) : null; } catch { k = null; }
+      if (k) m.set(t.epoch, Buffer.from(k));
+    }
+    return m;
+  };
+  const Seal = Engine.sealRules();
+  const published = (() => { try { return bytes && first.k2a ? Seal.openSealed(first.k2a, JSON.parse(bytes)) : null; } catch { return null; } })();
+  const readAs = (D) => {
+    const keys = keysOf(D);
+    const live = store().dump().filter(([k]) => k.startsWith("blob:")).map(([, v]) => JSON.parse(v))
+      .filter((v) => !v.place && !v.del && v.writer === w.s.lead.keyId).sort((a, b) => b.seq - a.seq);
+    for (const m of live) {
+      const ct = w.world.R.bucket.objects.get(m.obj), key = keys.get(m.epoch);
+      const r = ct && key ? w.world.B.openBlob({ blob: { id: m.id, epoch: m.epoch, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter,
+        nonce: m.nonce, signature: m.sig, ciphertext: ct }, relayTeamId: w.rec.rt, epoch: m.epoch, teamKey: key,
+        trust: { lead: { keyId: w.s.lead.keyId, public: w.s.lead.public }, desks: [] }, counters: {} }) : null;
+      if (!r || !r.ok || r.path !== first.ec) continue;
+      let doc = null, text = null;
+      try { doc = JSON.parse(String(r.body)); } catch { doc = null; }
+      const inner = doc ? keys.get(Number(doc.epoch)) : null;
+      try { text = inner ? Seal.openSealed(inner, doc) : null; } catch { text = null; }
+      return { seq: m.seq, blobEpoch: m.epoch, sealedEpoch: doc ? Number(doc.epoch) : null, keys: [...keys.keys()], reads: !!published && text === published };
+    }
+    return { keys: [...keys.keys()], reads: false };
+  };
+  const atK = readAs(w.D3), atX = readAs(w.D1);
+  const readsK = atK.reads === true, readsX = atX.reads === true;
+  const ok = {
+    removalWaited: !!removed && removed.pending === w.D2.keyId && removed.relay === 1,
+    sentUnderA: !!first.pub && !first.pub.error && !first.pub.refused && !!first.ec && underA >= 1,
+    setAside: later.stood && later.key2IsB,
+    /* The ring, which nothing here writes again, goes again under B's key 2 only by the re-send; the head is written again at the
+       move on top (key number 3), so it shows nothing of it. */
+    resent: rootsLater.some((x) => x.e === 2 && x.b === "etiuda-ring.json"),
+    remainingReads: readsK,
+    removedDoesNot: !readsX,
+  };
+  let after = null;
+  if (failOnce) {
+    /* A later removal on that team, pressed online once D2's stands: it goes through, the relay's file at epoch 4 naming no desk. */
+    after = await w.onA(async (sh) => {
+      const r = await sh.ask("studio:member-remove", w.R.proj, w.rec.team, w.D3.keyId, true);
+      await shellSettled(sh).catch(() => {});
+      return { reply: r && { removed: r.removed === undefined ? "absent" : r.removed, pending: r.pending || null, error: r.error || null },
+        relay: w.relayEpoch(), a: await w.epochIn(w.mirrorA, w.R.keyAt) };
+    });
+    ok.refusedOnce = JSON.stringify(w.failed) === "[\"resealAside\"]";
+    ok.laterRemoval = !!after.reply && after.reply.removed === w.D3.keyId && !after.reply.pending && !after.reply.error
+      && after.relay === 4 && !!after.a && after.a.epoch === 4 && after.a.ids.length === 0;
+  }
+  check(Object.keys(ok).every((k) => ok[k]),
+    tag + (failOnce ? " (its first reseal refused)" : "") + " an edition A published after its move, sealed under A's own key 2 in the pass the relay refused its team file, is sealed again under B's key 2 at A's next start with no ask, once A's key is set aside, and the ring goes again under it; D2's removal stands on top; the remaining desk, with the keys its wraps give it, reads the catalog A published, and the desk B removed does not: "
+    + (failOnce ? "; a later removal on that team goes through: " : ": ")
+    + JSON.stringify({ ok, removed, first: Object.assign({}, first, { k2a: !!first.k2a }), underA, rootsA, later, rootsLater, atK, atX, after, failed: w.failed, relay: w.relayEpoch() }));
+}
 LEGS.h2e = async () => {
   const world = await relayWorld(), lab = labDir("relay-h2e");
   const R = await leadAtRest(path.join(lab, "a"), "Lantern Quay");
@@ -10921,7 +11430,15 @@ const PLANTS = [
   { leg: "rs911", file: "shell/main.js", mark: "rs-catch-shell", line: "    const up = { ok: true, offline: false };" },
   { leg: "rs911", file: "ui/app.js", mark: "rs-catch-said", line: "      if (false) S.dkNote.push(T(r.catchUpSaid));" },
   { leg: "rs2l", file: "shell/main.js", mark: "rs-land-removed", line: "" },
-  { leg: "rs911h", file: "shell/main.js", mark: "rs-catch-hand", line: "  ;" },
+  { leg: "rs911h", file: "shell/main.js", mark: "rmo-in-step", line: "      inStep = true;" },
+  { leg: "rs911p", file: "shell/main.js", mark: "rmo-person-waits", line: "      { const K = await teamStore(), at = await teamsAt(); for (const o of others) K.dropRemoval(at, named, o); return await removalWaits(project, named, first); }" },
+  { leg: "rsro9", file: "shell/main.js", mark: "rmo-resend", line: "          ;" },
+  { leg: "rsro9", file: "shell/main.js", mark: "rmo-aside-reseal", line: "          if (false) {" },
+  { leg: "rsro9f", file: "shell/main.js", mark: "rmo-aside-reseal", line: "          if (false) {" },
+  { leg: "rsro9f", file: "shell/main.js", mark: "rmo-reseal-retry", line: "    const retryNow = false;" },
+  { leg: "rsq1", file: "shell/main.js", mark: "hold-quit", line: "  ;" },
+  { leg: "rsro5", file: "shell/main.js", mark: "rmo-row-shown", line: "    ;" },
+  { leg: "rsro5", file: "shell/main.js", mark: "rmo-race-null", line: "        Object.assign(r, { pending: who, removalsWaiting: waiting });" },
   { leg: "rs914a", file: "src/relay.mjs", mark: "rs914-open", line: "      inviteKeys: () => sealRows(t.team).map((i) => ({ id: i.inv, key: i.seal }))," },
   { leg: "rs914a", file: "src/relay.mjs", mark: "e4s-bound", line: "          if (false) {" },
   { leg: "rse4a", file: "src/relay.mjs", mark: "e4s-open", line: "    .filter((i) => i.state === \"live\" || (i.state === \"spent\" && copies)" },
@@ -11015,8 +11532,6 @@ const PLANTS = [
   { leg: "rs10t", file: "src/wire.cjs", mark: "wire-idle", line: "      ;" },
   { leg: "rs920", file: "src/relay.mjs", mark: "rs920-seal", line: "      sealEpoch: () => { const es = Object.keys(keysOf(t.team)).map(Number).filter((n) => Number.isSafeInteger(n) && n >= 1); return es.length ? Math.max(...es) : null; }," },
   { leg: "rs920", file: "src/publish.mjs", mark: "rs920-pending", line: "  const newer = newestEpochHeld(o.teamKeys, held.team.id);" },
-  { leg: "rs920", file: "shell/main.js", mark: "rs920-mark", line: "" },
-  { leg: "rs920", file: "shell/main.js", mark: "rs920-clear", line: "" },
   { leg: "rs920b", file: "src/relay.mjs", mark: "rs920-stale", line: "" },
   { leg: "rs923c5", file: "src/team-store.mjs", mark: "rs923-c5", line: "    const replace = false;" },  { leg: "g2s1", file: "src/relay.mjs", mark: "g2s-post", line: "      const r = { ok: false, said: \"planted\" };" },
   { leg: "g2s2", file: "src/relay.mjs", mark: "g2s-route", line: "  const r = await post(o.request, base(o.url) + \"/t/\" + o.rt + \"/renew\", { grant: o.grant });" },

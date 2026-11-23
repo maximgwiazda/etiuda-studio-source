@@ -192,6 +192,21 @@ function raiseRevFloor(keyFile, team) {
   writeWhole(revsFile(keyFile), JSON.stringify(d, null, 1) + "\n");
 }
 
+/** A FORK SET THIS STUDIO'S FILE ASIDE (Claude alpha's ruling of 2026-11-23 00:37): the floor kept for `team` comes down to that
+ *  team file's epoch and rev, the relay's that stands, so heldTeam reads it although this Studio had written a later one that never
+ *  went up. The floor it replaces is kept beside it as `aside`, never lost. Nothing is written where the floor is not above it. */
+function forkRevFloor(keyFile, team) {
+  const rev = revOf(team), had = revFloor(keyFile, team.id);
+  if (rev === null || !had || team.epoch > had.epoch || (team.epoch === had.epoch && rev >= had.rev)) return false;
+  const d = readRevs(keyFile), was = own(d.teams, team.id) && typeof d.teams[team.id] === "object" ? d.teams[team.id] : {};
+  const lead = team.lead && team.lead.public ? String(team.lead.public) : "";
+  const next = { epoch: team.epoch, rev, aside: (Array.isArray(was.aside) ? was.aside : []).concat([{ epoch: had.epoch, rev: had.rev }]) };
+  if (lead) next[lead] = { epoch: team.epoch, rev };
+  d.teams[team.id] = next;
+  writeWhole(revsFile(keyFile), JSON.stringify(d, null, 1) + "\n");
+  return true;
+}
+
 /** The folder's team as readTeam reads it, held, only where it names the lead key in the key file `o.key` and verifies
  *  under it, and is not below the floor kept for it; otherwise `team` is null and `reason` says why, with `older` where
  *  a lower rev at the floor's epoch, or an epoch below it, was put back. The only way a team on the share becomes one
@@ -658,4 +673,4 @@ function rosterName(team, deskId) {
 }
 
 export { teamPath, readTeam, heldTeam, heldCopy, newTeam, withSealed, withCatalog, withoutCatalog, withExportsSealed, withSharing, withSignin, withChannel, withRing, withDesk, withoutDesk, withHandover, admit, admitRequest, admitAsked, newEpoch, withRecovery, openRecovery, recoveryOf,
-  writeTeam, rosterName, revsFile, revFloor, raiseRevFloor, conflictSiblingName };
+  writeTeam, rosterName, revsFile, revFloor, raiseRevFloor, forkRevFloor, conflictSiblingName };
