@@ -1,0 +1,19 @@
+# Read by tools/pre-commit, and by nothing else.
+#
+# The content scan has two halves: the NAME half, which refuses a listed name anywhere in a
+# commit, and the QUOTE half, which refuses a line quoting a catalog the repository is holding
+# back. The quote half reads the held-back home that .git/etiuda-held-back names (a pointer
+# kept in each clone's own git directory, never in the tree), so the catalog it quotes from is
+# the one the owner works with, and a scan with nothing to look for is not a quiet pass: the
+# hook refuses where it finds no home.
+#
+# This repository declares no catalog of its own, and never will: it holds the tooling that
+# publishes and lints somebody else's catalog, and a catalog reaching it would be the fault,
+# not the fixture. The tree is published, so a file here is read by anyone.
+#
+# Everything above is a comment. Two kinds of line are read, by the scan's address and
+# identifier rules (rules 4 and 5):
+#   address <domain>   a domain whose mail addresses are this repository's own
+#   seller <path>      the page whose seller's line (its first paragraph after the title) is public: its business name and NIP
+address etiuda.dev
+seller packaging/license_en.txt

@@ -1,0 +1,99 @@
+# Studio's window legs on a hosted Windows runner, so a leg that opens Studio's window need not wait for the desk.
+#
+# WHY (the test architect, 2026-11-21). The window legs (bad-day, rename-project, publish-screen, polish and the rest that open a
+# Studio window through tests/shell-door.mjs) run only where a person sets ETIUDA_WINDOWS for one command, which has meant the
+# desk alone, and a fold's area refuses them with 78. gates.yml stands the screen suites down because painting on a runner had
+# never been driven; the engine's verify.yml drives its window legs on windows-latest with the runner's UTC date as the wall's
+# word, and this file does the same for Studio. A red leg here is read like a red leg on the desk.
+#
+# Dispatch only. Nothing secret is handed to the runner: the legs make their own throwaway licences and keys (tests/licensed.mjs,
+# tests/seated.mjs), and the engine comes from its public remote by the pin. No catalog, no name list, no credential is kept.
+# windows_date is the runner's local date, which is UTC (date -u +%F); empty refuses every leg, as on the desk.
+
+name: window-legs
+run-name: window-legs ${{ inputs.legs }} at ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to check out and test
+        required: true
+        type: string
+      legs:
+        description: Leg names separated by spaces, each a file tests/<name>.mjs that opens Studio's window
+        required: true
+        type: string
+        default: "bad-day rename-project publish-screen polish"
+      windows_date:
+        description: The runner's date (UTC), the window wall's word for each leg. Empty refuses them, as on the desk.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  legs:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # The window legs start Electron, so its binary is fetched once by the package's own install.js after npm ci.
+      - name: npm ci, with the electron binary
+        shell: bash
+        run: |
+          npm ci
+          node node_modules/electron/install.js
+          test -s node_modules/electron/path.txt
+
+      - name: the pin, from the public engine remote
+        shell: bash
+        run: |
+          node tools/engine-fetch.mjs 2>&1 | tee window-engine-fetch.log
+          grep -q 'from the bare mirror of' window-engine-fetch.log || {
+            echo 'the fetch did not read the remote, so this run proves nothing about a clean clone'
+            exit 1
+          }
+
+      # Each leg runs on its own with the wall's word set for that one command, its output kept; the job is red where any leg is.
+      - name: the legs
+        shell: bash
+        env:
+          LEGS: ${{ inputs.legs }}
+          WDATE: ${{ inputs.windows_date }}
+        run: |
+          mkdir -p window-legs-out
+          red=0
+          for leg in $LEGS; do
+            case "$leg" in *[!a-z0-9-]*) echo "refusing the leg name '$leg'" >&2; red=1; continue ;; esac
+            f="tests/$leg.mjs"
+            [ -f "$f" ] || { echo "no $f" >&2; red=1; continue; }
+            echo "== $leg"
+            set +e
+            ETIUDA_WINDOWS="$WDATE" node "$f" > "window-legs-out/$leg.txt" 2>&1
+            code=$?
+            set -e
+            tail -n 25 "window-legs-out/$leg.txt"
+            echo "#window-leg $leg exit $code"
+            [ "$code" = "0" ] || red=1
+          done
+          exit $red
+
+      - name: the outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: window-legs
+          path: window-legs-out/
+          retention-days: 3

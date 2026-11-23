@@ -1,0 +1,51 @@
+#!/usr/bin/env sh
+# This repo holds the business record: clients, money, plans. It never goes anywhere but its
+# one private remote.
+#
+# THE GUARD IS THE DESTINATION, NOT A FLAG. The old version refused until
+# `git config office.pushAllowed true` was set, and that is a permanent value: once set it
+# passed every push to every remote for ever, which is what it was found doing on 2026-09-12.
+# A flag asks "has someone said yes at some point". This asks "where is this actually going",
+# which is the question that matters when the thing being pushed is the business record.
+#
+# It also binds what a deny rule cannot. Board item 208: a Grok seat reaching PowerShell
+# through an MCP tool runs git directly, past every Bash deny in tools/grok-seat.sh. A
+# git-level hook is downstream of all of that, so an agent that adds a remote and pushes to
+# it is refused here regardless of how it got a shell.
+#
+# HOOKS ARE NOT CLONED, which is why this lives in the tree. Install it in every clone:
+#   cp tools/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+#
+# To change where this repo may go, edit ALLOWED below in a commit that says why.
+ALLOWED='https://github.com/maximgwiazda/etiuda-studio.git'
+
+url="$2"
+[ -n "$url" ] || url="$(git config --get remote."$1".url 2>/dev/null)"
+
+# Compare loosely on the one thing that identifies the destination: host and path, without a
+# trailing .git, without a scheme, without credentials, and case-insensitively, so that an
+# ssh form or a personal-access-token form of the SAME repo still passes and a different
+# repo still fails.
+norm() {
+  printf '%s' "$1" |
+    sed -e 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##'         -e 's#^[^@/]*@##'         -e 's#^\([^/:]*\):#\1/#'         -e 's#/*$##'         -e 's#\.git$##' |
+    tr 'A-Z' 'a-z'
+}
+
+if [ "$(norm "$url")" != "$(norm "$ALLOWED")" ]; then
+  echo "etiuda-office: push REFUSED." >&2
+  echo "  This repo is private by construction and may go to one destination only." >&2
+  echo "  allowed:  $ALLOWED" >&2
+  echo "  attempted: ${url:-<unknown>}" >&2
+  exit 1
+fi
+
+# The office charter gates every engine and Studio push behind ETIUDA_PUSH set to today's date,
+# so a push is meant today and a value left in a shell profile stops working tomorrow. Added
+# 2026-10-04 by Claude α, chief of staff, where the charter said it and this hook did not.
+today="$(date +%F)"
+if [ "${ETIUDA_PUSH:-}" != "$today" ]; then
+  echo "etiuda-studio: push refused. Set ETIUDA_PUSH=$today for this one command if the push is meant." >&2
+  exit 1
+fi
+exit 0

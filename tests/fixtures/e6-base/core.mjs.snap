@@ -1,0 +1,1686 @@
+/* THE LICENCE SERVICE'S CORE (board 936, S4: the plan's L2 and L3, with Claude α's three settlements of 2026-10-22 15:35
+ * and the test architect's A1 to A4).
+ *
+ *     import { makeService } from "./core.mjs";
+ *     const service = makeService({ rules, roots, clock });   // worker.mjs passes the pinned engine's rules
+ *     const response = await service.fetch(request, env);      // env: DB (D1), SERVICE_KEY, DELEGATION and HASH_KEY (secrets)
+ *
+ * THE CRITERION: a customer who buys or starts a trial ends up, with no hand of ours, holding a licence Studio accepts
+ * and a relay grant the relay accepts, renewed quietly while the licence is paid; and nothing on the network can mint
+ * either, extend one, or learn more than the Privacy paragraph says.
+ *
+ * THE ROUTES, every one a POST of a JSON body under the Worker's API_PREFIX, over https, with no query. API_PREFIX is a
+ * variable of wrangler.toml naming its route's own path (staging's /licence-staging/v1/, Claude alpha's ruling on the test
+ * architect's C5), and with none set the Worker answers under /licence/v1/, Studio's production address (src/wire.cjs):
+ *   check            {lead, t, sig[, proofs]}             the quiet check: the licence, a fresh grant while paid, the revoked keys
+ *   grant             {lead, proof, t, sig}                a fresh grant, to a desk proving it holds a team proof key
+ *   signin            {provider, idToken, lead, t, sig[, seed]}  a person's ID token seats them as a lead and binds the key
+ *   signin/renew      {provider, idToken, lead, t, sig}    a refreshed ID token proves the person of the key's lead seat again
+ *   signin/desk       {provider, idToken, desk, t, sig[, seed]}  a desk signs its person in itself, or renews, signed by its
+ *                                                          own key: a desk seat where a licence admits them, and a seat
+ *                                                          certificate with the licence's doors and their signature
+ *                                                          (doorsSig), or none and the person's code
+ *   signout/desk      {desk, t, sig}                       a desk signs out, signed by its own key: its place among its person's
+ *                                                          desks is freed at once and its renewal no longer taken; the seat
+ *                                                          stays the person's; answered alike whether or not the key held one
+ *   person/admit      {code, lead, t, sig}                 a lead of a licence admits a person to it by their sign-in code
+ *   person/withdraw   {person, lead, t, sig}               a lead withdraws its own admission of a person by name from its
+ *                                                          licence, by the per-licence pseudonym; where no other lead's stands,
+ *                                                          the "person:" row goes and their desk seats there are freed, and the
+ *                                                          owner's withdrawal of a co-lead frees their lead seat too; answered
+ *                                                          alike whether or not the person was admitted so
+ *   person/list       {lead, t, sig}                       a lead of a licence asks for the people of the organisations it
+ *                                                          admits whose desks signed in within LIST_DAYS, by code and pseudonym
+ *   door/set          {lead, t, doors, sig}                a lead sets the doors of the relay teams it leads on its licence, each
+ *                                                          {team, rt, url, keyId, box}; its own rows replaced, another lead's
+ *                                                          untouched; an empty list clears them, and a lead whose seat lapsed
+ *                                                          or was freed may still clear (the door-finding, below)
+ *   seat/list         {lead, t, sig}                       the licence's owner asks for its lead seats by their codes; another
+ *                                                          lead is answered their codes alone (decision 29 (b))
+ *   seat/free         {kind, person, lead, t, sig}         the owner, or a lead who admitted that person, frees a desk seat at
+ *                                                          once, by the person a seat certificate names (anyone else's desk
+ *                                                          seat here: 403 "not-yours"; an asker with no current lead seat: 403
+ *                                                          "not-lead"); the owner frees a lead seat, by its code
+ * seat/desk, a lead's forward of a desk's token, is retired: it is no route, and is answered "not there" (404) as any such is.
+ * So is the front door (activate, activate/email, activate/confirm, trial, trial/confirm): a purchase key, an emailed code
+ * and a trial by code bind nothing, since signing in is the only way to hold a paid seat (decisions 2026-11-11 22:14).
+ *   admin/org         {provider, org, t, sig}              the vendor's root asks for an organisation as admits keeps it
+ * and two GETs with no body, which sign nothing (board 991, below):
+ *   note/desk         the desk's version note, as NOTE_DESK holds it
+ *   note/studio       Studio's version note, as NOTE_STUDIO holds it
+ * `sig` is Ed25519, 128 hex, over requests.mjs's bytes for the route, which begin with the route's own line; `t` is the
+ * caller's clock in ms and must be within the relay's call skew of ours; a signed request is answered once. The lead's
+ * key signs every request but the grant fetch, which the proof key signs: the lead's own, or one the lead registered at a
+ * check (settlement 3, and the test architect's condition (4): the lead's public half leaves the team in every audit
+ * pack, so it alone proves nothing).
+ *
+ * WHAT IS SIGNED HERE, with the service key the root delegated, and never anything else: a format-3 licence carrying the
+ * delegation in `via`, or a trial's licence carrying it (below), as src/licence.mjs verifyLicence accepts either (S1), its
+ * bytes the pinned catalog fold; a relay grant carrying the delegation in `via`, as the pinned relay's grantWhy
+ * accepts it, its bytes the pinned grantBytes; and a desk's seat certificate (below), under the delegation's "licence", its
+ * bytes requests.mjs seatCertBytes, with the doors handed beside it, their bytes seatDoorsBytes.
+ * Both forms reach this file as `rules` from worker.mjs, which takes them from the pin, so nothing here retypes a byte.
+ * The service key and the delegation are Worker secrets (SERVICE_KEY, the PKCS#8 of the Ed25519 key in hex; DELEGATION,
+ * the root-signed document as JSON); the delegation is made by the root offline (tools/sign.mjs delegate) and never here.
+ * A service whose delegation is not the root's, does not certify its key for both uses, or is not running now answers
+ * every route `unavailable` and signs nothing. So does one without HASH_KEY (below).
+ *
+ * A TRIAL GETS A GRANT AND A TRIAL'S LICENCE (decisions: "trials are signed licences too", 2026-09-24 02:03 and
+ * 2026-10-06 21:26). Studio reads a full licence by its updates date and never by today, so a trial is never one: it is
+ * signed in its own kind, "etiuda-studio-trial-license", with `ends`, the trial's end in ms, inside the signature, and
+ * Studio's src/licence.mjs honours it as a licence until that end by the clock, then pauses publishing, statistics and
+ * proposals as the record says for after the trial. A reader older than that one reads the kind as no licence. The
+ * sign-in and every quiet check of a trial hand it over, re-signed with the day's `issued` and the end unchanged.
+ *
+ * THE VERSION NOTES (board 991; Max's ruling of 2026-10-06 22:07: "Each program reads a small signed version note (form B) from
+ * etiuda.dev"). Max signs a note offline with the root (tools/sign.mjs note) and the deploy puts it as a Worker secret,
+ * NOTE_DESK or NOTE_STUDIO, as REVOKED is put. note/desk and note/studio serve it as it was handed, byte for byte, to a GET with
+ * no query, rate limited per IP like every route; one that is unset, empty or longer than NOTE_MAX bytes is "not there" (404).
+ * The service signs nothing in a note and judges nothing of it, and no route writes one: each program verifies it under the
+ * root's public half by the format the office keeps, so a service
+ * that serves a wrong note, an old one or none changes nothing an app shows but "not there".
+ *
+ * THE REVOKED KEYS (audit 6; S6) reach Studio through the quiet check, and a desk through signin/desk (its 200s and its 403
+ * "signin"): REVOKED, when set, is the root-signed list of service keys whose licences Studio refuses and whose certificates
+ * a desk reads as lapsed (src/licence.mjs, "etiuda-revocations"), made offline as the delegation is and handed as it stands. The service signs nothing in it and judges nothing of it; Studio judges it under the root and keeps
+ * the newest it has seen, so a service that hands an older list, or none, takes nothing back.
+ *
+ * EVERY DECISION ABOUT WHO HOLDS WHAT IS ONE STATEMENT OR ONE BATCH (A4): a sign-in seat and its token's first use (one
+ * batch), a trial once per person (one INSERT, by a unique index), a seat freed by its owner (one UPDATE naming the owner).
+ * Nothing reads and then writes on a decision: where a read answers early, the statement that writes holds the same
+ * condition again.
+ *
+ * ABUSE BOUNDS (A3): a request that could teach a guess something is answered alike whatever the cause; every route is rate
+ * limited per IP and per lead (LIMITS, per hour).
+ *
+ * PRIVACY: D1 keeps hashes of IPs, the organisation and seat count a licence names, dates, and the public halves of Studio
+ * keys. For sign-in it keeps, keyed under HASH_KEY: each seat's person (iss and sub),
+ * Entra's tenant and object ids beside it, the organisations a licence admits, a licence's owner (a person), the desks'
+ * public keys and the organisation each desk's person signed in from; and in the clear each person's sign-in code, a random pseudonym that says nothing of the person. An ID
+ * token is checked and discarded, never kept: its hash is kept, keyed, only in the replay record, until the token expires.
+ * What the front door wrote before (a purchase key's and an address's hashes, a trial's address and domain) is read by no
+ * route, and the codes and the outbox it kept are emptied by the retention purge. For each
+ * relay team a lead keeps, beside its licence, the team's door (below): the relay's address, the team's two random ids and the
+ * lead's two public keys, and nothing else. For a payment (pay.mjs) it keeps the provider's subscription and payment ids beside
+ * the licence, the paying person as seats keeps one, the seats each subscription bought, and each notification's id, type, time and
+ * outcome; no address, name or amount. Nothing is logged here.
+ *
+ * THE DOOR-FINDING (board 980; Max, 2026-11-12 18:46, "1) yes", to whether the service may keep each team's relay address, and
+ * 18:57, "Yes for the licence service question", to the lead's two public keys beside it). His criterion, 2026-11-11 21:51: "Agent
+ * would be able to log in into their own licenced Etiuda from any computer." A lead's Studio sets, by door/set, the doors of the
+ * relay teams it leads while it is signed in: each team's id, its relay team id, the relay's address, the lead key's id (its
+ * canonical id, leadKeyId of the signer, and no other) and the lead's box. A desk this service certifies is handed, in its
+ * signin/desk answer, the doors on the licence its certificate names whose lead still leads it now (leadOf's conditions, read
+ * at the handing), so a new computer finds its team with no invitation and takes the lead's keys from here, never from the relay.
+ * Admission stays the lead's: a door only lets a certified desk ask. Both ids are kept because the lead admits a request only
+ * where it names the team's own id (Studio src/join.mjs) and the relay knows the team only by its relay id, a separate random one.
+ *
+ * KEYED HASHES (the test architect's C1 on S4): every IP and answered request is kept as HMAC-SHA-256 under HASH_KEY, a
+ * third Worker secret of 32 random bytes in hex that Maxim's one command makes and puts (tools/sign.mjs secrets), never as
+ * a plain hash, so a leaked table cannot be read back by hashing guesses. The hashes a signed request's bytes carry stay
+ * plain (requests.mjs), since Studio computes them and holds no secret; they are compared, never kept.
+ *
+ * SIGN-IN (board 980; decisions 2026-11-11 22:14, and Claude alpha's decision 15 of 23:39, which replaces 13's trial once
+ * per organisation). A seat is a named person, proved by an OpenID Connect ID token their own provider signed, never by a
+ * key or an address, and proved again at least every PROOF_DAYS:
+ *   - THE PROVIDERS ARE CONFIGURATION (PROVIDERS, a variable of wrangler.toml, over PROVIDER_DEFAULTS): an id, the issuer or
+ *     issuers (Microsoft's templated by {tenantid}), the published keys' address, the client id tokens must be for, the claim
+ *     naming the organisation and the value of it that marks a personal account. A third provider is one more entry. One
+ *     with no client id is not trusted.
+ *   - THE TOKEN is judged here by the runtime's own crypto.subtle: RS256 alone, by a key the provider publishes (cached by
+ *     its HTTP cache headers within KEYS_TTL_MIN and KEYS_TTL_MAX, an unknown kid fetching once at most every
+ *     KID_REFRESH_MS), its issuer exact (Microsoft's {tenantid} replaced by the token's own tid, a GUID, and the key's own
+ *     issuer the same), its audience the client id, unexpired, not before its nbf, issued no later than now, and its nonce
+ *     where the caller gives one. The token is checked and discarded; it answers once, its keyed hash in the replay record
+ *     until it expires. What is kept of it is keyed: the person is (iss, sub), Entra's tid and oid beside it.
+ *   - ORGANISATIONS: a licence admits organisations (the admits table): a tenant or a domain keyed under HASH_KEY
+ *     (KEYED.org), which the vendor's attach script learns through admin/org, signed by the root, never holding HASH_KEY; a
+ *     person, "person:" and their keyed hash (a personal account is its own organisation, a licence's owner is admitted so,
+ *     and so is anyone a lead admits by their code through person/admit, until every lead who admitted them withdraws them
+ *     through person/withdraw, the one admission a route ever deletes; admitted_by keeps which leads admitted whom). "personal", which once let a lead forward desks of
+ *     that provider's personal accounts, is read by no route now and never seats anyone (so nobody signs in onto a stranger's
+ *     licence). One organisation holds one paid licence: a second order raises its seats and dates in place, and its id stays
+ *     (scripts/attach-seats.mjs). A DESK-ONLY licence (desk_only) has no lead seat, is owned by its buyer, and admits its
+ *     owner's desks alone; whether one is sold, and at what price, is Max's and is not decided by this code.
+ *   - THE SEAT follows the organisation's current licence (paid before trial, then the latest paid date), at sign-in and at
+ *     every quiet check. Lead seats and desk seats count apart (lead_seats, seats), each decided inside one statement; a
+ *     seat counts while seen within its licence's grace_days and proved within PROOF_DAYS, and is never removed; a seat
+ *     freed by its lead (a desk's) or by the licence's owner (a lead's, by its code) is unseen and unproved at once, and is
+ *     taken again only by its person's fresh proof; one person's Studio keys are at most DEVICES_PER_SEAT, the one unseen
+ *     longest released.
+ *   - PROOF AGAIN (decision 15 item 1): signin, signin/renew and signin/desk set a seat's proved_at. The quiet check never
+ *     proves: from PROOF_ASK_DAYS it answers proof "due", and from PROOF_DAYS, or for a freed seat, it answers "signin" and
+ *     takes, moves and grants nothing; the grant fetch refuses such a key and its desks alike. A refreshed token carries no nonce, so signin/renew binds it by four conditions
+ *     together: signed by the key already bound through that person, the token's person the seat's, iat within
+ *     RENEW_IAT_MS, and first use; a freed seat is not renewed. A lead's catalogs never depend on it: Studio's licence file
+ *     stays where it is.
+ *   - A PERSON HAS A CODE (persons): 16 Crockford symbols, random, made at their first sign-in, lead or desk, and kept for
+ *     good; a lead seat's code is its person's. The check and the sign-ins answer it as `me`, with `owner`, and a lead's
+ *     answers carry `ref`, its licence's public reference (a keyed hash of its id), which a seat certificate names; the
+ *     owner's seat/list names the licence's lead seats by code, seat/free frees one by it, and person/admit admits by it.
+ *   - A TOKEN IS BOUND TO THE KEY THAT SIGNS (the join of stages 1 and 2): Studio asks the provider for a nonce that is
+ *     requests.mjs signinNonce(lead, seed) and sends the seed beside the token; a token signs in only where its nonce is the
+ *     one the signed lead and the seed make, so one captured for one Studio key is refused for another. The nonce is
+ *     required: a token with none, or a body with no seed, is refused alike as "token".
+ *   - THE DESK SIGNS IN ITSELF (night decision 18): signin/desk is signed by the desk's own key, never by a lead, and its
+ *     first sign-in's token must carry signinNonce(desk, seed), so a token captured for one desk is no token for another.
+ *     A body with no seed is the desk's renewal, by a lead's four conditions: a desk key held for that person (person_desks,
+ *     recorded at a first sign-in), the token's person, iat within RENEW_IAT_MS, and first use; a renewal of a seat its lead
+ *     freed is "signin". The service, never the desk, chooses the licence: the organisation's, else one admitting the person
+ *     by name, else a desk-only licence they own. One person holds at most DESKS_PER_PERSON desks seen within the grace, a
+ *     fourth refused as "desks". Where no licence admits them the answer is no certificate and their code, to give a lead.
+ *     A desk's sign-out (night decision 20 (a)) frees that computer's place among the three at once and ends its renewal; the
+ *     person's seat on the licence stays theirs, and only an interactive sign-in takes the place again.
+ *   - THE LEAD'S LIST (night decision 20 (c)): person/list names, by code and per-licence pseudonym, the people whose desk
+ *     signed in within LIST_DAYS from an organisation the lead's licence admits, kept keyed beside the desk (person_desks.org).
+ *     A personal account has no organisation and is never listed: it reaches a lead by an invitation or by its code.
+ *   - THE SEAT CERTIFICATE is all a lead ever sees of a desk's person: the licence's public reference, the desk key, the
+ *     per-licence pseudonym of the person, their code, issued, and until, the earliest of PROOF_DAYS ahead, the licence's
+ *     paid date and a trial's end; signed by the service key with the delegation in `via`. No token, name or address.
+ *   - A TRIAL: a lead's first sign-in where no licence admits them starts a TRIAL_DAYS trial licence, once per
+ *     TRIAL_ONCE_PER (one statement, by a unique index), answered with a trial licence and a grant. Once per person, it is owned
+ *     by its person and admits only them, so it never stands in an organisation's way; its lead admits others by their code.
+ *     When the owner's organisation pays, the attach supersedes the trial and moves their seat and keys.
+ *   - REFUSALS, each one body whatever the cause: "token" (a bad, expired, replayed or foreign token, or a renewal that
+ *     does not bind), "no-licence" (no licence admits this person's organisation, its trial had), "full" (no seat of that
+ *     kind is free), "signin" (the seat was freed, or its proof lapsed), and for a desk "desks" (its person already holds
+ *     three). A refused attempt leaves its token unspent.
+ */
+import * as Q from "./requests.mjs";
+import { makePayRoute } from "./pay.mjs";
+import { paddleProvider } from "./pay-paddle.mjs";
+import { stripeProvider } from "./pay-stripe.mjs";
+
+const API = "/licence/v1/";
+/* The path the Worker answers under: API_PREFIX where wrangler.toml sets one, else Studio's production path; a value of any
+   other shape is a misconfigured Worker, which answers every route "unavailable". */
+const PREFIX_RE = /^\/[a-z][a-z0-9-]{0,40}\/v1\/$/;
+function apiPrefixOf(env) {
+  const p = env ? env.API_PREFIX : undefined;
+  if (p === undefined || p === null || p === "") return API;
+  if (typeof p !== "string") return null;
+  if (!PREFIX_RE.test(p)) return null;
+  return p;
+}
+const LICENCE_KIND = "etiuda-studio-license", LICENCE_FORMAT = 3, LICENCE_SIG_ALG = "Ed25519";
+/* A trial's licence: src/licence.mjs TRIAL_KIND and TRIAL_FORMAT, held equal by tests/licence-service.mjs. */
+const TRIAL_KIND = "etiuda-studio-trial-license", TRIAL_FORMAT = 1;
+const GRANT_KIND = "etiuda-relay-grant", GRANT_SIG_ALG = "ed25519";
+const DELEGATION_KIND = "etiuda-delegation";
+/* The EULA's three devices per seat and Studio's fourteen-day trial: src/licence.mjs DEVICES_PER_SEAT and TRIAL_DAYS, held
+   equal by tests/licence-service.mjs, since the Worker cannot load that file. */
+const DEVICES_PER_SEAT = 3, TRIAL_DAYS = 14;
+const HOUR = 3600000, DAY = 24 * HOUR;
+const BODY_MAX = 8192, PROOFS_MAX = 32;
+/* Requests per hour per bucket, by route: per IP and per lead. */
+const LIMITS = Object.freeze({
+  "check": { ip: 60, lead: 20 },
+  "grant": { ip: 120, lead: 60 },
+  "note/desk": { ip: 60 },
+  "note/studio": { ip: 60 },
+  "signin": { ip: 20, lead: 10 },
+  "signin/renew": { ip: 20, lead: 10 },
+  /* A desk signs in at each start and daily; an office's desks may share one address, so the address's bucket is wide. */
+  "signin/desk": { ip: 600, lead: 20 },
+  "signout/desk": { ip: 600, lead: 20 },
+  "person/admit": { ip: 60, lead: 60 },
+  "person/withdraw": { ip: 60, lead: 60 },
+  "person/list": { ip: 60, lead: 60 },
+  "door/set": { ip: 60, lead: 60 },
+  "seat/list": { ip: 60, lead: 60 },
+  "seat/free": { ip: 60, lead: 60 },
+  "lead/name": { ip: 60, lead: 60 },
+  "licence/set": { ip: 60, lead: 60 },
+  "admin/org": { ip: 20 },
+});
+
+/* SIGN-IN'S PROVIDERS (board 980), the facts each provider documents, read 2026-11-11 and cited in
+   the lead engineer's report of 2026-11-11. A PROVIDERS entry naming one of these ids takes these and
+   adds its clientId; an entry with another id states every field (a third provider, no code).
+   Microsoft: the tenant-independent issuer "https://login.microsoftonline.com/{tenantid}/v2.0", whose {tenantid} the token's
+   own tid replaces before an exact match, the keys at common/discovery/v2.0/keys, each key carrying its own issuer
+   (learn.microsoft.com/entra/identity-platform/access-tokens, "Validate the issuer" and "Validate the signing key issuer");
+   tid names the organisation, and 9188040d-6c67-4c5b-b112-36a304b66dad is "the personal Microsoft account tenant"
+   (id-token-claims-reference). Google: iss "https://accounts.google.com" or "accounts.google.com", hd names the Workspace
+   domain and "The absence of this claim indicates that the account does not belong to a Google hosted domain"
+   (developers.google.com/identity/openid-connect/openid-connect); jwks_uri as its discovery document gives it. */
+const CONSUMERS_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
+const PROVIDER_DEFAULTS = Object.freeze({
+  microsoft: Object.freeze({ issuer: Object.freeze(["https://login.microsoftonline.com/{tenantid}/v2.0"]),
+    jwks: "https://login.microsoftonline.com/common/discovery/v2.0/keys", org: "tid", personal: CONSUMERS_TENANT }),
+  google: Object.freeze({ issuer: Object.freeze(["https://accounts.google.com", "accounts.google.com"]),
+    jwks: "https://www.googleapis.com/oauth2/v3/certs", org: "hd", personal: null }),
+});
+/* The published keys: kept by the response's max-age, never less than five minutes nor more than Microsoft's "every 24
+   hours"; a token naming a kid not held fetches the keys again, at most once in KID_REFRESH_MS, so a stranger's made-up
+   kids cost one fetch in five minutes. A body longer than KEYS_MAX is no keys. */
+const KEYS_TTL_MIN = 5 * 60000, KEYS_TTL_MAX = 24 * 3600000, KID_REFRESH_MS = 5 * 60000, KEYS_MAX = 65536;
+/* How far a token's nbf and iat may stand ahead of our clock. exp has none: an expired token is expired. */
+const TOKEN_LEEWAY_MS = 60000, TOKEN_MAX = 7000;
+/* PROOF AGAIN (Claude alpha's decision 15 item 1): a seat held by sign-in lapses PROOF_DAYS after its last proof, and from
+   PROOF_ASK_DAYS the quiet check asks for a fresh one. A refreshed token renews a seat, a lead's or a desk's, only if issued
+   within RENEW_IAT_MS, since Studio and the desk each exchange and post it at once. */
+const PROOF_DAYS = 30, PROOF_ASK_DAYS = 25, RENEW_IAT_MS = 10 * 60000;
+/* The seat certificate's kind and format (the interface of 2026-11-12, as src/desk-seat.mjs reads it). */
+const CERT_KIND = "etiuda-seat-certificate", CERT_FORMAT = 1;
+/* A TRIAL BY SIGN-IN is had once per this (Claude alpha's decision 15 (a), replacing 13's "organisation"): "person", one
+   lead's own, owned by them and admitting only them as lead, so no colleague can take or squat it; or "organisation", the
+   tenant, the domain or the personal account. Its seats: one lead, TRIAL_DESK_SEATS desks, thirty, the size a team can
+   already be today (Claude alpha's decision 14, 2026-11-11). */
+const TRIAL_ONCE_PER = "person", TRIAL_LEAD_SEATS = 1, TRIAL_DESK_SEATS = 30;
+const TRIAL_PERSONAL_DESK_SEATS = 3; /* plant:trial-personal-desks */
+const RETENTION_DAYS = 365, RETENTION_MS = RETENTION_DAYS * DAY;
+/* A lead seat's code: 16 Crockford symbols, 80 random bits. */
+const SEAT_CODE_LEN = 16, SEAT_CODE_RE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
+/* ONE PERSON, AT MOST THREE ACTIVE DESKS (board 980, stage 3; the condition Max agreed to at 22:14, as Claude alpha gave it at
+   22:15: "Studio caps one person at three active desks"). A desk is active while it proved its person within its licence's
+   grace; without the cap one account shared by thirty agents would be one seat (the lead engineer's page of 2026-11-11,
+   section 3). Desks sign in here themselves, so this is the count, and no certificate is made past it. */
+const DESKS_PER_PERSON = 3;
+/* THE DOORS (the door-finding): at most DOORS_PER_LEAD in one lead's set, DOORS_HANDED in a desk's answer; a team id and a relay
+   team id in Studio's shape. A DOOR'S RELAY IS ONE THE APPS TRUST, AND NOTHING ELSE (Argon's review of the sign-in service, finding
+   3; Claude alpha's decision 31 of 2026-11-12: "the desk keeps and knocks on a door only where its address is one of the relay
+   addresses the build itself trusts (ours), the same list the service pins doors to when it stores them"): DOOR_RELAYS, the
+   shipped relay, as src/relay.mjs RELAY_URL writes it into a team row (src/wire.cjs RELAY_ORIGIN without its last slash), taken
+   with or without that slash; and on a staging Worker (one answering under any API_PREFIX but production's) the staging relay
+   too, DOOR_RELAYS_STAGING. These are the engine's samples' "installed" rows, and on staging its "unpackaged" rows besides (the
+   engine's tests/door-relays.json, which the desk reads; its bytes are Studio's tests/fixtures/door-relays.json). doorRelayOk is
+   the one judge of a door's address. A door carries no lead's signature over its address, so no lead key, a co-lead's or a stolen
+   one, can steer a desk the service certifies to a relay a lead never chose. When a customer's own relay becomes a product
+   feature this list becomes a setting here and on the desk. */
+const DOORS_PER_LEAD = 16, DOORS_HANDED = 16;
+const DOOR_RELAYS = Object.freeze(["https://etiuda.dev/relay/v1"]);
+const DOOR_RELAYS_STAGING = Object.freeze(["https://etiuda.dev/relay-staging/v1"]);
+const doorRelayOk = (url, staging) => {
+  if (typeof url !== "string") return false;
+  const bare = url.endsWith("/") ? url.slice(0, -1) : url;
+  return DOOR_RELAYS.indexOf(bare) >= 0 || (staging === true && DOOR_RELAYS_STAGING.indexOf(bare) >= 0); /* plant:door-staging */
+};
+const DOOR_TEAM_RE = /^t-[0-9a-f]{16}$/, DOOR_RT_RE = /^[0-9a-f]{32}$/;
+/* THE LEAD'S LIST (the product designer's Team screen): people whose desk signed in within LIST_DAYS, at most LIST_MAX of them. */
+const LIST_DAYS = 30, LIST_MAX = 100;
+/* What a licence row holds where a purchase key's and address's hashes went, columns the schema keeps NOT NULL and unique:
+   a value no hash (64 hex) ever is. */
+/* THE OWNER'S SWITCH as a licence the attach or a payment makes starts (decision 47's addition): false, only people the owner or a
+   named lead admitted are seated; true, colleagues' desks are seated by the organisation admission. The default is Max's to rule. */
+const ORG_DESKS_DEFAULT = false;
+const NO_KEY = "signin:";
+/* Admits' values beside a tenant's or a domain's hash. */
+const PERSON = "person:", PERSONAL = "personal";
+/* THE VERSION NOTES' ROUTES, each to the Worker secret it serves, and the most bytes a note is (the format's 1024). */
+const NOTES = Object.freeze({ "note/desk": "NOTE_DESK", "note/studio": "NOTE_STUDIO" });
+const NOTE_MAX = 1024;
+/* What a keyed hash is taken of: a line naming the kind, then the value, so one kind never stands for another. */
+const KEYED = Object.freeze({
+  ip: "etiuda-licence-ip", seen: "etiuda-licence-seen",
+  person: "etiuda-licence-person", tid: "etiuda-licence-tid", oid: "etiuda-licence-oid", token: "etiuda-licence-token",
+  personOut: "etiuda-licence-person-out", org: "etiuda-licence-org", ref: "etiuda-licence-ref",
+});
+
+const HEX64 = /^[0-9a-f]{64}$/, HEX128 = /^[0-9a-f]{128}$/;
+const ID_RE = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
+const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
+const exactly = (o, names, optional) => Object.keys(o).every(k => names.includes(k) || (optional || []).includes(k))
+  && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
+const isT = v => Number.isSafeInteger(v) && v > 0;
+/* A lead's doors as door/set takes them: at most DOORS_PER_LEAD, each exactly {team, rt, url, keyId, box} of its shape, keyId the
+   signer's own canonical id (`keyId`, requests.mjs leadKeyId), and no team twice. */
+const doorsShape = (doors, keyId, staging) => Array.isArray(doors) && doors.length <= DOORS_PER_LEAD /* plant:door-count */
+  && doors.every(d => plain(d) && exactly(d, ["team", "rt", "url", "keyId", "box"]) && DOOR_TEAM_RE.test(String(d.team))
+    && DOOR_RT_RE.test(String(d.rt)) && doorRelayOk(d.url, staging) /* plant:door-url */
+    && d.keyId === keyId && HEX64.test(String(d.box))) /* plant:door-key-id */
+  && new Set(doors.map(d => d.team)).size === doors.length;
+const unhex = s => Uint8Array.from(String(s).match(/../g) || [], h => parseInt(h, 16));
+const dayOf = ms => new Date(ms).toISOString().slice(0, 10);
+function randomHex(n) { const b = new Uint8Array(n); globalThis.crypto.getRandomValues(b); return Q.toHex(b); }
+
+/** A lead seat's code: SEAT_CODE_LEN Crockford symbols, each from five random bits. */
+function makeSeatCode() {
+  const b = new Uint8Array(SEAT_CODE_LEN);
+  globalThis.crypto.getRandomValues(b);
+  return Array.from(b, x => Q.CROCKFORD[x & 31]).join("");
+}
+
+/** A statement's values in the order it names them: q(v) is the ?N standing for v, the same N for the same value, so a
+ *  statement composed of optional parts binds exactly what it names (D1 refuses a value no ?N names). */
+function params() {
+  const values = [];
+  const q = v => { const x = v === undefined ? null : v; let i = values.indexOf(x); if (i < 0) { values.push(x); i = values.length - 1; } return "?" + (i + 1); };
+  q.values = values;
+  return q;
+}
+
+/** An organisation as admits keeps it: keyed under HASH_KEY, of the provider's id and the organisation's own value. */
+const orgKeyed = (hmacKey, provider, value) => keyedHash(hmacKey, KEYED.org, String(provider) + "\n" + String(value).toLowerCase()); /* plant:org-keyed */
+
+/** HMAC-SHA-256 under `hmacKey` (a WebCrypto HMAC key) of `kind`'s line and then `value`, as lower-case hex. */
+async function keyedHash(hmacKey, kind, value) {
+  const enc = new TextEncoder(), head = enc.encode(kind + "\n");
+  const tail = typeof value === "string" ? enc.encode(value) : value;
+  const all = new Uint8Array(head.length + tail.length);
+  all.set(head, 0); all.set(tail, head.length);
+  return Q.toHex(await globalThis.crypto.subtle.sign("HMAC", hmacKey, all));
+}
+
+/* ---- answers ------------------------------------------------------------------------------------------------------ */
+
+const answer = (status, obj) => new Response(JSON.stringify(obj), {
+  status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+const missing = () => new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
+/* ONE REFUSAL FOR EVERYTHING A GUESS COULD LEARN FROM (A3): a grant fetch without a proof or for a key holding nothing. */
+const refused = () => answer(403, { ok: false, reason: "refused" });
+const malformed = () => answer(400, { ok: false, reason: "malformed" });
+const slowDown = () => answer(429, { ok: false, reason: "slow-down" });
+const unavailable = () => answer(503, { ok: false, reason: "unavailable" });
+const fault = () => answer(500, { ok: false, reason: "fault" });
+
+/* ---- the service ---------------------------------------------------------------------------------------------------- */
+
+/**
+ * The service over `o.rules` (the pinned forms: licenceBytes, grantBytes, delegationBytes, grantWhy, callSkewMs,
+ * grantMaxMs, delegationMaxMs), `o.roots` (the root public halves a delegation must trace to; worker.mjs passes the
+ * vendor's root and only a leg passes another) and `o.clock` (ms).
+ */
+function makeService(o) {
+  const rules = o.rules, roots = o.roots, clock = o.clock || (() => Date.now());
+  /* The one way out to the network: sign-in's published keys and the payment providers' APIs (pay.mjs), and nothing else. A leg passes a stand-in. */
+  const fetchOut = o.fetch || ((url, init) => globalThis.fetch(url, init));
+  const trialOncePer = o.trialOncePer || TRIAL_ONCE_PER;
+  if (trialOncePer !== "organisation" && trialOncePer !== "person") throw new Error("a trial is had once per organisation or per person");
+  if (!rules || typeof rules.licenceBytes !== "function" || typeof rules.grantBytes !== "function"
+      || typeof rules.delegationBytes !== "function" || typeof rules.grantWhy !== "function")
+    throw new Error("the licence service needs the pinned engine's licence, grant and delegation forms");
+  if (!Array.isArray(roots) || roots.length < 1 || !roots.every(r => HEX64.test(String(r))))
+    throw new Error("the licence service needs the root public halves a delegation must trace to");
+  const skew = rules.callSkewMs, grantMax = rules.grantMaxMs;
+  const pay = makePayRoute({ clock, fetch: fetchOut, timeoutMs: o.paddleTimeoutMs, consts: { NO_KEY, PERSON, PERSONAL, SEAT_CODE_RE, ORG_DESKS_DEFAULT },
+    providers: { paddle: paddleProvider(), stripe: stripeProvider() } });
+
+  async function verified(pubHex, bytes, sigHex) {
+    if (!HEX64.test(String(pubHex)) || !HEX128.test(String(sigHex))) return false;
+    try {
+      const k = await globalThis.crypto.subtle.importKey("raw", unhex(pubHex), { name: "Ed25519" }, false, ["verify"]);
+      return await globalThis.crypto.subtle.verify({ name: "Ed25519" }, k, unhex(sigHex), bytes);
+    } catch { return false; }
+  }
+
+  /* THE CONFIGURATION: the service key, the delegation and the hash key, judged once per isolate and per value. The
+     delegation must be the root's, certify this very key for "licence" and "relay-grant", and run forwards for no longer
+     than the relay accepts; HASH_KEY must be 32 bytes in hex; otherwise nothing is signed, kept or answered. */
+  let memo = null;
+  async function configOf(env) {
+    const sk = env && env.SERVICE_KEY, dj = env && env.DELEGATION, hk = env && env.HASH_KEY;
+    const id = String(sk) + "\n" + String(dj) + "\n" + String(hk);
+    if (memo && memo.id === id) return memo.cfg;
+    memo = { id, cfg: await judgeConfig(sk, dj, hk) };
+    return memo.cfg;
+  }
+  async function judgeConfig(sk, dj, hk) {
+    if (typeof hk !== "string" || !HEX64.test(hk)) return null; /* plant:hash-key */
+    let d;
+    try { d = typeof dj === "string" ? JSON.parse(dj) : null; } catch { return null; }
+    if (!plain(d) || d.kind !== DELEGATION_KIND || d.format !== 1
+        || !exactly(d, ["kind", "format", "key", "may", "from", "until", "sig"])) return null;
+    if (!plain(d.key) || !exactly(d.key, ["id", "pub"]) || !ID_RE.test(String(d.key.id)) || !HEX64.test(String(d.key.pub))) return null;
+    if (!Array.isArray(d.may) || !d.may.includes("licence") || !d.may.includes("relay-grant")) return null;
+    if (!Number.isSafeInteger(d.from) || !Number.isSafeInteger(d.until) || d.until <= d.from
+        || d.until - d.from > rules.delegationMaxMs) return null;
+    if (!plain(d.sig) || !HEX128.test(String(d.sig.value))) return null;
+    let roo = false;
+    for (const r of roots) if (await verified(r, rules.delegationBytes(d), d.sig.value)) roo = true;
+    if (!roo) return null; /* plant:config-root */
+    if (typeof sk !== "string" || !/^[0-9a-f]+$/.test(sk)) return null;
+    try {
+      const subtle = globalThis.crypto.subtle;
+      const open = await subtle.importKey("pkcs8", unhex(sk), { name: "Ed25519" }, true, ["sign"]);
+      const x = (await subtle.exportKey("jwk", open)).x;
+      const pub = Q.toHex(Uint8Array.from(atob(x.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0)));
+      if (pub !== d.key.pub) return null;
+      const key = await subtle.importKey("pkcs8", unhex(sk), { name: "Ed25519" }, false, ["sign"]);
+      const hmac = await subtle.importKey("raw", unhex(hk), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      return { delegation: d, key, hmac };
+    } catch { return null; }
+  }
+  async function signHex(cfg, bytes) {
+    return Q.toHex(await globalThis.crypto.subtle.sign({ name: "Ed25519" }, cfg.key, bytes));
+  }
+
+  /* ---- sign-in: the providers, their keys, the token ---------------------------------------------------------------- */
+
+  /* THE PROVIDERS TRUSTED, judged once per value of PROVIDERS: a Map of id to provider, empty where PROVIDERS is unset, and
+     null where it is set but not a list of providers (the sign-in routes then answer "unavailable"). */
+  let providersMemo = null;
+  function providersOf(env) {
+    const text = env ? env.PROVIDERS : undefined;
+    if (providersMemo && providersMemo.text === text) return providersMemo.map;
+    providersMemo = { text, map: judgeProviders(text) };
+    return providersMemo.map;
+  }
+  function judgeProviders(text) {
+    const map = new Map();
+    if (text === undefined || text === null || text === "") return map;
+    let list;
+    try { list = typeof text === "string" ? JSON.parse(text) : null; } catch { return null; }
+    if (!Array.isArray(list) || list.length > 16) return null;
+    const URL_RE = /^https:\/\/[a-z0-9.-]+(?::\d{1,5})?\/[\x21-\x7e]*$/, ISS_RE = /^[\x21-\x7e]{1,200}$/;
+    for (const e of list) {
+      if (!plain(e) || typeof e.id !== "string" || !/^[a-z][a-z0-9-]{1,30}$/.test(e.id) || map.has(e.id)) return null;
+      const base = PROVIDER_DEFAULTS[e.id] || {};
+      const p = { id: e.id, clientId: e.clientId, issuer: e.issuer || base.issuer, jwks: e.jwks || base.jwks,
+        org: e.org === undefined ? base.org : e.org, personal: e.personal === undefined ? base.personal : e.personal };
+      if (typeof p.clientId !== "string" || p.clientId.length > 200 || /\s/.test(p.clientId)) return null;
+      if (!Array.isArray(p.issuer) || p.issuer.length < 1 || p.issuer.length > 4 || !p.issuer.every(i => typeof i === "string" && ISS_RE.test(i))) return null;
+      if (typeof p.jwks !== "string" || !URL_RE.test(p.jwks)) return null;
+      if (p.org !== null && (typeof p.org !== "string" || !/^[a-z_]{1,40}$/.test(p.org))) return null;
+      if (p.personal !== null && p.personal !== undefined && typeof p.personal !== "string") return null;
+      if (p.personal === undefined) p.personal = null;
+      if (p.clientId) map.set(p.id, Object.freeze(p)); /* plant:provider-client */
+    }
+    return map;
+  }
+
+  /* THE PUBLISHED KEYS, per provider, in this isolate: {keys: Map kid -> {jwk, key}, at, ttl}. A fetch that fails, and a 200
+     that is malformed or holds no usable key (Argon 8c), keeps what was held; with nothing held it is the provider down,
+     and the route answers "unavailable". */
+  const keyCache = new Map();
+  async function loadKeys(p, now) {
+    const old = keyCache.get(p.id);
+    const kept = () => {
+      if (old) { old.at = now; old.ttl = KEYS_TTL_MIN; return old; }
+      throw Object.assign(new Error("provider down"), { down: true });
+    };
+    let res, text;
+    try {
+      /* "manual", never "error": Cloudflare's runtime refuses redirect "error" with a TypeError (measured under wrangler dev,
+         2026-11-13: "use manual and check the response status code"), which made every real sign-in answer "unavailable". A 3xx
+         is not ok, so the line below still refuses a redirect, as "error" meant to. */
+      res = await fetchOut(p.jwks, { method: "GET", redirect: "manual", headers: { accept: "application/json" } });
+      if (!res || !res.ok) throw new Error("keys " + (res && res.status));
+      text = await res.text();
+      if (text.length > KEYS_MAX) throw new Error("keys too long");
+    } catch { return kept(); }
+    let doc = null;
+    try { doc = JSON.parse(text); } catch { doc = null; }
+    const keys = new Map();
+    for (const k of (plain(doc) && Array.isArray(doc.keys) ? doc.keys : [])) {
+      if (!plain(k) || k.kty !== "RSA" || typeof k.kid !== "string" || typeof k.n !== "string" || typeof k.e !== "string") continue;
+      if (k.use !== undefined && k.use !== "sig") continue;
+      if (k.alg !== undefined && k.alg !== "RS256") continue;
+      keys.set(k.kid, { jwk: k, key: null });
+    }
+    if (keys.size === 0) return kept(); /* plant:keys-empty */
+    const m = /max-age=(\d+)/.exec((res.headers && res.headers.get("cache-control")) || "");
+    const ttl = Math.min(KEYS_TTL_MAX, Math.max(KEYS_TTL_MIN, m ? Number(m[1]) * 1000 : KEYS_TTL_MAX));
+    const entry = { keys, at: now, ttl };
+    keyCache.set(p.id, entry);
+    return entry;
+  }
+  async function keyFor(p, kid, now) {
+    let entry = keyCache.get(p.id);
+    if (!entry || now >= entry.at + entry.ttl) entry = await loadKeys(p, now); /* plant:keys-ttl */
+    if (!entry.keys.has(kid) && now - entry.at >= KID_REFRESH_MS) entry = await loadKeys(p, now); /* plant:kid-refresh */
+    const held = entry.keys.get(kid);
+    if (!held) return null;
+    if (!held.key) held.key = await globalThis.crypto.subtle.importKey("jwk",
+      { kty: "RSA", n: held.jwk.n, e: held.jwk.e, alg: "RS256", ext: true },
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    return held;
+  }
+
+  const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const B64U_RE = /^[A-Za-z0-9_-]+$/;
+  const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), ch => ch.charCodeAt(0));
+  const jsonOf = s => { try { const v = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(unb64u(s))); return plain(v) ? v : null; } catch { return null; } };
+  /* The issuer a template stands for in this token: Microsoft's {tenantid} replaced by the token's own tid, which must be
+     a GUID ("Validate that the tid claim is a GUID and the iss claim is of the form .../{tid}/v2.0"); null where it cannot. */
+  function issuerFor(template, claims) {
+    if (template.indexOf("{tenantid}") < 0) return template;
+    if (typeof claims.tid !== "string" || !GUID_RE.test(claims.tid)) return null;
+    return template.split("{tenantid}").join(claims.tid);
+  }
+  const issuerMatches = (p, claims) => typeof claims.iss === "string" && p.issuer.some(i => issuerFor(i, claims) === claims.iss); /* plant:jwt-iss */
+
+  /* AN ID TOKEN, JUDGED: the claims of a token `p` issued for us, or null; null too for any provider in `providers` where
+     `p` is not given, the token's own issuer choosing (every route names its provider today). Throws {down} where the keys cannot be had.
+     The nonce is returned, not judged: each route binds it as its own rule says. */
+  async function judgeToken(token, p0, providers, now) {
+    if (typeof token !== "string" || token.length > TOKEN_MAX) return null;
+    const parts = token.split(".");
+    if (parts.length !== 3 || !parts.every(s => B64U_RE.test(s))) return null;
+    const head = jsonOf(parts[0]), claims = jsonOf(parts[1]);
+    if (!head || !claims) return null;
+    if (head.alg !== "RS256" || typeof head.kid !== "string" || head.kid.length > 200) return null;
+    const p = p0 || Array.from(providers.values()).find(x => issuerMatches(x, claims));
+    if (!p || !issuerMatches(p, claims)) return null;
+    if (!(claims.aud === p.clientId || (Array.isArray(claims.aud) && claims.aud.length === 1 && claims.aud[0] === p.clientId))) return null; /* plant:jwt-aud */
+    if (!Number.isFinite(claims.exp) || !(now < claims.exp * 1000)) return null; /* plant:jwt-exp */
+    if (claims.nbf !== undefined && !(Number.isFinite(claims.nbf) && claims.nbf * 1000 <= now + TOKEN_LEEWAY_MS)) return null; /* plant:jwt-nbf */
+    if (typeof claims.iat !== "number" || !Number.isFinite(claims.iat) || claims.iat * 1000 > now + TOKEN_LEEWAY_MS) return null; /* plant:jwt-iat */
+    if (typeof claims.sub !== "string" || !claims.sub || claims.sub.length > 255) return null;
+    const held = await keyFor(p, head.kid, now);
+    if (!held) return null;
+    /* The key's own issuer, where the keys document names one: a templated one for this tenant's issuer, an exact one for
+       that issuer alone (Microsoft's consumers key never signs for a work tenant). */
+    if (held.jwk.issuer !== undefined && issuerFor(String(held.jwk.issuer).replace(/\{tenantid\}/gi, "{tenantid}"), claims) !== claims.iss) return null; /* plant:key-issuer */
+    let good = false;
+    try {
+      good = await globalThis.crypto.subtle.verify({ name: "RSASSA-PKCS1-v1_5" }, held.key, unb64u(parts[2]),
+        new TextEncoder().encode(parts[0] + "." + parts[1]));
+    } catch { good = false; }
+    if (!good) return null; /* plant:jwt-sig */
+    let org = null, personal = false;
+    if (p.org === null) org = claims.iss;
+    else {
+      const v = claims[p.org];
+      if (v === undefined || v === null || v === "" || (p.personal && typeof v === "string" && v.toLowerCase() === p.personal.toLowerCase())) personal = true;
+      else if (typeof v !== "string" || v.length > 255) return null;
+      else org = v;
+    }
+    return { provider: p, iss: claims.iss, sub: claims.sub, exp: claims.exp, iat: claims.iat, nonce: typeof claims.nonce === "string" ? claims.nonce : null,
+      tid: typeof claims.tid === "string" ? claims.tid : null, oid: typeof claims.oid === "string" ? claims.oid : null, org, personal };
+  }
+
+  /* What the service signs. A licence's `issued` is the day it is signed, inside the delegation's window as S1 reads it;
+     its updates date is the purchase's. A grant runs from now to the earliest of the end it is for, 45 days ahead (the
+     relay's longest) and the delegation's own end, which the relay requires (via-window); none is made that ends by now,
+     and none leaves here that the pinned relay's own grantWhy would refuse. */
+  async function licenceFor(cfg, row, now) {
+    const doc = { kind: LICENCE_KIND, format: LICENCE_FORMAT, org: row.org, seats: row.seats, edition: "studio",
+      issued: dayOf(now), updatesUntil: row.updates_until, via: cfg.delegation,
+      sig: { alg: LICENCE_SIG_ALG, keyId: cfg.delegation.key.id } };
+    doc.sig.value = await signHex(cfg, rules.licenceBytes(doc));
+    return doc;
+  }
+  /* A trial's licence: issued today, ending when the trial does, and stating nothing a full licence counts by. */
+  async function trialLicenceFor(cfg, ends, now) {
+    const doc = { kind: TRIAL_KIND, format: TRIAL_FORMAT, edition: "studio", issued: dayOf(now), ends, via: cfg.delegation,
+      sig: { alg: LICENCE_SIG_ALG, keyId: cfg.delegation.key.id } };
+    doc.sig.value = await signHex(cfg, rules.licenceBytes(doc));
+    return doc;
+  }
+  async function grantFor(cfg, lead, paid, ends, now) {
+    let until = Math.min(ends, now + grantMax); /* plant:grant-45 */
+    until = Math.min(until, cfg.delegation.until); /* plant:grant-delegation */
+    if (!(until > now)) return null;
+    const grant = { kind: GRANT_KIND, format: 1, lead, issued: now, until, paid, via: cfg.delegation,
+      sig: { alg: GRANT_SIG_ALG, keyId: cfg.delegation.key.id, value: "" } };
+    grant.sig.value = await signHex(cfg, rules.grantBytes(grant));
+    const why = rules.grantWhy(grant, lead, now, roots);
+    if (why !== null) throw new Error("a grant the relay would refuse: " + why);
+    return grant;
+  }
+
+  /* RATE LIMITS: one batch counting each bucket for this hour, one row per bucket and hour, the old hours dropped. */
+  async function overLimit(db, route, buckets, now) {
+    const slot = Math.floor(now / HOUR), limits = LIMITS[route];
+    const stmts = [db.prepare("DELETE FROM hits WHERE slot < ?1").bind(slot - 1)];
+    for (const [kind, value] of buckets) stmts.push(db.prepare(
+      "INSERT INTO hits (bucket, slot, n) VALUES (?1, ?2, 1) ON CONFLICT (bucket, slot) DO UPDATE SET n = n + 1 RETURNING n")
+      .bind(route + ":" + kind + ":" + value, slot));
+    const res = await db.batch(stmts);
+    return buckets.some(([kind], i) => res[i + 1].results[0].n > limits[kind]); /* plant:rate */
+  }
+
+  /* A SIGNED REQUEST: fresh, signed by `signer` over `bytes`, and not answered before. The replay record is written only
+     after the signature holds, so nobody fills it with junk. Null where it stands, else the refusal to answer. */
+  async function signedOk(db, cfg, bytes, signer, sig, t, now) {
+    if (Math.abs(now - t) > skew) return answer(403, { ok: false, reason: "stale" }); /* plant:skew */
+    if (!await verified(signer, bytes, sig)) return answer(403, { ok: false, reason: "signature" }); /* plant:sig */
+    const digest = await keyedHash(cfg.hmac, KEYED.seen, bytes); /* plant:keyed-seen */
+    const res = await db.batch([
+      db.prepare("DELETE FROM seen WHERE until < ?1").bind(now),
+      db.prepare("INSERT INTO seen (digest, until) VALUES (?1, ?2) ON CONFLICT (digest) DO NOTHING").bind(digest, now + 2 * skew),
+    ]);
+    if (res[1].meta.changes !== 1) return answer(403, { ok: false, reason: "replayed" }); /* plant:replay */
+    return null;
+  }
+
+  const LICENCE_COLUMNS = "id, org, seats, updates_until, paid_until, refunded, lead_seats, trial_ends, grace_days, owner, desk_only, org_desks";
+
+  /* ---- sign-in: the organisation's licence, the seat, the key ------------------------------------------------------- */
+
+  /* THE LICENCE A PERSON LEADS (a team is its lead's own; decision 47): of the licences not refunded and not desk-only that the
+     person owns or its owner named them to (lead_names), a paid one before a trial, then the latest paid date, then the newest. An
+     organisation's admission, or a "person:" one, seats desks and never a lead. */
+  async function leadLicence(db, person) {
+    return db.prepare("SELECT " + LICENCE_COLUMNS + " FROM licences WHERE refunded = 0 AND desk_only = 0 AND (owner = ?1 " /* plant:org-admit */
+      + "OR id IN (SELECT licence FROM lead_names WHERE person = ?1)) " /* plant:lead-named */
+      + "ORDER BY (trial_ends IS NULL) DESC, paid_until DESC, id DESC LIMIT 1").bind(person).first();
+  }
+  /* WHETHER A RUNNING PAID LICENCE ADMITS AN ORGANISATION: what a person that licence does not seat or lead is told beside their own
+     trial, so they know whom to ask. */
+  const orgHolds = async (db, provider, org, now) => !!(await db.prepare("SELECT 1 AS h FROM licences WHERE refunded = 0 "
+    + "AND desk_only = 0 AND trial_ends IS NULL AND paid_until > ?1 "
+    + "AND id IN (SELECT licence FROM admits WHERE provider = ?2 AND org = ?3) LIMIT 1").bind(now, provider, org).first());
+
+  /* A TRIAL, ONCE PER UNIT, IN ONE BATCH: the licence row, owned by the person starting it, is inserted only where no row
+     holds the unit (the unique index licences_one_trial decides), and its admission is written for whichever row holds it,
+     so two leads racing end on one. Once per person the unit is the person, so the trial admits them alone as lead. */
+  async function startTrial(db, s, unit, now, o) {
+    const opt = o || {}, ends = now + TRIAL_DAYS * DAY;
+    const deskSeats = opt.deskOnly ? 1 : (s.personal ? TRIAL_PERSONAL_DESK_SEATS : TRIAL_DESK_SEATS); /* plant:trial-seats-personal */
+    const gate = opt.digest ? "WHERE NOT EXISTS (SELECT 1 FROM seen WHERE digest = ?10) " : "WHERE 1 ";
+    const vals = [NO_KEY + randomHex(16), NO_KEY, deskSeats, dayOf(ends), TRIAL_LEAD_SEATS, ends, unit, s.person, opt.deskOnly ? 1 : 0];
+    if (opt.digest) vals.push(opt.digest);
+    const insert = db.prepare("INSERT INTO licences (key_hash, email_hash, org, seats, updates_until, paid_until, refunded, lead_seats, "
+      + "trial_ends, trial_unit, owner, desk_only, org_desks) SELECT ?1, ?2, 'Trial', ?3, ?4, 0, 0, ?5, ?6, ?7, ?8, ?9, 1 " + gate
+      + "ON CONFLICT (trial_unit) WHERE trial_unit IS NOT NULL DO NOTHING") /* plant:trial-once */
+      .bind(...vals);
+    await db.batch([insert].concat(opt.deskOnly ? [] : [
+      db.prepare("INSERT INTO admits (licence, provider, org) SELECT id, ?1, ?2 FROM licences WHERE trial_unit = ?2 AND desk_only = 0 " /* plant:desk-trial-no-admit */
+        + "ON CONFLICT DO NOTHING").bind(s.provider, unit),
+    ]));
+  }
+
+  /* THE PERSON'S CODE, made once: their lead seat's where one was kept before persons were, else a fresh one. Written only where
+     the call it serves is answered ok (a refusal writes nothing; the test architect's survey of 2026-11-12): takeSeat makes it in
+     its own batch where the seat is held now, and signin/desk's answer of no licence here where its token is unspent (`digest`). */
+  const personRow = (db, s, now, digest) => db.prepare("INSERT INTO persons (person, provider, code, made) SELECT ?1, ?2, "
+    + "COALESCE((SELECT code FROM seats WHERE kind = 'lead' AND person = ?1), ?3), ?4 WHERE NOT EXISTS (SELECT 1 FROM seen WHERE digest = ?5) "
+    + "ON CONFLICT (person) DO NOTHING").bind(s.person, s.provider, makeSeatCode(), now, digest);
+
+  const PROOF_MS = PROOF_DAYS * DAY;
+  /* A proof lapsed: freed (0) or older than PROOF_DAYS. */
+  const lapsed = (proved, now) => !(proved > 0) || now - proved >= PROOF_MS; /* plant:proof-lapse */
+
+  /* A SEAT, AND WHAT PROVES IT, IN ONE BATCH (A4; Claude alpha's decision 15 items 1 and 5). The person takes (or keeps, or
+     moves to) a seat of `s.kind` on `licence` only while fewer other persons than the licence's count of that kind are
+     seen there within its grace and proved within PROOF_DAYS; a seat that is neither is not counted and stays where it is.
+     o.proved sets proved_at, as a fresh proof does; without it (the quiet check) a freed or lapsed seat is left as it is.
+     o.digest is the token's replay digest: the seat is taken only where the token is unspent, and the token spent only
+     where the seat was taken, so a refused attempt leaves it unspent. o.renew takes only a seat already held and not
+     freed; o.deskKey records the desk within DESKS_PER_PERSON in the same batch, and o.notFreed takes nothing where the
+     person's seat of this kind on this licence was freed. The person's code is made here, where they have none, and a lead
+     seat takes it; o.held {org} holds the desk key for its person (person_desks) as signin/desk's first sign-in does. Each is
+     written only where the seat is held now, after the seat's statement in the same batch, so a seat not taken writes no
+     person, no held desk and no list entry here (Argon's review of the sign-in service, finding 2; the test architect's survey);
+     what a desk's wait for a free seat records, signin/desk records on purpose (decision 32). THE OWNER IS NEVER LOCKED OUT (Argon's checkpoint 4; Claude alpha's floor of 2026-11-12: "an owner can never lose
+     their licence"): a lead seat on a licence its person owns is taken whatever the others hold, since only the owner frees a
+     lead seat and an owner who freed their own while co-leads filled the rest could otherwise never sign in again. Co-leads
+     still count the owner's seat, so they never pass the count; the owner alone may stand one past it, until a lead is freed or
+     lapses. {ok, row, spent, desks}: ok where this call holds the seat now. */
+  async function takeSeat(db, s, licence, now, o) {
+    const opt = o || {};
+    /* Each fragment names its values through the statement's own q, so every statement binds exactly what it names. */
+    const grace = q => "(SELECT grace_days FROM licences WHERE id = " + q(licence) + ") * " + q(DAY);
+    const deskRoom = q => "(SELECT COUNT(*) FROM desk_keys WHERE licence = " + q(licence) + " AND person = " + q(s.person)
+      + " AND desk_key <> " + q(opt.deskKey) + " AND seen_at > " + q(now) + " - " + grace(q) + ") < " + q(DESKS_PER_PERSON) + " "; /* plant:desk-cap */
+    /* Taken by this batch: the seat on this licence, seen and proved now, and the desk recorded now. */
+    const taken = (q, seatOnly) => "EXISTS (SELECT 1 FROM seats WHERE kind = " + q(s.kind) + " AND person = " + q(s.person) + " AND licence = "
+      + q(licence) + " AND seen_at = " + q(now) + " AND proved_at = " + q(now) + ")" + (opt.deskKey && !seatOnly
+      ? " AND EXISTS (SELECT 1 FROM desk_keys WHERE licence = " + q(licence) + " AND person = " + q(s.person)
+        + " AND desk_key = " + q(opt.deskKey) + " AND seen_at = " + q(now) + ")" : "");
+    /* Held by this batch, proved or not (the quiet check proves nothing): the seat on this licence seen now, and the desk recorded now. */
+    const heldNow = q => "EXISTS (SELECT 1 FROM seats WHERE kind = " + q(s.kind) + " AND person = " + q(s.person) + " AND licence = "
+      + q(licence) + " AND seen_at = " + q(now) + ")" + (opt.deskKey
+      ? " AND EXISTS (SELECT 1 FROM desk_keys WHERE licence = " + q(licence) + " AND person = " + q(s.person)
+        + " AND desk_key = " + q(opt.deskKey) + " AND seen_at = " + q(now) + ")" : "");
+    const statement = build => { const q = params(); const sql = build(q); return db.prepare(sql).bind(...q.values); };
+
+    const stmts = [], at = {};
+    if (opt.digest) {
+      at.spent = stmts.push(db.prepare("SELECT EXISTS (SELECT 1 FROM seen WHERE digest = ?1) AS spent").bind(opt.digest)) - 1;
+      stmts.push(db.prepare("DELETE FROM seen WHERE until < ?1").bind(now));
+    }
+    stmts.push(statement(q => {
+      const K = q(s.kind), P = q(s.person), L = q(licence), NOW = q(now), FRESH = q(now - PROOF_MS);
+      let gate = "WHERE ((SELECT COUNT(*) FROM seats WHERE licence = " + L + " AND kind = " + K + " "
+        + "AND person <> " + P + " AND seen_at > " + NOW + " - " + grace(q) + " " /* plant:grace */
+        + "AND proved_at > " + FRESH + ") " /* plant:proof-count */
+        + "< (SELECT CASE " + K + " WHEN 'lead' THEN lead_seats * (1 - desk_only) ELSE seats END FROM licences WHERE id = " + L + ") " /* plant:seat-room */
+        + "OR (" + K + " = 'lead' AND EXISTS (SELECT 1 FROM licences WHERE id = " + L + " AND owner = " + P + " AND desk_only = 0))) "; /* plant:owner-room */
+      if (opt.digest) gate += "AND NOT EXISTS (SELECT 1 FROM seen WHERE digest = " + q(opt.digest) + ") "; /* plant:seat-unspent */
+      if (opt.renew) gate += "AND EXISTS (SELECT 1 FROM seats WHERE kind = " + K + " AND person = " + P + " AND proved_at > 0) "; /* plant:renew-freed */
+      if (opt.deskKey) gate += "AND " + deskRoom(q);
+      if (opt.notFreed) gate += "AND NOT EXISTS (SELECT 1 FROM seats WHERE kind = " + K + " AND person = " + P + " AND licence = " + L
+        + " AND proved_at = 0) "; /* plant:desk-renew-freed */
+      return "INSERT INTO seats (kind, person, licence, provider, org, tid, oid, seated_at, seen_at, proved_at, code) SELECT "
+        + [K, P, L, q(s.provider), q(s.org), q(s.tid), q(s.oid), NOW, NOW, q(opt.proved ? now : 0),
+          s.kind === "lead" ? "(SELECT code FROM persons WHERE person = " + P + ")" : "NULL"].join(", ") + " " + gate
+        + "ON CONFLICT (kind, person) DO UPDATE SET licence = excluded.licence, provider = excluded.provider, "
+        + "org = excluded.org, tid = excluded.tid, oid = excluded.oid, seen_at = excluded.seen_at, "
+        + "proved_at = CASE WHEN excluded.proved_at > 0 THEN excluded.proved_at ELSE seats.proved_at END, "
+        + "code = COALESCE(seats.code, excluded.code), "
+        + "seated_at = CASE WHEN seats.licence = excluded.licence THEN seats.seated_at ELSE excluded.seated_at END "
+        + "WHERE excluded.proved_at > 0 OR seats.proved_at > " + FRESH; /* plant:check-retake */
+    }));
+    if (opt.deskKey) stmts.push(statement(q => "INSERT INTO desk_keys (licence, person, desk_key, seen_at) SELECT "
+      + [q(licence), q(s.person), q(opt.deskKey), q(now)].join(", ") + " WHERE " + taken(q, true) + " AND " + deskRoom(q) + "ON CONFLICT (licence, person, desk_key) DO UPDATE SET seen_at = excluded.seen_at"));
+    /* The person's code where they have none, then a lead seat's code from it, both where the seat is held now. */
+    stmts.push(statement(q => "INSERT INTO persons (person, provider, code, made) SELECT " + [q(s.person), q(s.provider),
+      "COALESCE((SELECT code FROM seats WHERE kind = 'lead' AND person = " + q(s.person) + "), " + q(makeSeatCode()) + ")", q(now)].join(", ")
+      + " WHERE " + heldNow(q) + " ON CONFLICT (person) DO NOTHING")); /* plant:person-held */
+    if (s.kind === "lead") stmts.push(statement(q => "UPDATE seats SET code = (SELECT code FROM persons WHERE person = " + q(s.person) + ") "
+      + "WHERE kind = 'lead' AND person = " + q(s.person) + " AND code IS NULL AND " + heldNow(q)));
+    if (opt.held) stmts.push(statement(q => "INSERT INTO person_desks (person, desk_key, signed_at, org) SELECT "
+      + [q(s.person), q(opt.deskKey), q(now), q(opt.held.org)].join(", ") + " WHERE " + taken(q) /* plant:held-taken */
+      + " ON CONFLICT (person, desk_key) DO UPDATE SET signed_at = excluded.signed_at, org = excluded.org"));
+    if (opt.digest) at.spend = stmts.push(statement(q => "INSERT INTO seen (digest, until) SELECT " + q(opt.digest) + ", " + q(opt.until)
+      + " WHERE " + taken(q) + " ON CONFLICT (digest) DO NOTHING")) - 1; /* plant:spend-taken */
+    at.row = stmts.push(db.prepare("SELECT licence, seen_at, proved_at, code FROM seats WHERE kind = ?1 AND person = ?2").bind(s.kind, s.person)) - 1;
+    if (opt.deskKey) at.desks = stmts.push(statement(q => "SELECT COALESCE(SUM(desk_key <> " + q(opt.deskKey) + "), 0) AS others, "
+      + "COALESCE(SUM(desk_key = " + q(opt.deskKey) + " AND seen_at = " + q(now) + "), 0) AS mine FROM desk_keys WHERE licence = "
+      + q(licence) + " AND person = " + q(s.person) + " AND seen_at > " + q(now) + " - " + grace(q))) - 1;
+    const res = await db.batch(stmts);
+    const row = res[at.row].results[0] || null;
+    const spent = opt.digest ? res[at.spent].results[0].spent === 1 : false;
+    let ok = !!row && row.licence === licence && row.seen_at === now;
+    if (opt.digest) ok = ok && res[at.spend].meta.changes === 1; /* plant:token-once */
+    return { ok, row, spent, desks: opt.deskKey ? res[at.desks].results[0] : null };
+  }
+
+  /* THE KEY, BOUND THROUGH THE PERSON'S LEAD SEAT, IN ONE BATCH: this key bound (or moved) to `licence`, a binding a purchase
+     key made before taken over; every key of the person follows to it; and of the person's keys only the DEVICES_PER_SEAT
+     seen latest stay, the rest released (recorded, so their check says so). */
+  async function bindPerson(db, lead, person, licence, now) {
+    const tag = randomHex(16);
+    await db.batch([
+      db.prepare("INSERT INTO bindings (lead, licence, bound_at, seen_at, person) VALUES (?1, ?2, ?3, ?3, ?4) "
+        + "ON CONFLICT (lead) DO UPDATE SET licence = excluded.licence, seen_at = excluded.seen_at, person = excluded.person, "
+        + "bound_at = CASE WHEN bindings.licence = excluded.licence THEN bindings.bound_at ELSE excluded.bound_at END") /* plant:s4-take-over */
+        .bind(lead, licence, now, person),
+      db.prepare("UPDATE bindings SET licence = ?1 WHERE person = ?2").bind(licence, person), /* plant:keys-follow */
+      db.prepare("INSERT INTO releases (licence, lead, at, token) SELECT ?1, lead, ?2, ?3 || lead FROM bindings WHERE person = ?4 "
+        + "ORDER BY seen_at DESC, bound_at DESC, lead DESC LIMIT -1 OFFSET ?5").bind(licence, now, tag, person, DEVICES_PER_SEAT), /* plant:key-cap */
+      db.prepare("DELETE FROM bindings WHERE person = ?1 AND lead IN (SELECT lead FROM releases WHERE token = ?2 || releases.lead)")
+        .bind(person, tag),
+    ]);
+  }
+
+  /* THE COUNTS BY KIND on a licence: the seats seen within its grace and proved within PROOF_DAYS, and how many it has. */
+  async function seatCounts(db, row, now) {
+    const got = await db.prepare("SELECT kind, COUNT(*) AS n FROM seats WHERE licence = ?1 AND seen_at > ?2 AND proved_at > ?3 GROUP BY kind")
+      .bind(row.id, now - row.grace_days * DAY, now - PROOF_MS).all();
+    const n = k => { const r = got.results.find(x => x.kind === k); return r ? r.n : 0; };
+    return { lead: { held: n("lead"), of: row.desk_only ? 0 : row.lead_seats }, desk: { held: n("desk"), of: row.seats } };
+  }
+
+  /* THE SEAT FOLLOWS THE ORGANISATION'S CURRENT LICENCE at a quiet check: for a key bound through a
+     person, that person's lead seat is taken again on the organisation's current licence (the one it is on, where none is
+     newer), and the person's keys follow; where no seat is free there it is a released key's holding. A freed or lapsed
+     seat is never taken here: the holding is "signin", and nothing is taken, moved or granted (decision 15 item 1). Such a
+     key's holding carries who it is: `me`, its seat's code, `owner`, and `due` from PROOF_ASK_DAYS. Any other key's holding
+     is as it was. WHERE NO LICENCE ADMITS THE PERSON NOW (Argon's review of the sign-in service, finding 7), the key holds
+     nothing: the seat is never kept on the licence it is bound to by that binding alone (a refunded one still answers as
+     refunded). */
+  async function followSeat(db, lead, h, now) {
+    if (h.kind === "none" || h.kind === "signin") return h;
+    const b = await db.prepare("SELECT person FROM bindings WHERE lead = ?1").bind(lead).first();
+    if (!b || !b.person) return h;
+    const seat = await db.prepare("SELECT provider, org, tid, oid, proved_at, code FROM seats WHERE kind = 'lead' AND person = ?1").bind(b.person).first();
+    if (!seat) return h;
+    if (lapsed(seat.proved_at, now)) return { kind: "signin" };
+    const cur = await leadLicence(db, b.person);
+    const target = cur || (h.row.refunded ? h.row : null); /* plant:follow */
+    if (!target) return { kind: "none", released: false }; /* plant:follow-admitted */
+    const ask = await askOwner(db, seat, target, now);
+    const who = row => ({ person: b.person, me: seat.code, owner: !!row.owner && row.owner === b.person,
+      due: now - seat.proved_at >= PROOF_ASK_DAYS * DAY, ask }); /* plant:proof-due */
+    if (target.refunded) return Object.assign({}, h, who(h.row));
+    const s = { kind: "lead", person: b.person, provider: seat.provider, org: seat.org, tid: seat.tid, oid: seat.oid };
+    const got = await takeSeat(db, s, target.id, now);
+    if (!got.ok) return got.row && lapsed(got.row.proved_at, now) ? { kind: "signin" }
+      : Object.assign({ kind: "none", released: true }, who(target)); /* plant:stale-check */
+    if (target.id !== h.row.id) await bindPerson(db, lead, b.person, target.id, now);
+    return Object.assign(holdingOfRow(target), who(target), { me: got.row.code });
+  }
+  /* Whether a key bound through a person holds a lead seat freed or lapsed, which followSeat answers "signin"; read only, for
+     the grant fetch, which must give such a key nothing a check would not. */
+  async function seatLapsed(db, lead, now) {
+    const b = await db.prepare("SELECT person FROM bindings WHERE lead = ?1").bind(lead).first();
+    if (!b || !b.person) return false;
+    const seat = await db.prepare("SELECT proved_at FROM seats WHERE kind = 'lead' AND person = ?1").bind(b.person).first();
+    return !!seat && lapsed(seat.proved_at, now);
+  }
+  const holdingOfRow = row => (row.trial_ends !== null && row.trial_ends !== undefined
+    ? { kind: "trial", ends: row.trial_ends, row } : { kind: "licence", row });
+  /* ASK THE OWNER (a team is its lead's own): a lead on a trial whose organisation holds a running paid licence that has not named
+     them is told so beside the trial, never in its place. */
+  const askOwner = async (db, seat, row, now) => row.trial_ends !== null && row.trial_ends !== undefined && typeof seat.org === "string"
+    && seat.org.slice(0, PERSON.length) !== PERSON && await orgHolds(db, seat.provider, seat.org, now); /* plant:ask-owner */
+  /* What the owner of a paid licence is told of its switch. */
+  const switchOf = (row, owner) => (owner && row && (row.trial_ends === null || row.trial_ends === undefined) && !row.desk_only
+    ? { orgDesks: row.org_desks === 1 } : {});
+  /* What an ok answer for a key bound through a person adds: its seat's code, whether it owns the licence, a proof due, the ask. */
+  const whoOf = h => (h.person ? Object.assign({ me: h.me, owner: h.owner }, h.due ? { proof: "due" } : {}, h.ask ? { ask: "owner" } : {},
+    switchOf(h.row, h.owner)) : {});
+
+  /* What a sign-in answers once seated: a paid licence with a grant while paid, or a trial's licence and grant, with the
+     seat's code and whether this person owns the licence. */
+  async function signedIn(cfg, row, lead, now, who0) {
+    const who = Object.assign({ ref: await refOf(cfg, row.id) }, who0, switchOf(row, who0.owner));
+    if (row.trial_ends !== null && row.trial_ends !== undefined) {
+      const ends = row.trial_ends;
+      return answer(200, Object.assign({ ok: true, licence: await trialLicenceFor(cfg, ends, now), trial: { ends },
+        grant: ends > now ? await grantFor(cfg, lead, false, ends, now) : null }, who));
+    }
+    return answer(200, Object.assign({ ok: true, licence: await licenceFor(cfg, row, now),
+      grant: row.paid_until > now ? await grantFor(cfg, lead, true, row.paid_until, now) : null }, who));
+  }
+
+  /* A LICENCE'S PUBLIC REFERENCE: 32 hex of its id's keyed hash, handed to its leads and named by each seat certificate, so a
+     lead's Studio knows a certificate is for its own licence and nobody learns the id or counts licences by it. */
+  const refOf = async (cfg, id) => (await keyedHash(cfg.hmac, KEYED.ref, String(id))).slice(0, 32); /* plant:ref-keyed */
+  /* A person as one licence's leads know them: a keyed pseudonym of the licence and the person, never the same on two licences. */
+  const personOutOf = (cfg, id, person) => keyedHash(cfg.hmac, KEYED.personOut, id + "\n" + person);
+
+  /* A DESK'S SEAT CERTIFICATE (the interface of 2026-11-12): what a lead's Studio checks under the delegation, naming no token,
+     name or address. Its end is the earliest of PROOF_DAYS ahead, the licence's paid date and a trial's end. */
+  async function certificateFor(cfg, row, desk, person, code, now) {
+    const end = row.trial_ends !== null && row.trial_ends !== undefined ? row.trial_ends : row.paid_until;
+    const cert = { kind: CERT_KIND, format: CERT_FORMAT, licence: await refOf(cfg, row.id), desk,
+      person: await personOutOf(cfg, row.id, person), code, issued: now, until: Math.min(now + PROOF_MS, end), /* plant:cert-until */
+      via: cfg.delegation, sig: { alg: LICENCE_SIG_ALG, keyId: cfg.delegation.key.id } };
+    /* A desk-only licence has no lead, so its desk is told it works without a team (Max's test of 2026-11-13). */
+    if (row.desk_only) cert.deskOnly = true; /* plant:cert-desk-only */
+    cert.sig.value = await signHex(cfg, Q.seatCertBytes(cert));
+    return cert;
+  }
+
+  /* The sign-in refusals, one body each whatever the cause. */
+  const badToken = () => answer(403, { ok: false, reason: "token" });
+  const noLicence = () => answer(403, { ok: false, reason: "no-licence" });
+  const noSeat = () => answer(409, { ok: false, reason: "full" });
+  const signinAgain = () => answer(403, { ok: false, reason: "signin" });
+
+  /* A TOKEN ANSWERS ONCE: its digest, keyed, is what the replay record keeps of it, until the token expires (takeSeat spends
+     it in the batch that takes the seat). */
+  async function tokenSpend(cfg, hash, exp) {
+    return { digest: await keyedHash(cfg.hmac, KEYED.token, hash), until: exp * 1000 + skew };
+  }
+  /* A TRUE REFUSAL OF A PROVED PERSON SPENDS THE TOKEN AND WRITES NOTHING ELSE (Claude alpha's decision 32, superseding decision
+     15 item 5 for "full" and "desks": a token left unspent stayed replayable): false where another request spent it first. */
+  async function spendOnly(db, spend, now) {
+    const res = await db.batch([db.prepare("DELETE FROM seen WHERE until < ?1").bind(now),
+      db.prepare("INSERT INTO seen (digest, until) VALUES (?1, ?2) ON CONFLICT (digest) DO NOTHING").bind(spend.digest, spend.until)]);
+    return res[1].meta.changes === 1;
+  }
+
+  /* WHO A TOKEN NAMES, as kept: the person (keyed (iss, sub)), Entra's tid and oid keyed, and the organisation as admits
+     holds it, keyed, a personal account being its own. */
+  async function personOf(cfg, j) {
+    const person = await keyedHash(cfg.hmac, KEYED.person, j.iss + "\n" + j.sub);
+    const org = j.personal ? PERSON + person : await orgKeyed(cfg.hmac, j.provider.id, j.org);
+    return { person, org, provider: j.provider.id, personal: j.personal,
+      tid: j.tid ? await keyedHash(cfg.hmac, KEYED.tid, j.tid.toLowerCase()) : null,
+      oid: j.oid ? await keyedHash(cfg.hmac, KEYED.oid, j.oid.toLowerCase()) : null };
+  }
+  /* What a key holds now: a licence it is bound to by sign-in, or nothing (and whether its person's later keys released it).
+     A key a purchase key or address bound, or one holding a trial by code, holds "signin": only signing in keeps a seat now,
+     and its licence file stays as it is. Read only: the quiet check marks the key seen itself, once it is not refused. */
+  async function holdingOf(db, lead) {
+    const bound = await db.prepare("SELECT licence, person FROM bindings WHERE lead = ?1").bind(lead).first();
+    if (bound) {
+      if (bound.person === null || bound.person === undefined) return { kind: "signin" }; /* plant:s4-key-bound */
+      const row = await db.prepare("SELECT " + LICENCE_COLUMNS + " FROM licences WHERE id = ?1").bind(bound.licence).first();
+      if (row) return holdingOfRow(row);
+    }
+    if (await db.prepare("SELECT 1 AS t FROM trials WHERE lead = ?1").bind(lead).first()) return { kind: "signin" }; /* plant:s4-code-trial */
+    const rel = await db.prepare("SELECT 1 AS r FROM releases WHERE lead = ?1 LIMIT 1").bind(lead).first();
+    return { kind: "none", released: !!rel };
+  }
+
+  /* THE LICENCE THAT ADMITS A DESK'S PERSON, the service's choice and never the desk's (the interface of 2026-11-12): of the
+     licences not refunded and running now (paid until later, or a trial not ended), one admitting the person by name ("person:",
+     as a lead admits by code, and as a trial admits its owner), or their organisation's where its owner's switch seats colleagues
+     (org_desks), or else a desk-only licence the person owns: a paid one before a trial, then by name before by organisation (a
+     team is its lead's own: a colleague a second buyer admitted sits on that buyer's licence), then the latest paid date, then the
+     newest. Null for none. */
+  async function deskLicence(db, s, now) {
+    const named = "(desk_only = 0 AND id IN (SELECT licence FROM admits WHERE provider = ?2 AND org = ?3))"; /* plant:desk-named */
+    const byOrg = "(desk_only = 0 AND org_desks = 1 AND id IN (SELECT licence FROM admits WHERE provider = ?2 AND org = ?4))"; /* plant:desk-org */
+    const own = "(desk_only = 1 AND owner = ?5)"; /* plant:desk-only-owner */
+    return db.prepare("SELECT " + LICENCE_COLUMNS + " FROM licences WHERE refunded = 0 AND ((trial_ends IS NULL AND paid_until > ?1) OR trial_ends > ?1) "
+      + "AND (" + named + " OR " + byOrg + " OR " + own + ") "
+      + "ORDER BY desk_only ASC, (trial_ends IS NULL) DESC, " + named + " DESC, paid_until DESC, id DESC LIMIT 1") /* plant:desk-named-first */
+      .bind(now, s.provider, PERSON + s.person, s.org, s.person).first();
+  }
+
+  /* THE LICENCE A KEY LEADS, for person/admit, person/withdraw, person/list, seat/list and seat/free: a key bound by sign-in through a person
+     with a lead seat on it proved within PROOF_DAYS, the licence not refunded; `owner` says whether that person owns it. The
+     owner is held to the same seat, so an owner freed, lapsed or gone from the provider acts on nothing. Null for any other key. */
+  const leadOf = (db, lead, now) => db.prepare("SELECT b.licence AS licence, b.person AS person, (l.owner = b.person) AS owner "
+    + "FROM bindings b JOIN licences l ON l.id = b.licence WHERE b.lead = ?1 "
+    + "AND b.person IS NOT NULL AND l.refunded = 0 AND EXISTS (SELECT 1 FROM seats s WHERE s.kind = 'lead' " /* plant:lead-owner */
+    + "AND s.person = b.person AND s.licence = b.licence AND s.proved_at > ?2) " /* plant:admit-lead */
+    + "AND (l.owner = b.person OR EXISTS (SELECT 1 FROM lead_names n WHERE n.licence = b.licence AND n.person = b.person))") /* plant:lead-of-named */
+    .bind(lead, now - PROOF_MS).first();
+
+  /* WHO FREES A DESK SEAT (board 1000; decision 46, Claude alpha's, under Max's delegation of 2026-11-13 14:56), held by both of
+     seat/free's desk statements, ?1 the person, ?2 the licence, ?3 the asker's person: the licence's owner frees any; another lead
+     only a person it admitted by code (admitted_by, decision 27 (a)), and only while no organisation the licence admits seats them
+     (the seat's org a tenant or domain in admits, never the person's own "person:" row), else a co-lead could list, admit and free
+     another team's member (Claude alpha's ruling of 15:33). An admission kept from before 0007 has no lead beside it and is the
+     owner's to free. */
+  const FREES_DESK = "EXISTS (SELECT 1 FROM seats s WHERE s.kind = 'desk' AND s.person = ?1 AND s.licence = ?2 AND ("
+    + "EXISTS (SELECT 1 FROM licences WHERE id = ?2 AND owner = ?3) OR (EXISTS (SELECT 1 FROM admitted_by " /* plant:free-admitter */
+    + "WHERE licence = ?2 AND person = ?1 AND lead = ?3) AND NOT EXISTS (SELECT 1 FROM admits a WHERE a.licence = ?2 "
+    + "AND a.provider = s.provider AND a.org = s.org AND a.org <> '" + PERSON + "' || ?1))))"; /* plant:free-org */
+
+  /* A PERSON'S TEAMS on licence ?1 (a team is its lead's own): the leads who admitted person ?4 by name and still lead, the owner or
+     one the owner named; a person none of them admitted, seated by the organisation, is the owner's. `l` is the licence's row. */
+  const TEAM_LEADS = "SELECT a.lead FROM admitted_by a WHERE a.licence = ?1 AND a.person = ?4 AND (a.lead = l.owner "
+    + "OR EXISTS (SELECT 1 FROM lead_names n WHERE n.licence = ?1 AND n.person = a.lead))";
+
+  /* THE DOORS A CERTIFIED DESK IS HANDED (the door-finding): those on the licence `licence` whose lead key still leads it now, by
+     leadOf's own conditions read at the handing (bound by sign-in through a person with a lead seat on it proved within PROOF_DAYS,
+     the licence not refunded), so a lead freed, lapsed or gone hands nothing and no row need be cleaned for it; at most
+     DOORS_HANDED, ONE LEAD'S AT A TIME (Argon's review of the sign-in service, finding 3: "the sixteen newest" let one co-lead's
+     sixteen crowd out every other lead's): each lead key's newest door first, then each one's second newest, and so on, the
+     newest first within a round. A row a lead set on a licence its key no longer leads is not handed either. A desk is handed only
+     its own team's doors (TEAM_LEADS) and its own person's, so two teams on one licence never meet. */
+  async function doorsOf(db, licence, person, now) {
+    const rows = await db.prepare("SELECT team, rt, url, keyId, lead, box FROM (SELECT d.team AS team, d.rt AS rt, d.url AS url, "
+      + "d.key_id AS keyId, d.lead AS lead, d.box AS box, d.at AS at, "
+      + "ROW_NUMBER() OVER (PARTITION BY d.lead ORDER BY d.at DESC, d.team) AS round " /* plant:door-hand-fair */
+      + "FROM doors d JOIN bindings b ON b.lead = d.lead AND b.licence = d.licence JOIN licences l ON l.id = d.licence "
+      + "WHERE d.licence = ?1 " /* plant:door-hand-licence */
+      + "AND b.person IS NOT NULL AND l.refunded = 0 AND EXISTS (SELECT 1 FROM seats s WHERE s.kind = 'lead' AND s.person = b.person "
+      + "AND s.licence = b.licence AND s.proved_at > ?2) " /* plant:door-hand-lead */
+      + "AND (l.owner = b.person OR EXISTS (SELECT 1 FROM lead_names n WHERE n.licence = d.licence AND n.person = b.person)) "
+      + "AND (b.person = ?4 OR b.person IN (" + TEAM_LEADS + ") OR (b.person = l.owner AND NOT EXISTS (" + TEAM_LEADS + "))) " /* plant:door-team */
+      + ") ORDER BY round, at DESC, team, lead LIMIT ?3").bind(licence, now - PROOF_MS, DOORS_HANDED, person).all();
+    return rows.results.map(r => ({ team: r.team, rt: r.rt, url: r.url, keyId: r.keyId, lead: r.lead, box: r.box }));
+  }
+
+  /* ---- the routes ------------------------------------------------------------------------------------------------- */
+
+  const ROUTES = {
+    async "check"(c) {
+      const b = c.body;
+      if (!exactly(b, ["lead", "t", "sig"], ["proofs"]) || !HEX64.test(String(b.lead)) || !isT(b.t)
+          || !HEX128.test(String(b.sig))) return malformed();
+      if (b.proofs !== undefined && (!Array.isArray(b.proofs) || b.proofs.length > PROOFS_MAX
+          || !b.proofs.every(p => HEX64.test(String(p))) || new Set(b.proofs).size !== b.proofs.length)) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.checkBytes({ lead: b.lead, t: b.t, proofs: b.proofs }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      /* The key is marked seen only once the check is not refused (a refusal writes nothing; the test architect's survey of
+         2026-11-12), so a key asked to sign in again keeps the seen_at it had. */
+      const h = await followSeat(c.db, b.lead, await holdingOf(c.db, b.lead), c.now); /* plant:check-unseen */
+      const rev = revokedOf(c.env);
+      /* A seat freed or lapsed (decision 15 item 1): Studio is asked to prove its person again; nothing is taken or granted. */
+      if (h.kind === "signin") return answer(403, Object.assign({ ok: false, reason: "signin" }, rev)); /* plant:check-signin */
+      await c.db.prepare("UPDATE bindings SET seen_at = ?1 WHERE lead = ?2").bind(c.now, b.lead).run(); /* plant:check-seen */
+      if (h.kind !== "none" && b.proofs !== undefined) {
+        await c.db.batch([c.db.prepare("DELETE FROM proofs WHERE lead = ?1").bind(b.lead)]
+          .concat(b.proofs.map(p => c.db.prepare("INSERT INTO proofs (lead, proof) VALUES (?1, ?2)").bind(b.lead, p))));
+      }
+      /* A lead's answer names its licence's public reference, which its desks' certificates name (refOf). */
+      const who = Object.assign(h.row && !h.row.refunded ? { ref: await refOf(c.cfg, h.row.id) } : {}, whoOf(h));
+      if (h.kind === "licence") {
+        if (h.row.refunded) return answer(200, Object.assign({ ok: true, licence: null, grant: null, ended: "refunded" }, who, rev)); /* plant:refund */
+        return answer(200, Object.assign({ ok: true, licence: await licenceFor(c.cfg, h.row, c.now),
+          grant: h.row.paid_until > c.now ? await grantFor(c.cfg, b.lead, true, h.row.paid_until, c.now) : null }, who, rev));
+      }
+      if (h.kind === "trial") return answer(200, Object.assign({ ok: true, licence: await trialLicenceFor(c.cfg, h.ends, c.now), /* plant:trial-check-licence */
+        trial: { ends: h.ends },
+        grant: h.ends > c.now ? await grantFor(c.cfg, b.lead, false, h.ends, c.now) : null }, who, rev));
+      return answer(200, Object.assign({ ok: true, licence: null, grant: null, released: h.released }, who, rev)); /* plant:revoked-sent */
+    },
+
+    async "grant"(c) {
+      const b = c.body;
+      if (!exactly(b, ["lead", "proof", "t", "sig"]) || !HEX64.test(String(b.lead)) || !HEX64.test(String(b.proof))
+          || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.grantFetchBytes({ lead: b.lead, proof: b.proof, t: b.t }), b.proof, b.sig, b.t, c.now); /* plant:domain */
+      if (no) return no;
+      if (b.proof !== b.lead) {
+        const reg = await c.db.prepare("SELECT 1 AS r FROM proofs WHERE lead = ?1 AND proof = ?2").bind(b.lead, b.proof).first();
+        if (!reg) return refused(); /* plant:proof */
+      }
+      if (await seatLapsed(c.db, b.lead, c.now)) return refused(); /* plant:grant-signin */
+      const h = await holdingOf(c.db, b.lead); /* plant:s4-grant */
+      let grant = null;
+      if (h.kind === "licence" && !h.row.refunded && h.row.paid_until > c.now) /* plant:holding */
+        grant = await grantFor(c.cfg, b.lead, true, h.row.paid_until, c.now);
+      else if (h.kind === "trial" && h.ends > c.now) grant = await grantFor(c.cfg, b.lead, false, h.ends, c.now);
+      if (!grant) return refused();
+      return answer(200, { ok: true, grant });
+    },
+
+    async "signin"(c) {
+      const b = c.body;
+      if (!exactly(b, ["provider", "idToken", "lead", "t", "sig"], ["seed"]) || typeof b.provider !== "string"
+          || !/^[a-z][a-z0-9-]{1,30}$/.test(b.provider) || typeof b.idToken !== "string" || !HEX64.test(String(b.lead))
+          || !isT(b.t) || !HEX128.test(String(b.sig)) || (b.seed !== undefined && !HEX64.test(String(b.seed)))) return malformed();
+      /* The seed is required (below): a body without one is refused as a bad token, alike with one that does not bind. */
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const tokenHash = await Q.tokenHash(b.idToken);
+      const no = await signedOk(c.db, c.cfg, Q.signinBytes({ provider: b.provider, tokenHash, lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const providers = providersOf(c.env);
+      if (!providers) return unavailable();
+      const p = providers.get(b.provider);
+      if (!p) return badToken();
+      const j = await judgeToken(b.idToken, p, providers, c.now);
+      if (!j) return badToken();
+      /* The token's nonce must be the one the signed lead and the seed make (above, A TOKEN IS BOUND TO THE KEY THAT SIGNS); a
+         token with none, or a body with no seed, is refused alike (the test architect, on stage 1: required once the stages join). */
+      if (j.nonce === null || b.seed === undefined || j.nonce !== await Q.signinNonce(b.lead, b.seed)) return badToken(); /* plant:nonce-bound */
+      const s = await personOf(c.cfg, j);
+      const own = PERSON + s.person;
+      let row = await leadLicence(c.db, s.person);
+      if (!row) {
+        /* Claude alpha's decision 15 (a): a lead no licence admits starts a trial of their own, once. */
+        await startTrial(c.db, s, trialOncePer === "person" ? own : s.org, c.now);
+        row = await leadLicence(c.db, s.person);
+        if (!row) return noLicence();
+      }
+      /* The seat, proved now, and the token's first use, in one batch (decision 15 item 5): a refusal leaves it unspent. */
+      const spend = await tokenSpend(c.cfg, tokenHash, j.exp);
+      const got = await takeSeat(c.db, Object.assign({ kind: "lead" }, s), row.id, c.now, Object.assign({ proved: true }, spend));
+      /* No lead seat free is a true refusal (decision 32; an owner's seat always finds room, takeSeat): the token spent, nothing else. */
+      if (!got.ok) return got.spent ? badToken() : await spendOnly(c.db, spend, c.now) ? noSeat() : badToken(); /* plant:lead-full-spent */
+      await bindPerson(c.db, b.lead, s.person, row.id, c.now);
+      return signedIn(c.cfg, row, b.lead, c.now, Object.assign({ me: got.row.code, owner: !!row.owner && row.owner === s.person },
+        await askOwner(c.db, s, row, c.now) ? { ask: "owner" } : {}));
+    },
+
+    /* A QUIET RENEWAL OF A LEAD SEAT (decision 15 item 1). A refreshed ID token carries no nonce, so it binds by four
+       conditions together: the request is signed by the key already bound through the token's person, so its sub is the
+       seat's; the token judges as signin's does, its nonce, if any, unread; it was issued within RENEW_IAT_MS; and it is
+       used once, spent in the batch that proves the seat. A seat freed by the owner is not renewed ("signin"): its person
+       signs in afresh. Only a licence that admits the person now is renewed on, never the one the key is bound to by that
+       binding alone (Argon's review of the sign-in service, finding 7): none is "no-licence". */
+    async "signin/renew"(c) {
+      const b = c.body;
+      if (!exactly(b, ["provider", "idToken", "lead", "t", "sig"]) || typeof b.provider !== "string"
+          || !/^[a-z][a-z0-9-]{1,30}$/.test(b.provider) || typeof b.idToken !== "string" || !HEX64.test(String(b.lead))
+          || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const tokenHash = await Q.tokenHash(b.idToken);
+      const no = await signedOk(c.db, c.cfg, Q.signinRenewBytes({ provider: b.provider, tokenHash, lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const providers = providersOf(c.env);
+      if (!providers) return unavailable();
+      const p = providers.get(b.provider);
+      if (!p) return badToken();
+      const j = await judgeToken(b.idToken, p, providers, c.now);
+      if (!j) return badToken();
+      if (c.now - j.iat * 1000 > RENEW_IAT_MS) return badToken(); /* plant:renew-iat */
+      const s = await personOf(c.cfg, j);
+      const bound = await c.db.prepare("SELECT licence, person FROM bindings WHERE lead = ?1").bind(b.lead).first();
+      if (!bound || bound.person !== s.person) return badToken(); /* plant:renew-person */
+      const seat = await c.db.prepare("SELECT proved_at FROM seats WHERE kind = 'lead' AND person = ?1").bind(s.person).first();
+      if (!seat) return badToken();
+      if (!(seat.proved_at > 0)) return signinAgain(); /* plant:renew-freed-read */
+      const row = await leadLicence(c.db, s.person); /* plant:renew-admitted */
+      if (!row || row.refunded) return noLicence();
+      const spend = await tokenSpend(c.cfg, tokenHash, j.exp);
+      const got = await takeSeat(c.db, Object.assign({ kind: "lead" }, s), row.id, c.now, Object.assign({ proved: true, renew: true }, spend));
+      if (!got.ok) return got.spent ? badToken() : got.row && !(got.row.proved_at > 0) ? signinAgain()
+        : await spendOnly(c.db, spend, c.now) ? noSeat() : badToken();
+      await bindPerson(c.db, b.lead, s.person, row.id, c.now);
+      return signedIn(c.cfg, row, b.lead, c.now, Object.assign({ me: got.row.code, owner: !!row.owner && row.owner === s.person },
+        await askOwner(c.db, s, row, c.now) ? { ask: "owner" } : {}));
+    },
+
+    /* THE DESK SIGNS ITS PERSON IN ITSELF (night decision 18; the interface of 2026-11-12), signed by its own key, never through
+       a lead. A first sign-in carries the seed of the token's nonce, which must be signinNonce(desk, seed), so a token captured
+       for one desk is no token for another; the desk key is then held for that person (person_desks), seated or not. A body with
+       no seed is the desk's renewal, the provider's refreshed token carrying no nonce, taken by a lead's four conditions
+       together: a desk key held for the token's person, so its sub is theirs; iat within RENEW_IAT_MS; and first use, spent in
+       the batch that proves the seat. A renewal of a seat its lead freed is "signin". The service chooses the licence
+       (deskLicence); where none admits the person, the answer is no certificate and their code, and the desk asks again at its
+       next renewal. WHAT IS WRITTEN IS WRITTEN ON PURPOSE (Argon's review of the sign-in service, finding 2; Claude alpha's decision
+       32: "'No free seat' is not a refusal, it is a wait"): the desk key is held, and the person made, in the batch that seats it
+       (takeSeat's o.held), or, where no licence admits them or their licence has no free seat (THE WAIT, answered ok with no
+       certificate and the reason "waiting"), in the batch that spends the token; the lead then lists them, and the desk's next
+       quiet renewal seats it once a seat is free. A person's fourth desk ("desks") is a true refusal: the token spent, nothing else. */
+    async "signin/desk"(c) {
+      const b = c.body;
+      if (!exactly(b, ["provider", "idToken", "desk", "t", "sig"], ["seed"]) || typeof b.provider !== "string"
+          || !/^[a-z][a-z0-9-]{1,30}$/.test(b.provider) || typeof b.idToken !== "string" || !HEX64.test(String(b.desk))
+          || !isT(b.t) || !HEX128.test(String(b.sig)) || (b.seed !== undefined && !HEX64.test(String(b.seed)))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.desk]], c.now)) return slowDown();
+      /* The revoked keys' list rides every answer that names a seat or asks for a sign-in, as the check's does; undefined where
+         REVOKED is unset, and so absent from the answer. */
+      const revoked = revokedOf(c.env).revoked; /* plant:desk-revoked-sent */
+      const again = () => answer(403, { ok: false, reason: "signin", revoked });
+      const tokenHash = await Q.tokenHash(b.idToken);
+      const no = await signedOk(c.db, c.cfg, Q.signinDeskBytes({ provider: b.provider, tokenHash, desk: b.desk, t: b.t }), b.desk, b.sig, b.t, c.now);
+      if (no) return no;
+      const providers = providersOf(c.env);
+      if (!providers) return unavailable();
+      const p = providers.get(b.provider);
+      if (!p) return badToken();
+      const j = await judgeToken(b.idToken, p, providers, c.now);
+      if (!j) return badToken();
+      const renew = b.seed === undefined;
+      if (!renew && (j.nonce === null || j.nonce !== await Q.signinNonce(b.desk, b.seed))) return badToken(); /* plant:desk-nonce */
+      if (renew && c.now - j.iat * 1000 > RENEW_IAT_MS) return badToken(); /* plant:desk-renew-iat */
+      const s = await personOf(c.cfg, j);
+      if (renew) {
+        /* A key its desk signed out of (signed_at 0) is held no longer: only an interactive sign-in takes it again. */
+        const held = await c.db.prepare("SELECT 1 AS h FROM person_desks WHERE person = ?1 AND desk_key = ?2 AND signed_at > 0") /* plant:signout-renew */
+          .bind(s.person, b.desk).first();
+        if (!held) return badToken(); /* plant:desk-renew-held */
+      }
+      const spend = await tokenSpend(c.cfg, tokenHash, j.exp);
+      /* A token already spent is refused before anything is written, so its replay never holds a signed-out key again. */
+      const used = await c.db.prepare("SELECT 1 AS u FROM seen WHERE digest = ?1 AND until >= ?2").bind(spend.digest, c.now).first();
+      if (used) return badToken(); /* plant:desk-spent-first */
+      /* The organisation is kept for the lead's list; a personal account has none, so it is never listed. */
+      const heldOrg = s.personal ? null : s.org; /* plant:list-personal */
+      const codeOf = async () => (await c.db.prepare("SELECT code FROM persons WHERE person = ?1").bind(s.person).first()).code;
+      let row = await deskLicence(c.db, s, c.now);
+      if (!row && !renew) { await startTrial(c.db, s, PERSON + s.person, c.now, { deskOnly: true, digest: spend.digest }); row = await deskLicence(c.db, s, c.now); } /* plant:desk-trial */
+      /* ASK YOUR LEAD (decision 47's addition, with Claude alpha's edit of 15:18): a person their organisation's licence does not seat,
+         its owner's switch seating only people admitted, is told so beside what they are answered, their own trial included, never
+         in its place; a lead's later admission moves them at their next sign-in (by name before anything else). With the switch on,
+         such a person is seated by the organisation and never reaches the ask. */
+      const ask = !s.personal && (!row || row.desk_only === 1 || (row.trial_ends !== null && row.trial_ends !== undefined))
+        && await orgHolds(c.db, s.provider, s.org, c.now); /* plant:ask-lead */
+      /* Signed in with no seat taken: the token spent, once, and the person and the desk key held only by the batch that spends it
+         (each where it is still unspent, before the statement that spends it). False where another request spent it first. */
+      const holdAndSpend = async () => {
+        const res = await c.db.batch([c.db.prepare("DELETE FROM seen WHERE until < ?1").bind(c.now), personRow(c.db, s, c.now, spend.digest)]
+          .concat(renew ? [] : [c.db.prepare("INSERT INTO person_desks (person, desk_key, signed_at, org) SELECT ?1, ?2, ?3, ?4 " /* plant:wait-held */
+            + "WHERE NOT EXISTS (SELECT 1 FROM seen WHERE digest = ?5) "
+            + "ON CONFLICT (person, desk_key) DO UPDATE SET signed_at = excluded.signed_at, org = excluded.org")
+            .bind(s.person, b.desk, c.now, heldOrg, spend.digest)])
+          .concat([c.db.prepare("INSERT INTO seen (digest, until) VALUES (?1, ?2) ON CONFLICT (digest) DO NOTHING").bind(spend.digest, spend.until)]));
+        return res[res.length - 1].meta.changes === 1; /* plant:desk-none-once */
+      };
+      if (!row) {
+        /* Signed in, and no licence admits them yet. */
+        if (!await holdAndSpend()) return badToken();
+        const code = await codeOf();
+        return ask ? answer(200, { ok: true, certificate: null, code, ask: "lead", revoked }) : answer(200, { ok: true, certificate: null, code, revoked });
+      }
+      const freed = () => c.db.prepare("SELECT 1 AS f FROM seats WHERE kind = 'desk' AND person = ?1 AND licence = ?2 AND proved_at = 0")
+        .bind(s.person, row.id).first();
+      if (renew && await freed()) return again(); /* plant:desk-renew-freed-read */
+      const got = await takeSeat(c.db, Object.assign({ kind: "desk" }, s), row.id, c.now,
+        Object.assign({ proved: true, deskKey: b.desk, notFreed: renew, held: renew ? null : { org: heldOrg } }, spend));
+      if (!got.ok) {
+        if (got.spent) return badToken();
+        if (renew && await freed()) return again();
+        if (got.desks.others >= DESKS_PER_PERSON) return await spendOnly(c.db, spend, c.now) ? answer(409, { ok: false, reason: "desks" }) : badToken(); /* plant:desks-spent */
+        /* THE WAIT (decision 32): no free seat on their licence; signed in, held, listed, and seated by a later renewal. */
+        if (!await holdAndSpend()) return badToken();
+        return answer(200, { ok: true, certificate: null, code: await codeOf(), reason: "waiting", revoked });
+      }
+      /* The doors on that licence ride with the certificate (the door-finding), so a new computer finds its team, signed by the key
+         that signed the certificate, over seatDoorsBytes, so a desk takes no door this service did not hand it (decision 35). */
+      const code = await codeOf(), certificate = await certificateFor(c.cfg, row, b.desk, s.person, code, c.now);
+      const doors = await doorsOf(c.db, row.id, s.person, c.now); /* plant:door-hand */
+      const doorsSig = await signHex(c.cfg, Q.seatDoorsBytes({ certificate, doors })); /* plant:door-sign */
+      return ask ? answer(200, { ok: true, certificate, code, doors, doorsSig, ask: "lead", revoked }) : answer(200, { ok: true, certificate, code, doors, doorsSig, revoked });
+    },
+
+    /* A DESK SIGNS OUT (night decision 20 (a)), signed by its own key: that computer's place among its person's three is freed
+       at once, on every licence and for every person it held, and its renewal is taken no longer. The seat stays the person's
+       and nothing is removed. Answered alike whether or not the key held a place, so the answer tells a stranger nothing. */
+    async "signout/desk"(c) {
+      const b = c.body;
+      if (!exactly(b, ["desk", "t", "sig"]) || !HEX64.test(String(b.desk)) || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.desk]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.signoutDeskBytes({ desk: b.desk, t: b.t }), b.desk, b.sig, b.t, c.now);
+      if (no) return no;
+      await c.db.batch([
+        c.db.prepare("UPDATE desk_keys SET seen_at = 0 WHERE desk_key = ?1").bind(b.desk), /* plant:signout-place */
+        c.db.prepare("UPDATE person_desks SET signed_at = 0 WHERE desk_key = ?1").bind(b.desk), /* plant:signout-held */
+      ]);
+      return answer(200, { ok: true });
+    },
+
+    /* A LEAD ADMITS A PERSON BY THEIR CODE (night decision 18, choice 3): a key bound by sign-in through a person who leads the
+       licence (a lead seat on it, proved within PROOF_DAYS) or owns it adds the person whose code it is to the licence's admits,
+       as "person:" and their keyed hash, so their desks are seated there at their next sign-in or renewal. The lead learns the
+       person's pseudonym on its licence and nothing else. A key holding no such seat and a code nobody holds are refused alike. */
+    async "person/admit"(c) {
+      const b = c.body;
+      if (!exactly(b, ["code", "lead", "t", "sig"]) || !SEAT_CODE_RE.test(String(b.code)) || !HEX64.test(String(b.lead))
+          || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.personAdmitBytes({ code: b.code, lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const mine = await leadOf(c.db, b.lead, c.now);
+      if (!mine) return noSeatHere();
+      const who = await c.db.prepare("SELECT person, provider FROM persons WHERE code = ?1").bind(b.code).first();
+      if (!who) return noSeatHere();
+      /* The admission is the licence's, and which lead made it is kept beside it (decision 27 (a)), so one lead's withdrawal
+         leaves another's standing. */
+      await c.db.batch([
+        c.db.prepare("INSERT INTO admits (licence, provider, org) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING")
+          .bind(mine.licence, who.provider, PERSON + who.person),
+        c.db.prepare("INSERT INTO admitted_by (licence, person, lead) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING")
+          .bind(mine.licence, who.person, mine.person), /* plant:admit-by */
+      ]);
+      return answer(200, { ok: true, admitted: b.code, person: await personOutOf(c.cfg, mine.licence, who.person) });
+    },
+
+    /* A LEAD WITHDRAWS AN ADMISSION BY NAME (night decision 22: "Remove means out"): a key leadOf admits names a person by the
+       pseudonym person/admit and their certificates gave it, and the licence's "person:" row for them is deleted while, in the
+       same batch, their desk seats there are marked unseen and unproved and their desks' places freed, as seat/free frees them;
+       nothing else is deleted. They take no seat on it until a lead admits them again and they sign in. Only that row goes: an
+       organisation's tenant or domain admission, which may still seat the same person, is not touched. The licence's owner is
+       never withdrawn, nor a lead seat's person but by the owner, since only the owner frees a lead (decision 15 (b)). A
+       person not admitted so, or kept by either rule, is answered alike, so the answer tells a lead nothing and a retry is safe.
+       EACH LEAD'S OWN (decision 27 (a), and Claude alpha's word of 08:44: "If two leads on one licence can each have admitted the
+       same person, the other lead's admission must not fall with it"): admitted_by keeps which leads admitted the person, and
+       while another lead still holding a lead seat here has admitted them, only this lead's own row there goes and the person
+       keeps their seat. An admission kept with no lead beside it (made before 0007) goes as before. THE OWNER TAKING OUT A
+       CO-LEAD (decision 27 (c)): every lead's admission of them goes, since only the owner frees a lead, and their lead seat is
+       freed in the same batch, as seat/free frees one. */
+    async "person/withdraw"(c) {
+      const b = c.body;
+      if (!exactly(b, ["person", "lead", "t", "sig"]) || !HEX64.test(String(b.person)) || !HEX64.test(String(b.lead))
+          || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.personWithdrawBytes({ person: b.person, lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const mine = await leadOf(c.db, b.lead, c.now);
+      if (!mine) return noSeatHere(); /* plant:withdraw-lead */
+      const rows = await c.db.prepare("SELECT provider, org FROM admits WHERE licence = ?1 AND substr(org, 1, ?2) = ?3")
+        .bind(mine.licence, PERSON.length, PERSON).all();
+      for (const r of rows.results) {
+        const person = r.org.slice(PERSON.length);
+        if (await personOutOf(c.cfg, mine.licence, person) !== b.person) continue;
+        const kept = await c.db.prepare("SELECT 1 AS k FROM licences WHERE id = ?1 AND (owner = ?2 OR (?3 = 0 AND EXISTS (SELECT 1 FROM lead_names "
+          + "WHERE person = ?2 AND licence = ?1)))").bind(mine.licence, person, mine.owner ? 1 : 0).first();
+        if (kept) break; /* plant:withdraw-kept */
+        const coLead = !!mine.owner && !!(await c.db.prepare("SELECT 1 AS k FROM lead_names WHERE person = ?1 AND licence = ?2")
+          .bind(person, mine.licence).first());
+        const other = !coLead && await c.db.prepare("SELECT 1 AS k FROM admitted_by a WHERE a.licence = ?1 AND a.person = ?2 AND a.lead <> ?3 "
+          + "AND EXISTS (SELECT 1 FROM seats s WHERE s.kind = 'lead' AND s.person = a.lead AND s.licence = a.licence AND s.proved_at > 0) "
+          + "AND (a.lead = (SELECT owner FROM licences WHERE id = ?1) OR EXISTS (SELECT 1 FROM lead_names n WHERE n.licence = ?1 AND n.person = a.lead))")
+          .bind(mine.licence, person, mine.person).first(); /* plant:withdraw-other */
+        if (other) {
+          await c.db.prepare("DELETE FROM admitted_by WHERE licence = ?1 AND person = ?2 AND lead = ?3").bind(mine.licence, person, mine.person).run();
+          break;
+        }
+        await c.db.batch([
+          c.db.prepare("DELETE FROM admits WHERE licence = ?1 AND provider = ?2 AND org = ?3").bind(mine.licence, r.provider, r.org), /* plant:withdraw-row */
+          c.db.prepare("UPDATE seats SET seen_at = 0, proved_at = 0 WHERE kind = 'desk' AND person = ?1 AND licence = ?2").bind(person, mine.licence), /* plant:withdraw-seat */
+          c.db.prepare("UPDATE desk_keys SET seen_at = 0 WHERE person = ?1 AND licence = ?2").bind(person, mine.licence), /* plant:withdraw-desks */
+          c.db.prepare("DELETE FROM admitted_by WHERE licence = ?1 AND person = ?2").bind(mine.licence, person),
+          c.db.prepare("UPDATE seats SET seen_at = 0, proved_at = 0 WHERE kind = 'lead' AND person = ?1 AND licence = ?2 AND ?3 = 1")
+            .bind(person, mine.licence, coLead ? 1 : 0), /* plant:withdraw-co-lead */
+        ].concat(coLead ? unnamed(c.db, mine.licence, person, mine.person) : []));
+        break;
+      }
+      return answer(200, { ok: true });
+    },
+
+    /* THE LEAD'S LIST OF PEOPLE (night decision 20 (c); the Team screen), asked by the leads person/admit admits for: the people
+       whose desk signed in within LIST_DAYS from an organisation the licence admits, newest first, at most LIST_MAX, each by code,
+       the pseudonym a certificate on this licence names, and the day. Nothing from the provider. A personal account is never
+       here (no organisation is kept for it), nor a desk signed out. Anyone else is answered as a key with no seat. */
+    async "person/list"(c) {
+      const b = c.body;
+      if (!exactly(b, ["lead", "t", "sig"]) || !HEX64.test(String(b.lead)) || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.personListBytes({ lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const mine = await leadOf(c.db, b.lead, c.now);
+      if (!mine) return noSeatHere();
+      /* THE ASKER'S OWN TEAM (a team is its lead's own): the people it admitted by name; for the owner also those a lead no longer
+         leading admitted, and the organisation's colleagues no lead now leading admitted. `added`: seated by name, or by the
+         organisation where the owner's switch seats colleagues; a colleague not added waits for an Add. */
+      const STANDING = "(x.lead = l.owner OR EXISTS (SELECT 1 FROM lead_names n WHERE n.licence = ?1 AND n.person = x.lead))";
+      const VIA_ORG = "d.org IN (SELECT org FROM admits WHERE licence = ?1 AND provider = p.provider)"; /* plant:list-org */
+      const rows = await c.db.prepare("SELECT d.person AS person, p.code AS code, MAX(d.signed_at) AS at, MAX(" + VIA_ORG + ") AS viaOrg, "
+        + "EXISTS (SELECT 1 FROM admits WHERE licence = ?1 AND provider = p.provider AND org = ?5 || d.person) AS byName, l.org_desks AS orgDesks "
+        + "FROM person_desks d JOIN persons p ON p.person = d.person JOIN licences l ON l.id = ?1 WHERE d.signed_at > ?2 " /* plant:list-recent */
+        + "AND (EXISTS (SELECT 1 FROM admitted_by x WHERE x.licence = ?1 AND x.person = d.person AND x.lead = ?4) " /* plant:list-team */
+        + "OR (?4 = l.owner AND (EXISTS (SELECT 1 FROM admitted_by x WHERE x.licence = ?1 AND x.person = d.person AND NOT " + STANDING + ") " /* plant:list-orphans */
+        + "OR (" + VIA_ORG + " AND NOT EXISTS (SELECT 1 FROM admitted_by x WHERE x.licence = ?1 AND x.person = d.person AND " + STANDING + "))))) " /* plant:list-owner-org */
+        + "GROUP BY d.person ORDER BY at DESC, p.code LIMIT ?3").bind(mine.licence, c.now - LIST_DAYS * DAY, LIST_MAX, mine.person, PERSON).all(); /* plant:list-max */
+      const people = [];
+      for (const r of rows.results) people.push({ code: r.code, person: await personOutOf(c.cfg, mine.licence, r.person), signedIn: dayOf(r.at),
+        added: r.byName === 1 || (r.viaOrg === 1 && r.orgDesks === 1) }); /* plant:list-added */
+      return answer(200, { ok: true, people });
+    },
+
+    /* A LEAD SETS ITS DOORS (the door-finding): a key leadOf admits replaces, in one batch, its own doors on its licence with the
+       list it signed, each row stamped with the set's t; another lead's rows on the licence are never touched, so one lead can
+       neither take nor close another's door. The list's lead key id is the signer's canonical one or the set is malformed (the test
+       architect's read: an id is never a claim). A set no later than this lead's newest row is refused, and every statement of the
+       batch holds that condition again, so two sets in flight land in the order they were signed. An empty list clears this lead's
+       doors, taken also from a key bound by sign-in whose seat lapsed or was freed, as the relay lets a lapsed team close its door,
+       on a licence not refunded, as every other act of a lead (Argon's review of the sign-in service, finding 3).
+       Anyone else is answered as a key with no seat. */
+    async "door/set"(c) {
+      const b = c.body;
+      if (!exactly(b, ["lead", "t", "doors", "sig"]) || !HEX64.test(String(b.lead)) || !isT(b.t) || !HEX128.test(String(b.sig))
+          || !doorsShape(b.doors, await Q.leadKeyId(b.lead), apiPrefixOf(c.env) !== API)) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.doorSetBytes({ lead: b.lead, t: b.t, doors: b.doors }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const mine = b.doors.length ? await leadOf(c.db, b.lead, c.now)
+        : await c.db.prepare("SELECT b.licence AS licence FROM bindings b JOIN licences l ON l.id = b.licence WHERE b.lead = ?1 "
+          + "AND b.person IS NOT NULL AND l.refunded = 0").bind(b.lead).first(); /* plant:door-clear */
+      if (!mine) return noSeatHere(); /* plant:door-lead */
+      const last = await c.db.prepare("SELECT MAX(at) AS at FROM doors WHERE licence = ?1 AND lead = ?2").bind(mine.licence, b.lead).first();
+      if (last && last.at !== null && last.at >= b.t) return refused(); /* plant:door-fresh */
+      await c.db.batch(b.doors.map(d => c.db.prepare("INSERT INTO doors (licence, lead, team, rt, url, key_id, box, at) "
+        + "SELECT ?1, ?2, ?4, ?5, ?6, ?7, ?8, ?3 WHERE NOT EXISTS (SELECT 1 FROM doors WHERE licence = ?1 AND lead = ?2 AND at > ?3) "
+        + "ON CONFLICT (licence, lead, team) DO UPDATE SET rt = excluded.rt, url = excluded.url, key_id = excluded.key_id, box = excluded.box, "
+        + "at = excluded.at WHERE excluded.at > doors.at")
+        .bind(mine.licence, b.lead, b.t, d.team, d.rt, d.url, d.keyId, d.box))
+        .concat([c.db.prepare("DELETE FROM doors WHERE licence = ?1 AND lead = ?2 AND at < ?3 " /* plant:door-own */
+          + "AND NOT EXISTS (SELECT 1 FROM doors WHERE licence = ?1 AND lead = ?2 AND at > ?3)").bind(mine.licence, b.lead, b.t)]));
+      return answer(200, { ok: true, doors: b.doors.length });
+    },
+
+    /* THE OWNER'S LIST OF LEAD SEATS (decision 15 (b)): for a key bound through the person who owns its licence and holds a
+       lead seat on it proved within PROOF_DAYS (leadOf), every lead seat on it by its code, counted or not, with the days it
+       was last seen and proved (a freed seat's null), and which is the asker's own. Anyone else is answered as a key with no seat. */
+    async "seat/list"(c) {
+      const b = c.body;
+      if (!exactly(b, ["lead", "t", "sig"]) || !HEX64.test(String(b.lead)) || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.seatListBytes({ lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const mine = await leadOf(c.db, b.lead, c.now);
+      if (!mine) return noSeatHere();
+      const row = await c.db.prepare("SELECT " + LICENCE_COLUMNS + " FROM licences WHERE id = ?1").bind(mine.licence).first();
+      const rows = await c.db.prepare("SELECT person, code, seen_at, proved_at FROM seats WHERE licence = ?1 AND kind = 'lead' "
+        + "ORDER BY seated_at, code").bind(mine.licence).all();
+      const teams = await teamSizes(c.db, row, c.now);
+      /* ANOTHER LEAD learns who holds a lead seat, by code and which is theirs (decision 29 (b): "A lead who is not the owner cannot
+         remove another lead, from the team or the licence"), so its Studio keeps a co-lead on the team; and, a team being its lead's own,
+         which seat is the owner's, who alone names and unnames, its own team's size and the licence's desk seats in use, one pool. */
+      if (!mine.owner) return answer(200, { ok: true, seats: rows.results.filter(r => r.proved_at > 0).map(r => Object.assign({ code: r.code, you: r.person === mine.person },
+        r.person === row.owner ? { owner: true } : {}, r.person === mine.person ? { team: teams.get(r.person) || 0 } : {})), /* plant:list-owner */
+        desks: (await seatCounts(c.db, row, c.now)).desk });
+      /* THE OWNER also learns whom it named and who has not yet signed in on it, each team's size, the colleagues who signed in to
+         Studio on a trial of their own within LIST_DAYS, ready to name, and its switch (a team is its lead's own). */
+      const named = await c.db.prepare("SELECT n.person AS person, p.code AS code, n.at AS at FROM lead_names n JOIN persons p ON p.person = n.person "
+        + "WHERE n.licence = ?1 ORDER BY n.at, p.code").bind(mine.licence).all();
+      const namedAtOf = n => (n && n.at > 0 ? { namedAt: dayOf(n.at) } : {});
+      const seats = rows.results.map(r => Object.assign({ code: r.code, seen: r.seen_at > 0 ? dayOf(r.seen_at) : null, proved: r.proved_at > 0 ? dayOf(r.proved_at) : null,
+        you: r.person === mine.person, named: r.person === row.owner || named.results.some(n => n.person === r.person), team: teams.get(r.person) || 0 },
+        namedAtOf(named.results.find(n => n.person === r.person))));
+      for (const n of named.results) if (!rows.results.some(r => r.person === n.person))
+        seats.push(Object.assign({ code: n.code, seen: null, proved: null, you: false, named: true, team: teams.get(n.person) || 0 }, namedAtOf(n)));
+      const unnamed = await c.db.prepare("SELECT s.code AS code, s.seen_at AS seen FROM seats s JOIN licences t ON t.id = s.licence "
+        + "WHERE s.kind = 'lead' AND t.trial_ends IS NOT NULL AND s.seen_at > ?2 AND s.person <> ?3 AND s.code IS NOT NULL "
+        + "AND NOT EXISTS (SELECT 1 FROM lead_names n WHERE n.licence = ?1 AND n.person = s.person) "
+        + "AND EXISTS (SELECT 1 FROM admits a WHERE a.licence = ?1 AND a.provider = s.provider AND a.org = s.org AND substr(a.org, 1, ?4) <> ?5) " /* plant:list-unnamed */
+        + "ORDER BY s.seen_at DESC, s.code LIMIT ?6").bind(mine.licence, c.now - LIST_DAYS * DAY, row.owner, PERSON.length, PERSON, LIST_MAX).all();
+      return answer(200, { ok: true, seats, counts: await seatCounts(c.db, row, c.now), orgDesks: row.org_desks === 1,
+        unnamed: unnamed.results.map(u => ({ code: u.code, seen: dayOf(u.seen) })) });
+    },
+
+    /* A SEAT FREED AT ONCE. A desk seat by the lead (Claude alpha's decision 14): a key seated by sign-in frees a desk seat of
+       its own licence, named as its seat certificate names the person (the per-licence pseudonym, so the lead never learns who),
+       where it owns the licence or admitted that person by code, the organisation not seating them (FREES_DESK, decision 46). A
+       lead seat by the licence's owner alone (decision 15 (b)), named by its code; the owner may free their own, and then frees
+       nothing more until they sign in again. Either asker holds a lead seat proved within PROOF_DAYS (leadOf). Either seat
+       is marked unseen and unproved, so it stops counting now, its row stays, and only its person's fresh proof takes it
+       again. A key holding no current lead seat (nothing, a lead freed or lapsed) is refused as
+       "not-lead"; anyone but the owner for a lead seat, or a seat this licence does not have, is refused alike as no-seat; a desk seat here that this lead may not free is refused as "not-yours". */
+    async "seat/free"(c) {
+      const b = c.body;
+      if (!exactly(b, ["kind", "person", "lead", "t", "sig"]) || (b.kind !== "lead" && b.kind !== "desk")
+          || !(HEX64.test(String(b.person)) || SEAT_CODE_RE.test(String(b.person)))
+          || !HEX64.test(String(b.lead)) || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.seatFreeBytes({ kind: b.kind, person: b.person, lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const mine = await leadOf(c.db, b.lead, c.now);
+      /* An asker with no current lead seat (none, freed, lapsed, refunded) is told so, 403 "not-lead", and about
+         itself alone: as no-seat, Studio would read a lapsed lead's press as a seat already gone and show it freed (the test
+         architect's read of 364b2572). */
+      if (!mine) return answer(403, { ok: false, reason: "not-lead" }); /* plant:free-lead */
+      if (b.kind === "lead") {
+        if (!SEAT_CODE_RE.test(b.person)) return noSeatHere();
+        /* One batch, each statement only where the asker owns the licence: the seat of that code on it, and the person's name on it
+           (a team is its lead's own: a lead named and not yet signed in is unnamed by the same press), their team the owner's. */
+        const who = await c.db.prepare("SELECT person FROM persons WHERE code = ?1").bind(b.person).first();
+        const res = await c.db.batch([c.db.prepare("UPDATE seats SET seen_at = 0, proved_at = 0 WHERE kind = 'lead' "
+          + "AND code = ?1 AND licence = ?2 AND EXISTS (SELECT 1 FROM licences WHERE id = ?2 AND owner = ?3) RETURNING person") /* plant:free-owner */
+          .bind(b.person, mine.licence, mine.person)].concat(who ? unnamed(c.db, mine.licence, who.person, mine.person, true) : []));
+        if (!res[0].results.length && !(who && res[1].results.length)) return noSeatHere();
+        const row = await c.db.prepare("SELECT " + LICENCE_COLUMNS + " FROM licences WHERE id = ?1").bind(mine.licence).first();
+        return answer(200, { ok: true, freed: "lead", seats: await seatCounts(c.db, row, c.now) });
+      }
+      const held = await c.db.prepare("SELECT person FROM seats WHERE licence = ?1 AND kind = 'desk'").bind(mine.licence).all();
+      for (const r of held.results) {
+        if (await keyedHash(c.cfg.hmac, KEYED.personOut, mine.licence + "\n" + r.person) !== b.person) continue;
+        /* Only where this asker may free that person (FREES_DESK, decision 46). A seat still here that this lead may not free is
+           refused as "not-yours", 403, so Studio never reads the refusal as a seat already gone (no-seat) and shows it freed: the
+           lead already knows the person by this pseudonym, from its desk's certificate or the list, so the answer tells it nothing new. */
+        const freed = await c.db.prepare("UPDATE seats SET seen_at = 0, proved_at = 0 WHERE kind = 'desk' AND person = ?1 AND licence = ?2 AND " + FREES_DESK
+          + " RETURNING person").bind(r.person, mine.licence, mine.person).first(); /* plant:free-unseen */
+        if (!freed) {
+          const here = await c.db.prepare("SELECT 1 AS h FROM seats WHERE kind = 'desk' AND person = ?1 AND licence = ?2").bind(r.person, mine.licence).first();
+          return here ? answer(403, { ok: false, reason: "not-yours" }) : noSeatHere(); /* plant:free-not-yours */
+        }
+        /* A desk seat freed frees its person's desks too (stage 3), so the person's next desk is not a fourth. */
+        await c.db.prepare("UPDATE desk_keys SET seen_at = 0 WHERE person = ?1 AND licence = ?2 AND " + FREES_DESK).bind(r.person, mine.licence, mine.person).run(); /* plant:free-desks */
+        const row = await c.db.prepare("SELECT " + LICENCE_COLUMNS + " FROM licences WHERE id = ?1").bind(mine.licence).first();
+        return answer(200, { ok: true, freed: "desk", seats: await seatCounts(c.db, row, c.now) });
+      }
+      return noSeatHere();
+    },
+
+    /* THE OWNER NAMES A LEAD (a team is its lead's own; decision 47): a key leadOf finds owning a paid licence names the person
+       whose sign-in code it is to a lead seat on it, at most lead_seats with the owner counted, so a person named never meets
+       "full". In the same batch the person is admitted by name, so their own desks are seated whatever the switch, and their own
+       trial ends with their seat and keys moved here, as the attach moves an owner's. Named already is answered as named; a full
+       licence "full"; anyone but the owner, or a code nobody holds, as a key with no seat. */
+    async "lead/name"(c) {
+      const b = c.body;
+      if (!exactly(b, ["code", "lead", "t", "sig"]) || !SEAT_CODE_RE.test(String(b.code)) || !HEX64.test(String(b.lead))
+          || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.leadNameBytes({ code: b.code, lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const mine = await leadOf(c.db, b.lead, c.now);
+      if (!mine || !mine.owner) return noSeatHere(); /* plant:name-owner */
+      const who = await c.db.prepare("SELECT person, provider FROM persons WHERE code = ?1").bind(b.code).first();
+      if (!who) return noSeatHere();
+      if (who.person === mine.person) return answer(200, { ok: true, named: b.code });
+      const NAMED = "EXISTS (SELECT 1 FROM lead_names WHERE licence = ?1 AND person = ?2)";
+      const TRIALS = "(SELECT id FROM licences WHERE owner = ?2 AND trial_ends IS NOT NULL)";
+      const res = await c.db.batch([
+        c.db.prepare("INSERT INTO lead_names (licence, person, named_by, at) SELECT ?1, ?2, ?3, ?4 WHERE EXISTS (SELECT 1 FROM licences "
+          + "WHERE id = ?1 AND owner = ?3 AND desk_only = 0 AND refunded = 0 AND trial_ends IS NULL) "
+          + "AND (SELECT COUNT(*) FROM lead_names WHERE licence = ?1 AND person <> ?3) + 1 < (SELECT lead_seats FROM licences WHERE id = ?1) " /* plant:name-count */
+          + "ON CONFLICT DO NOTHING").bind(mine.licence, who.person, mine.person, c.now),
+        c.db.prepare("INSERT INTO admits (licence, provider, org) SELECT ?1, ?3, ?4 || ?2 WHERE " + NAMED + " ON CONFLICT DO NOTHING")
+          .bind(mine.licence, who.person, who.provider, PERSON), /* plant:name-admits */
+        c.db.prepare("INSERT INTO admitted_by (licence, person, lead) SELECT ?1, ?2, ?3 WHERE " + NAMED + " AND NOT EXISTS (SELECT 1 FROM admitted_by "
+          + "WHERE licence = ?1 AND person = ?2) ON CONFLICT DO NOTHING").bind(mine.licence, who.person, mine.person),
+        c.db.prepare("UPDATE licences SET trial_ends = MIN(trial_ends, ?3) WHERE owner = ?2 AND trial_ends IS NOT NULL AND " + NAMED)
+          .bind(mine.licence, who.person, c.now), /* plant:name-trial */
+        c.db.prepare("UPDATE seats SET licence = ?1 WHERE kind = 'lead' AND person = ?2 AND licence IN " + TRIALS + " AND " + NAMED)
+          .bind(mine.licence, who.person), /* plant:name-seat */
+        c.db.prepare("UPDATE bindings SET licence = ?1 WHERE person = ?2 AND licence IN " + TRIALS + " AND " + NAMED).bind(mine.licence, who.person),
+        c.db.prepare("SELECT " + NAMED + " AS named").bind(mine.licence, who.person),
+      ]);
+      if (res[res.length - 1].results[0].named !== 1) return noSeat();
+      return answer(200, { ok: true, named: b.code });
+    },
+
+    /* THE OWNER'S SWITCH (decision 47's addition): a key leadOf finds owning the licence sets whether colleagues' desks are seated
+       by the organisation admission (orgDesks true) or only people admitted by name are. Turned off, in the same batch every desk
+       the organisation seats now (proved, seen within the grace) and no lead admitted is admitted by name as the owner's, so
+       nobody seated is dropped; turned on, nothing that exists changes. Anyone but the owner is answered as a key with no seat. */
+    async "licence/set"(c) {
+      const b = c.body;
+      if (!exactly(b, ["orgDesks", "lead", "t", "sig"]) || typeof b.orgDesks !== "boolean" || !HEX64.test(String(b.lead))
+          || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip], ["lead", b.lead]], c.now)) return slowDown();
+      const no = await signedOk(c.db, c.cfg, Q.licenceSetBytes({ orgDesks: b.orgDesks, lead: b.lead, t: b.t }), b.lead, b.sig, b.t, c.now);
+      if (no) return no;
+      const mine = await leadOf(c.db, b.lead, c.now);
+      if (!mine || !mine.owner) return noSeatHere(); /* plant:set-owner */
+      const SEATED = "FROM seats s WHERE s.licence = ?1 AND s.kind = 'desk' AND s.proved_at > 0 "
+        + "AND s.seen_at > ?2 - (SELECT grace_days FROM licences WHERE id = ?1) * ?3 "
+        + "AND EXISTS (SELECT 1 FROM admits a WHERE a.licence = ?1 AND a.provider = s.provider AND a.org = s.org AND substr(a.org, 1, ?4) <> ?5) "
+        + "AND NOT EXISTS (SELECT 1 FROM admitted_by x WHERE x.licence = ?1 AND x.person = s.person) "
+        + "AND EXISTS (SELECT 1 FROM licences WHERE id = ?1 AND org_desks = 1)";
+      const keep = b.orgDesks ? [] : [
+        c.db.prepare("INSERT INTO admits (licence, provider, org) SELECT ?1, s.provider, ?5 || s.person " + SEATED + " ON CONFLICT DO NOTHING")
+          .bind(mine.licence, c.now, DAY, PERSON.length, PERSON), /* plant:set-keep */
+        c.db.prepare("INSERT INTO admitted_by (licence, person, lead) SELECT ?1, s.person, ?6 " + SEATED + " ON CONFLICT DO NOTHING")
+          .bind(mine.licence, c.now, DAY, PERSON.length, PERSON, mine.person),
+      ];
+      await c.db.batch(keep.concat([c.db.prepare("UPDATE licences SET org_desks = ?2 WHERE id = ?1").bind(mine.licence, b.orgDesks ? 1 : 0)])); /* plant:set-write */
+      return answer(200, { ok: true, orgDesks: b.orgDesks });
+    },
+
+    /* AN ORGANISATION AS ADMITS KEEPS IT, FOR THE VENDOR (decision 15 item 6): signed by one of the roots the service trusts,
+       so nobody else can have a guess hashed, and answered with the keyed hash the admits table holds, which is how the
+       attach script and the vendor script learn it without HASH_KEY. Anything else is refused alike. */
+    async "admin/org"(c) {
+      const b = c.body;
+      if (!exactly(b, ["provider", "org", "t", "sig"]) || typeof b.provider !== "string" || !/^[a-z][a-z0-9-]{1,30}$/.test(b.provider)
+          || typeof b.org !== "string" || !/^[\x21-\x7e]{1,255}$/.test(b.org) || !isT(b.t) || !HEX128.test(String(b.sig))) return malformed();
+      if (await overLimit(c.db, c.route, [["ip", c.ip]], c.now)) return slowDown();
+      const bytes = Q.adminOrgBytes({ provider: b.provider, org: b.org, t: b.t });
+      let root = null;
+      for (const r of roots) if (await verified(r, bytes, b.sig)) root = r;
+      if (!root) return refused(); /* plant:admin-root */
+      if (await signedOk(c.db, c.cfg, bytes, root, b.sig, b.t, c.now)) return refused();
+      return answer(200, { ok: true, org: await orgKeyed(c.cfg.hmac, b.provider, b.org) });
+    },
+  };
+  const noSeatHere = () => answer(404, { ok: false, reason: "no-seat" });
+
+  /* A LEAD UNNAMED BY THE OWNER (a team is its lead's own): its name on the licence goes, and the people it admitted become the
+     owner's, so its team keeps its seats. Statements for the owner's batch; the first returns the person where a name went. Each
+     holds the owner's condition again where `owned` asks it, for a batch that has not checked it before. */
+  function unnamed(db, licence, person, owner, owned) {
+    const OWNS = owned ? " AND EXISTS (SELECT 1 FROM licences WHERE id = ?1 AND owner = ?3)" : "";
+    return [
+      db.prepare("DELETE FROM lead_names WHERE licence = ?1 AND person = ?2 AND ?2 <> ?3" + OWNS + " RETURNING person").bind(licence, person, owner), /* plant:unname */
+      db.prepare("UPDATE OR IGNORE admitted_by SET lead = ?3 WHERE licence = ?1 AND lead = ?2 AND ?2 <> ?3" + OWNS).bind(licence, person, owner), /* plant:unname-team */
+      db.prepare("DELETE FROM admitted_by WHERE licence = ?1 AND lead = ?2 AND ?2 <> ?3" + OWNS).bind(licence, person, owner),
+    ];
+  }
+
+  /* EACH TEAM'S SIZE on a licence: its desk seats seen within the grace and proved within PROOF_DAYS, by lead (a person), each
+     counted for every lead now leading who admitted them by name, else for the owner. */
+  async function teamSizes(db, row, now) {
+    const STANDING = "(a.lead = ?4 OR EXISTS (SELECT 1 FROM lead_names n WHERE n.licence = ?1 AND n.person = a.lead))";
+    const LIVE = "s.licence = ?1 AND s.kind = 'desk' AND s.seen_at > ?2 AND s.proved_at > ?3";
+    const got = await db.prepare("SELECT lead, COUNT(*) AS n FROM (SELECT a.lead AS lead FROM seats s JOIN admitted_by a ON a.licence = s.licence "
+      + "AND a.person = s.person WHERE " + LIVE + " AND " + STANDING + " UNION ALL SELECT ?4 AS lead FROM seats s WHERE " + LIVE
+      + " AND NOT EXISTS (SELECT 1 FROM admitted_by a WHERE a.licence = ?1 AND a.person = s.person AND " + STANDING + ")) GROUP BY lead")
+      .bind(row.id, now - row.grace_days * DAY, now - PROOF_MS, row.owner).all();
+    return new Map(got.results.map(r => [r.lead, r.n]));
+  }
+
+  /* THE REVOKED KEYS' LIST as the deploy set it, for the check's answer: {revoked: the document} where REVOKED is a JSON
+     object no longer than a body, else nothing. Judged by Studio, never here. */
+  function revokedOf(env) {
+    const text = env && env.REVOKED;
+    if (typeof text !== "string" || !text || text.length > BODY_MAX) return {};
+    try { const doc = JSON.parse(text); return plain(doc) ? { revoked: doc } : {}; } catch { return {}; }
+  }
+
+  /* A VERSION NOTE, served as handed (above): a GET alone, under the same configuration and the same limit as every route. */
+  async function noteRoute(request, env, name) {
+    if (request.method !== "GET") return missing(); /* plant:note-get */
+    const now = clock(env);
+    if (!Number.isSafeInteger(now)) return fault();
+    const cfg = await configOf(env);
+    /* The same window and the same keyed address as every route, written apart so each route's own plant finds its line once. */
+    const inWindow = !!cfg && now >= cfg.delegation.from && now < cfg.delegation.until;
+    if (!inWindow) return unavailable();
+    const caller = request.headers.get("cf-connecting-ip") || "unknown";
+    const ip = await keyedHash(cfg.hmac, KEYED.ip, caller);
+    if (await overLimit(env.DB, name, [["ip", ip]], now)) return slowDown(); /* plant:note-rate */
+    const text = env[NOTES[name]];
+    if (typeof text !== "string" || !text) return missing();
+    const bytes = new TextEncoder().encode(text);
+    if (bytes.length > NOTE_MAX) return missing(); /* plant:note-max */
+    return new Response(bytes, { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+  }
+
+  async function route(request, env) {
+    const url = new URL(request.url);
+    const api = apiPrefixOf(env); /* plant:prefix */
+    if (!api) return unavailable();
+    if (url.protocol !== "https:" || url.search !== "" || !url.pathname.startsWith(api)) return missing();
+    const name = url.pathname.slice(api.length);
+    if (name.startsWith("pay/")) return pay(request, env, name.slice(4)); /* plant:paddle-dispatch */
+    if (Object.prototype.hasOwnProperty.call(NOTES, name)) return noteRoute(request, env, name);
+    if (!Object.prototype.hasOwnProperty.call(ROUTES, name) || request.method !== "POST") return missing();
+    const now = clock(env);
+    if (!Number.isSafeInteger(now)) return fault();
+    const cfg = await configOf(env);
+    if (!cfg || now < cfg.delegation.from || now >= cfg.delegation.until) return unavailable();
+    const body = await bodyOf(request);
+    if (!plain(body)) return malformed();
+    const ip = await keyedHash(cfg.hmac, KEYED.ip, request.headers.get("cf-connecting-ip") || "unknown"); /* plant:keyed-ip */
+    return ROUTES[name]({ route: name, body, db: env.DB, cfg, now, ip, env });
+  }
+
+  return {
+    async fetch(request, env) {
+      try { return await route(request, env); } catch (e) { return e && e.down ? unavailable() : fault(); }
+    },
+  };
+}
+
+/** The body as JSON, read to BODY_MAX and no further; null where it is longer, absent or not JSON. */
+async function bodyOf(request) {
+  if (!request.body) return null;
+  const reader = request.body.getReader();
+  const parts = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > BODY_MAX) { try { await reader.cancel(); } catch { /* gone already */ } return null; }
+    parts.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) { all.set(p, at); at += p.byteLength; }
+  try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(all)); } catch { return null; }
+}
+
+/* Retention: seat, sign-in and trial records stay RETENTION_DAYS after a licence or trial ends, then are purged beside
+   outbox on schedule. Ends at: refunded_at when refunded (stamped when NULL on first pass), trial_ends for a sign-in
+   trial, paid_until for a paid licence, ends for an e-mail trial. Invoices (orders) are untouched. */
+async function purgeRetention(db, now) {
+  const cutoff = now - RETENTION_MS; /* plant:retention-window */
+  const deadPaid = "(refunded = 0 AND trial_ends IS NULL AND paid_until < ?1)"; /* plant:retention-live-paid */
+  const deadTrial = "(refunded = 0 AND trial_ends IS NOT NULL AND trial_ends < ?1)"; /* plant:retention-live-trial */
+  const deadRefund = "(refunded = 1 AND refunded_at IS NOT NULL AND refunded_at < ?1)"; /* plant:retention-refund */
+  const dead = "(" + deadPaid + " OR " + deadTrial + " OR " + deadRefund + ")";
+  const deadId = "SELECT id FROM licences WHERE " + dead;
+  const orphaned = "person NOT IN (SELECT person FROM seats) AND person NOT IN (SELECT person FROM bindings WHERE person IS NOT NULL) "
+    + "AND person NOT IN (SELECT person FROM desk_keys) AND person NOT IN (SELECT owner FROM licences WHERE owner IS NOT NULL) "
+    + "AND person NOT IN (SELECT person FROM admitted_by) AND person NOT IN (SELECT lead FROM admitted_by) AND person NOT IN (SELECT person FROM lead_names)";
+  await db.batch([
+    db.prepare("UPDATE licences SET refunded_at = MIN(?1, CASE WHEN trial_ends IS NOT NULL THEN trial_ends ELSE paid_until END) "
+      + "WHERE refunded = 1 AND refunded_at IS NULL").bind(now),
+    db.prepare("DELETE FROM doors WHERE licence IN (" + deadId + ")").bind(cutoff),
+    db.prepare("DELETE FROM pay_subs WHERE licence IN (" + deadId + ")").bind(cutoff),
+    db.prepare("DELETE FROM desk_keys WHERE licence IN (" + deadId + ")").bind(cutoff),
+    db.prepare("DELETE FROM seats WHERE licence IN (" + deadId + ")").bind(cutoff),
+    db.prepare("DELETE FROM admitted_by WHERE licence IN (" + deadId + ")").bind(cutoff),
+    db.prepare("DELETE FROM lead_names WHERE licence IN (" + deadId + ")").bind(cutoff), /* plant:retention-names */
+    db.prepare("DELETE FROM admits WHERE licence IN (" + deadId + ")").bind(cutoff),
+    db.prepare("DELETE FROM releases WHERE licence IN (" + deadId + ")").bind(cutoff),
+    db.prepare("DELETE FROM bindings WHERE licence IN (" + deadId + ")").bind(cutoff),
+    db.prepare("DELETE FROM licences WHERE " + dead).bind(cutoff),
+    db.prepare("DELETE FROM trials WHERE ends < ?1").bind(cutoff), /* plant:retention-email-trial */
+    db.prepare("DELETE FROM proofs WHERE lead NOT IN (SELECT lead FROM bindings) AND lead NOT IN (SELECT lead FROM trials)"),
+    /* The codes and the outbox the emailed codes kept serve nothing now; whatever they still hold goes at the first purge. */
+    db.prepare("DELETE FROM codes"), /* plant:s4-codes-gone */
+    db.prepare("DELETE FROM outbox"),
+    db.prepare("DELETE FROM pay_events WHERE at < ?1").bind(cutoff),
+    db.prepare("DELETE FROM pay_binds WHERE at < ?1 AND NOT EXISTS (SELECT 1 FROM pay_subs s WHERE s.provider = pay_binds.provider AND s.sub = pay_binds.sub)").bind(cutoff),
+    db.prepare("DELETE FROM person_desks WHERE signed_at < ?1 AND " + orphaned).bind(cutoff), /* plant:retention-orphan-desks */
+    db.prepare("DELETE FROM persons WHERE made < ?1 AND person NOT IN (SELECT person FROM person_desks) AND " + orphaned).bind(cutoff), /* plant:retention-orphan-persons */
+  ]);
+}
+
+export { makeService, purgeRetention, keyedHash, KEYED, API, LIMITS, NOTES, NOTE_MAX, DEVICES_PER_SEAT, TRIAL_DAYS,
+  LICENCE_KIND, LICENCE_FORMAT, TRIAL_KIND, TRIAL_FORMAT,
+  PROVIDER_DEFAULTS, CONSUMERS_TENANT, TRIAL_ONCE_PER, TRIAL_LEAD_SEATS, TRIAL_DESK_SEATS, TRIAL_PERSONAL_DESK_SEATS, RETENTION_DAYS, RETENTION_MS, KID_REFRESH_MS, KEYS_TTL_MIN,
+  KEYS_TTL_MAX, NO_KEY, PERSON, PERSONAL, DESKS_PER_PERSON, PROOF_DAYS, PROOF_ASK_DAYS, RENEW_IAT_MS, CERT_KIND, CERT_FORMAT,
+  SEAT_CODE_RE, LIST_DAYS, LIST_MAX, DOOR_RELAYS, DOOR_RELAYS_STAGING, doorRelayOk, ORG_DESKS_DEFAULT };

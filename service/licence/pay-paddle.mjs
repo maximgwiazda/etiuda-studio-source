@@ -1,0 +1,167 @@
+/* PADDLE, ONE OF THE PAYMENT CORE'S PROVIDERS (pay.mjs; the Paddle design of 2026-11-13, B1, as Claude alpha approved it).
+ *
+ *     POST <API_PREFIX>pay/paddle      Paddle's notification, its raw body signed in the Paddle-Signature header
+ *
+ * What is Paddle's own and nothing more; every write is pay.mjs's. It needs PADDLE_WEBHOOK_SECRET and PADDLE_API_KEY (Worker
+ * secrets), PADDLE_ENV and PADDLE_PRICES (wrangler.toml), and "paddle" in PAY_PROVIDERS.
+ *
+ * THE SIGNATURE, as developer.paddle.com/webhooks/about/signature-verification says: `ts=<unix s>;h1=<hex>`, one h1 or more while a
+ * secret rotates, each the HMAC-SHA256, keyed by the destination's secret, of ts, ":" and the raw body untouched.
+ *
+ * THE EVENTS: transaction.completed is a payment, its transaction and subscription read back (the status "completed", the origin web,
+ * subscription_recurring or subscription_update, a billing period, every item a recurring price PADDLE_PRICES names, the code in
+ * custom_data.etiuda_code, and no adjustment of it a refund or chargeback approved whole); subscription.updated a status; subscription.canceled a cancel; adjustment.created and .updated a refund,
+ * read back by GET /adjustments?id=, of which a refund or chargeback, approved and full, is acted on and anything else held.
+ */
+import { hmacHolds, joined } from "./pay.mjs";
+
+const PADDLE_HOSTS = Object.freeze({ sandbox: "https://sandbox-api.paddle.com", live: "https://api.paddle.com" });
+const PADDLE_KEY_PREFIX = Object.freeze({ sandbox: "pdl_sdbx_apikey_", live: "pdl_live_apikey_" });
+const PADDLE_KINDS = Object.freeze(["lead", "desk", "desk-only"]);
+const PADDLE_ORIGINS = Object.freeze({ web: "first", subscription_recurring: "renewal", subscription_update: "rise" });
+/* A SUBSCRIPTION WHOSE MONEY IS LATE (Grok's review 6, finding 5B): a completed transaction moves it to active, so a payment that reads
+   it past_due is retried until it has; paused is held for Max. */
+const PADDLE_LATE = Object.freeze(["past_due"]);
+const PADDLE_EVENTS = Object.freeze({ "transaction.completed": "payment", "subscription.updated": "status", "subscription.canceled": "cancel",
+  "adjustment.created": "refund", "adjustment.updated": "refund" });
+/* Paddle's ids, each its prefix and 26 lower-case letters and digits (the API reference's own patterns). */
+const PID = Object.freeze({ evt: /^evt_[a-z0-9]{26}$/, txn: /^txn_[a-z0-9]{26}$/, sub: /^sub_[a-z0-9]{26}$/, adj: /^adj_[a-z0-9]{26}$/,
+  pri: /^pri_[a-z0-9]{26}$/ });
+const ID_OF = Object.freeze({ payment: PID.txn, status: PID.sub, cancel: PID.sub, refund: PID.adj });
+
+const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
+
+function paddleProvider() {
+  /* THE CONFIGURATION, judged once per value: null where any part is missing or misshapen. */
+  let memo = null;
+  function config(env) {
+    const id = [env.PADDLE_WEBHOOK_SECRET, env.PADDLE_API_KEY, env.PADDLE_ENV, env.PADDLE_PRICES].map(String).join("\n");
+    if (memo && memo.id === id) return memo.cfg;
+    memo = { id, cfg: judgeConfig(env) };
+    return memo.cfg;
+  }
+  function judgeConfig(env) {
+    const secret = env.PADDLE_WEBHOOK_SECRET, key = env.PADDLE_API_KEY;
+    if (typeof secret !== "string" || !secret || typeof key !== "string") return null;
+    if (!Object.prototype.hasOwnProperty.call(PADDLE_HOSTS, env.PADDLE_ENV)) return null;
+    if (!key.startsWith(PADDLE_KEY_PREFIX[env.PADDLE_ENV]) || !/^[\x21-\x7e]{20,200}$/.test(key)) return null; /* plant:paddle-key-env */
+    let prices;
+    try { prices = typeof env.PADDLE_PRICES === "string" ? JSON.parse(env.PADDLE_PRICES) : null; } catch { return null; }
+    if (!plain(prices) || !Object.entries(prices).every(([p, k]) => PID.pri.test(p) && PADDLE_KINDS.includes(k))) return null;
+    return { secret, key, host: PADDLE_HOSTS[env.PADDLE_ENV], prices: new Map(Object.entries(prices)) };
+  }
+
+  /** The Paddle-Signature header as {t, ts, h1: [..]}, or null where it is not one: ts whole seconds, each h1 64 hex, at most four. */
+  function signatureOf(headers) {
+    const header = headers.get("paddle-signature");
+    if (typeof header !== "string" || header.length > 600) return null;
+    let ts = null; const h1 = [];
+    for (const part of header.split(";")) {
+      const eq = part.indexOf("=");
+      if (eq < 0) return null;
+      const k = part.slice(0, eq).trim(), v = part.slice(eq + 1).trim();
+      if (k === "ts") { if (ts !== null || !/^[0-9]{1,12}$/.test(v)) return null; ts = v; }
+      else if (k === "h1") { if (!/^[0-9a-f]{64}$/.test(v)) return null; h1.push(v); }
+    }
+    if (ts === null || h1.length < 1 || h1.length > 4) return null;
+    return { t: Number(ts), ts, h1 };
+  }
+  const verify = (cfg, sig, raw) => hmacHolds(cfg.secret, joined(sig.ts + ":", raw), sig.h1);
+
+  /** The event as Paddle sends it, as {id, type, occurred, data}, or null where it is not one this route reads. */
+  function eventOf(raw) {
+    let ev;
+    try { ev = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw)); } catch { return null; }
+    if (!plain(ev) || typeof ev.event_id !== "string" || !PID.evt.test(ev.event_id) || typeof ev.event_type !== "string"
+        || !/^[a-z_]{1,40}\.[a-z_]{1,40}$/.test(ev.event_type) || typeof ev.occurred_at !== "string" || ev.occurred_at.length > 40
+        || !plain(ev.data) || typeof ev.data.id !== "string" || ev.data.id.length > 64) return null;
+    const act = PADDLE_EVENTS[ev.event_type];
+    if (act && !ID_OF[act].test(ev.data.id)) return null;
+    return { id: ev.event_id, type: ev.event_type, occurred: ev.occurred_at, data: ev.data };
+  }
+  const classify = ev => (PADDLE_EVENTS[ev.type] ? { act: PADDLE_EVENTS[ev.type], id: ev.data.id } : null);
+
+  const get = (io, cfg, path) => io.getJson(cfg.host + path, { authorization: "Bearer " + cfg.key, "paddle-version": "1" });
+  const dataOf = (io, doc) => {
+    if (doc === null) return null;
+    if (!(plain(doc.data) || Array.isArray(doc.data))) throw io.retry("no data");
+    return doc.data;
+  };
+
+  /* A TRANSACTION COMPLETED AT A TOTAL OF ZERO (a full discount, or a trial on a price) is applied as any other: either exists only
+     where Max set it up in his own dashboard, the key reading only and a buyer passing only a code he made (Claude alpha, 2026-11-13).
+     It is listed for his eye, its discount's id beside it. */
+  function appliedOutcome(t) {
+    const totals = plain(t.details) && plain(t.details.totals) ? t.details.totals : {};
+    const total = totals.grand_total !== undefined ? totals.grand_total : totals.total;
+    if (String(total) !== "0") return "applied"; /* plant:paddle-zero-listed */
+    return "zero-total:" + (typeof t.discount_id === "string" && /^dsc_[a-z0-9]{26}$/.test(t.discount_id) ? t.discount_id : "no-discount");
+  }
+
+  /** A payment read back: {subscription, status, origin, periodEnd, code, org, items, applied}, or {held}; a retry where Paddle has
+   *  not finished it. */
+  async function readPayment(io, cfg, id) {
+    const t = dataOf(io, await get(io, cfg, "/transactions/" + id));
+    if (t === null || !plain(t) || t.id !== id) return { held: "not-found" };
+    if (t.status !== "completed") throw io.retry("transaction " + t.status); /* plant:paddle-completed */
+    const origin = PADDLE_ORIGINS[t.origin];
+    if (!origin) return { held: "origin" }; /* plant:paddle-origin */
+    const period = plain(t.billing_period) ? Date.parse(t.billing_period.ends_at) : NaN;
+    if (!Number.isFinite(period) || period <= 0) return { held: "period" }; /* plant:paddle-period */
+    if (typeof t.subscription_id !== "string" || !PID.sub.test(t.subscription_id)) return { held: "subscription" };
+    const cd = plain(t.custom_data) ? t.custom_data : {};
+    const subId = t.subscription_id;
+    /* From here a hold names the subscription it read and the code the transaction carried, so pay.mjs names its buyer too (board 1020, F2). */
+    const heldOn = reason => ({ held: reason, subscription: subId, code: cd.etiuda_code });
+    const titems = Array.isArray(t.items) ? t.items : [];
+    if (!titems.length || !titems.every(it => plain(it) && plain(it.price) && cfg.prices.has(it.price.id) && plain(it.price.billing_cycle)))
+      return heldOn("price"); /* plant:paddle-one-time */
+    const s = dataOf(io, await get(io, cfg, "/subscriptions/" + subId));
+    if (s === null || !plain(s) || s.id !== subId) return heldOn("not-found");
+    if (PADDLE_LATE.includes(s.status)) throw io.retry("subscription " + s.status); /* plant:paddle-late-retry */
+    if (s.status !== "active" && s.status !== "trialing" && s.status !== "canceled") return heldOn("subscription-status"); /* plant:paddle-canceled-payment */
+    if (plain(s.custom_data) && s.custom_data.etiuda_code !== undefined && s.custom_data.etiuda_code !== cd.etiuda_code) return { held: "code-differs", subscription: subId };
+    if (!Array.isArray(s.items) || s.items.length > 100) return heldOn("items");
+    const activeItems = s.items.filter(it => plain(it) && (it.status === "active" || it.status === "trialing"));
+    /* A CANCELLED SUBSCRIPTION whose items have all gone inactive (register 47.13): the items it held at its end are the ones this payment
+       bills, so an inactive item whose price is not on the transaction, one removed earlier, is not counted. */
+    const items = (activeItems.length || s.status !== "canceled" ? activeItems : s.items.filter(it => plain(it) && it.status === "inactive" && plain(it.price) && titems.some(t => t.price.id === it.price.id))) /* plant:paddle-inactive-on-txn */
+      .map(it => ({ price: plain(it.price) ? it.price.id : undefined, quantity: it.quantity }));
+    /* A PAYMENT ALREADY GIVEN BACK (Grok's review 6, finding 1): an adjustment can reach the route before the transaction it refunds,
+       and is then held, the payment not stored here yet; the transaction stays "completed", so the payment reads its own adjustments
+       and grants nothing where a refund or chargeback of it was approved whole. */
+    const adjs = dataOf(io, await get(io, cfg, "/adjustments?transaction_id=" + id));
+    const givenBack = Array.isArray(adjs) && adjs.some(a => plain(a) && a.transaction_id === id && (a.action === "refund" || a.action === "chargeback")
+      && a.status === "approved" && a.type === "full");
+    if (givenBack) return heldOn("refunded"); /* plant:paddle-refunded-payment */
+    /* What this transaction bills (pay.mjs caps the seats by it, Grok's review 6, finding 2). */
+    const billed = titems.map(it => ({ price: it.price.id, quantity: it.quantity }));
+    return { subscription: subId, status: s.status, origin, periodEnd: period, code: cd.etiuda_code, org: cd.org, items, billed, applied: appliedOutcome(t) };
+  }
+
+  /** A subscription read back, {status} with Paddle's own words, or null where Paddle has none. */
+  async function readSubscription(io, cfg, id) {
+    const s = dataOf(io, await get(io, cfg, "/subscriptions/" + id));
+    if (s === null || !plain(s) || s.id !== id) return null;
+    return { status: s.status };
+  }
+
+  /** An adjustment read back: {subscription, payment} for a refund or chargeback approved and full, else {held}. */
+  async function readRefund(io, cfg, id) {
+    const list = dataOf(io, await get(io, cfg, "/adjustments?id=" + id));
+    const a = Array.isArray(list) ? list.find(x => plain(x) && x.id === id) : null;
+    if (!a) return { held: "not-found" };
+    const word = v => (typeof v === "string" && /^[a-z_]{1,32}$/.test(v) ? v : "unnamed");
+    if (!((a.action === "refund" || a.action === "chargeback") && a.status === "approved" && a.type === "full")) /* plant:paddle-refund-shape */
+      return { held: "adjustment:" + word(a.action) + "/" + word(a.status) + "/" + word(a.type) };
+    if (typeof a.subscription_id !== "string" || !PID.sub.test(a.subscription_id) || typeof a.transaction_id !== "string")
+      return { held: "adjustment-subscription" };
+    /* Whether the payment refunded was a rise (pay.mjs holds a rise's refund apart from an older period's). */
+    const t = PID.txn.test(a.transaction_id) ? dataOf(io, await get(io, cfg, "/transactions/" + a.transaction_id)) : null;
+    return { subscription: a.subscription_id, payment: a.transaction_id, origin: plain(t) ? PADDLE_ORIGINS[t.origin] : undefined };
+  }
+
+  return Object.freeze({ name: "paddle", config, signatureOf, verify, eventOf, classify, readPayment, readSubscription, readRefund });
+}
+
+export { paddleProvider, PADDLE_HOSTS, PADDLE_KEY_PREFIX, PADDLE_EVENTS };

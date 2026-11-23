@@ -1,0 +1,17 @@
+# LF in this tree, whatever the desk that clones it has set. Without this file the answer comes
+# from the cloning desk's core.autocrlf, which on the desk Studio was written on is true: a fresh
+# clone landed tools/pre-commit at 14553 bytes against the blob's 14263, 290 carriage returns the
+# repository does not hold. Git for Windows' sh runs such a hook anyway, which is why it went
+# unseen; a POSIX sh reads the shebang's trailing CR as part of the interpreter's name.
+#
+# tests/eol-attrs.mjs reads these attributes out of the INDEX and refuses any tracked file that
+# leaves the question open, so a file added later inherits the rule rather than the habit.
+* text=auto eol=lf
+# No binary is tracked here yet. One added later says so on its own line, because text=auto is a
+# detection and a detection is a guess: a fixture holding one NUL byte reads as binary and stops
+# being converted at all, silently.
+
+# The one binary tracked here: the app icon, a copy of etiuda-logo/studio/etiuda-app.ico. `-text` is
+# `text` unset, which tests/eol-attrs.mjs accepts as "declared binary, no conversion"; without
+# the line the answer comes from text=auto's detection, and a detection is a guess.
+*.ico -text

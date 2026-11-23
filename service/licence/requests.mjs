@@ -1,0 +1,248 @@
+/* THE BYTES A SIGNED REQUEST TO THE LICENCE SERVICE COVERS (board 936, S4; the test architect's A4 and his condition (5)).
+ *
+ * Every signed request is signed over bytes that BEGIN WITH A LINE NAMING ITS ROUTE, so a signature made for one route is
+ * never a signature for another, and none is a signature for the delegation ("etiuda-delegation"), the relay's grant
+ * ("etiuda-relay-grant"), the relay's own calls ("etiuda-relay-...") or a licence (the catalog fold, which begins "{").
+ * After the line come the request's own fields, one per line, each of a fixed shape that holds no newline: hashes and
+ * public keys as lower-case hex, `t` as a decimal number of milliseconds. Nothing here is secret and nothing here reads a
+ * clock, a key or the network: Studio (S6) and the Worker build the same bytes from the same file, and
+ * service/licence/request-vector.json holds one of each, byte for byte, for both to be checked against.
+ *
+ * activate, activateConfirm and trialConfirm name routes retired with the front door; their lines stay reserved, so no later
+ * route's signature is ever one for them.
+ */
+
+const DOMAINS = Object.freeze({
+  activate: "etiuda-licence-activate",
+  activateConfirm: "etiuda-licence-activate-confirm",
+  trialConfirm: "etiuda-licence-trial-confirm",
+  check: "etiuda-licence-check",
+  grantFetch: "etiuda-licence-grant-fetch",
+  signin: "etiuda-licence-signin",
+  seatDesk: "etiuda-licence-seat-desk",
+  seatFree: "etiuda-licence-seat-free",
+  signinRenew: "etiuda-licence-signin-renew",
+  seatList: "etiuda-licence-seat-list",
+  adminOrg: "etiuda-licence-admin-org",
+  signinDesk: "etiuda-licence-signin-desk",
+  personAdmit: "etiuda-licence-person-admit",
+  signoutDesk: "etiuda-licence-signout-desk",
+  personList: "etiuda-licence-person-list",
+  personWithdraw: "etiuda-licence-person-withdraw",
+  doorSet: "etiuda-licence-door-set",
+  leadName: "etiuda-licence-lead-name",
+  leadAccept: "etiuda-licence-lead-accept",
+  licenceSet: "etiuda-licence-licence-set",
+  licenceAdmin: "etiuda-licence-licence-admin",
+  signinManaged: "etiuda-licence-signin-managed",
+  signinDeskManaged: "etiuda-licence-signin-desk-managed",
+  signinRenewManaged: "etiuda-licence-signin-renew-managed",
+  licenceAdminManaged: "etiuda-licence-licence-admin-managed",
+  personErase: "etiuda-licence-person-erase",
+  signinDeskPooled: "etiuda-licence-signin-desk-pooled",
+  signinDeskManagedPooled: "etiuda-licence-signin-desk-managed-pooled",
+  storeGrant: "etiuda-licence-store-grant",
+  storeEnd: "etiuda-licence-store-end",
+  ask: "etiuda-licence-ask",
+  askStatus: "etiuda-licence-ask-status",
+  askBack: "etiuda-licence-ask-back",
+  askRefuse: "etiuda-licence-ask-refuse",
+  askPass: "etiuda-licence-ask-pass",
+  invite: "etiuda-licence-invite",
+  inviteWithdraw: "etiuda-licence-invite-withdraw",
+  personAdmitAsk: "etiuda-licence-person-admit-ask",
+  seatCert: "etiuda-seat-certificate",
+  seatDoors: "etiuda-seat-doors",
+  seatStay: "etiuda-licence-seat-stay", /* plant:seat-stay-list-bytes */
+  /* Board 1017: a lead named by address or from the licence's people, its withdrawal, the owner's confirmation of a candidate, and an
+     invitation withdrawn by its handle. */
+  leadNameAddress: "etiuda-licence-lead-name-address",
+  leadNamePerson: "etiuda-licence-lead-name-person",
+  leadNameWithdraw: "etiuda-licence-lead-name-withdraw",
+  leadConfirm: "etiuda-licence-lead-confirm",
+  inviteWithdrawHandle: "etiuda-licence-invite-withdraw-handle",
+  /* The vendor asking for an address as an invitation keeps it (the Grok review beta's D5 of 2026-11-22: the hand erase). */
+  adminAddress: "etiuda-licence-admin-address",
+});
+
+const enc = new TextEncoder();
+/* THE SEED, SIGNED WHERE IT RIDES (review 2's finding 12, its residual): a first sign-in's seed, which tells the service an interactive
+   sign-in from a renewal, is the last line of the bytes, "seed:" and its hex, wherever the body carries one; a body without one (a
+   renewal) signs today's bytes. The label keeps it apart from an optional member line, a bare key's hex, so one never reads as the
+   other. A copy with the seed taken out, or another seed put in, then fails the signature. An older desk or Studio signs no seed line;
+   the service still takes its request as today (core.mjs seedSigned). */
+const seedLine = seed => (seed ? ["seed:" + seed] : []);
+const lines = (domain, fields) => enc.encode(domain + "\n" + fields.map(String).join("\n"));
+
+/* THE HASHES THE BYTES CARRY, and the forms they are taken of. Each is SHA-256, as lower-case hex, over a line naming what
+   is hashed and then the value, so one kind's hash is never another's. WebCrypto, which node and a Worker both have. */
+const HASH_LINES = Object.freeze({
+  org: "etiuda-licence-org",
+  nonce: "etiuda-licence-signin-nonce",
+});
+const toHex = buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, "0")).join("");
+async function sha256Hex(bytes) {
+  return toHex(await globalThis.crypto.subtle.digest("SHA-256", typeof bytes === "string" ? enc.encode(bytes) : bytes));
+}
+const hashLine = (kind, value) => sha256Hex(kind + "\n" + value);
+
+/* Crockford base32, the symbols a person's sign-in code is written in (core.mjs makeSeatCode). */
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/** The quiet check: the lead, t, and the team proof keys it registers (sorted, comma-joined; empty when it registers none,
+ *  which leaves what is registered as it was, and "-" when it clears them). Signed by the lead. */
+const checkBytes = ({ lead, t, proofs }) => lines(DOMAINS.check,
+  [lead, t, proofs === undefined ? "" : proofs.length === 0 ? "-" : proofs.slice().sort().join(",")]);
+/** The grant fetch: the lead whose grant is asked for, the proof key that signs, t. Signed by the proof key, which is the
+ *  lead's own or one the lead registered at a check. */
+const grantFetchBytes = ({ lead, proof, t }) => lines(DOMAINS.grantFetch, [lead, proof, t]);
+/** Sign-in (board 980, stage 1): the provider's id, the SHA-256 of the ID token as the provider issued it (tokenHash, so a
+ *  signature written to a log carries no token), the lead, t. Signed by the lead. */
+const signinBytes = ({ provider, tokenHash, lead, t, member, seed }) => lines(DOMAINS.signin, [provider, tokenHash, lead, t].concat(member === undefined ? [] : [member], seedLine(seed)));
+/** A desk person's proof a lead once forwarded to seat/desk, a route now gone: the desk signs in itself (signinDeskBytes). Kept on
+ *  purpose, with its line, so request-vector.json's entry stays as it was and no other route's signature can ever be one for it. */
+const seatDeskBytes = ({ tokenHash, lead, t }) => lines(DOMAINS.seatDesk, [tokenHash, lead, t]);
+/** A desk's own sign-in and its renewal (board 980, the person's own sign-in): the provider's id, the ID token's SHA-256, the
+ *  desk's Ed25519 public half (the key its team's roster names it by), t. Signed by the desk's key, to which a first sign-in's
+ *  token is bound by its nonce, signinNonce(desk, seed). */
+const signinDeskBytes = ({ provider, tokenHash, desk, t, seed }) => lines(DOMAINS.signinDesk, [provider, tokenHash, desk, t].concat(seedLine(seed)));
+/** A lead admitting a person to its licence by the person's sign-in code: the code, the lead, t. Signed by the lead. */
+const personAdmitBytes = ({ code, lead, t }) => lines(DOMAINS.personAdmit, [code, lead, t]);
+/** A lead withdrawing a person's admission by name from its licence (night decision 22): the person as the service named them to
+ *  this lead (person/admit's and a seat certificate's per-licence pseudonym), the lead, t. Signed by the lead. */
+/* With `team` (board 1017's B: off that one team only), the team's line after the person's; without it, the bytes as they always were. */
+const personWithdrawBytes = ({ person, team, lead, t }) => lines(DOMAINS.personWithdraw, team === undefined ? [person, lead, t] : [person, team, lead, t]);
+/** A lead setting the doors of the relay teams it leads (board 980, the door-finding; Max's yeses of 2026-11-12 18:46 and 18:57):
+ *  the lead, t, the number of doors, then each door's team id, relay team id, relay address, the lead key's id and the lead's box,
+ *  one a line, the doors in the order of their team ids, so the same set is the same bytes whatever order it was sent in. An empty
+ *  list clears them. Signed by the lead. A relay address holds no whitespace (core.mjs DOOR_URL_RE), so no field holds a newline. */
+/* A TEAM'S NAME (the one act): where any door in the set carries a label, each door's lines end with "label:" and its label (empty for
+   one without), so a set without labels is the bytes it was; a label holds no newline (core.mjs labelOk), and no other field begins so. */
+const doorSetBytes = ({ lead, t, doors }) => { const labelled = doors.some(d => d.label !== undefined);
+  return lines(DOMAINS.doorSet, [lead, t, doors.length].concat(doors.slice()
+    .sort((a, b) => (String(a.team) < String(b.team) ? -1 : String(a.team) > String(b.team) ? 1 : 0))
+    .flatMap(d => [d.team, d.rt, d.url, d.keyId, d.box].concat(labelled ? ["label:" + (d.label === undefined ? "" : d.label)] : [])))); }; /* plant:door-label-bytes */
+/** The owner naming a person to a lead seat on its licence by the person's sign-in code (a team is its lead's own): the code,
+ *  the lead, t. Signed by the owner's key. */
+const leadNameBytes = ({ code, lead, t }) => lines(DOMAINS.leadName, [code, lead, t]);
+/* The named person's own Accept of a naming (lead/accept): their own key and the time alone; the naming is the one their key's person holds. */
+const leadAcceptBytes = ({ lead, t }) => lines(DOMAINS.leadAccept, [lead, t]);
+/** The owner setting its licence's switch (decision 47's addition): "1" where colleagues' desks are seated by themselves, "0"
+ *  where only people admitted are, the lead, t. Signed by the owner's key. */
+const licenceSetBytes = ({ orgDesks, lead, t }) => lines(DOMAINS.licenceSet, [orgDesks === true ? "1" : "0", lead, t]);
+/** The administrator's card on a licence whose seats follow Entra (decision 49): the provider, the ID token's hash, the Studio key,
+ *  t. Signed by that Studio key, which it binds to nothing. */
+const licenceAdminBytes = ({ provider, tokenHash, lead, t, seed }) => lines(DOMAINS.licenceAdmin, [provider, tokenHash, lead, t].concat(seedLine(seed)));
+/* THE MANAGED VARIANTS (decision 49, section 11.11): a request that carries the licence service's own access token beside the ID token
+   is signed over both tokens' hashes, under a line of its own, so an ordinary request's bytes stay as they were. */
+const signinManagedBytes = ({ provider, tokenHash, accessHash, lead, t, member, seed }) => lines(DOMAINS.signinManaged, [provider, tokenHash, accessHash, lead, t].concat(member === undefined ? [] : [member], seedLine(seed)));
+const signinDeskManagedBytes = ({ provider, tokenHash, accessHash, desk, t, seed }) => lines(DOMAINS.signinDeskManaged, [provider, tokenHash, accessHash, desk, t].concat(seedLine(seed)));
+const signinRenewManagedBytes = ({ provider, tokenHash, accessHash, lead, t, member }) => lines(DOMAINS.signinRenewManaged, [provider, tokenHash, accessHash, lead, t].concat(member === undefined ? [] : [member]));
+const licenceAdminManagedBytes = ({ provider, tokenHash, accessHash, lead, t, seed }) => lines(DOMAINS.licenceAdminManaged, [provider, tokenHash, accessHash, lead, t].concat(seedLine(seed)));
+/* THE POOLED VARIANTS (decision 49, section 12.2 point 3): a desk whose machine policy sets NonPersistent sends `pooled: true`, and
+   signs it under a line of its own, so the claim cannot be added to or taken from a request in flight and an ordinary request's
+   bytes stay as they were. The fields are the plain and managed desk forms' own, in the same order. */
+const signinDeskPooledBytes = ({ provider, tokenHash, desk, t, seed }) => lines(DOMAINS.signinDeskPooled, [provider, tokenHash, desk, t].concat(seedLine(seed)));
+const signinDeskManagedPooledBytes = ({ provider, tokenHash, accessHash, desk, t, seed }) => lines(DOMAINS.signinDeskManagedPooled, [provider, tokenHash, accessHash, desk, t].concat(seedLine(seed)));
+/** A Studio key's own id, as Studio's src/sign.mjs keyIdFor makes it: "studio-" and the first 16 hex of the SHA-256 of the public
+ *  half's bytes. A door names its lead key by this id and no other (the test architect's read of the door-finding), so the id a desk
+ *  pins is never a claim the lead made up. */
+const leadKeyId = async pubHex => "studio-" + (await sha256Hex(Uint8Array.from(String(pubHex).match(/../g) || [], h => parseInt(h, 16)))).slice(0, 16);
+/** A desk signing out (night decision 20 (a)): the desk's public half, t. Signed by the desk's key; frees that computer's place
+ *  among its person's three, the person's seat staying theirs. */
+const signoutDeskBytes = ({ desk, t }) => lines(DOMAINS.signoutDesk, [desk, t]);
+/** A lead asking for the people of its licence's organisations who signed in on a desk (the Team screen's list): the lead, t.
+ *  Signed by the lead. */
+const personListBytes = ({ lead, t }) => lines(DOMAINS.personList, [lead, t]);
+/** A seat certificate's signed bytes: its format, the licence's public reference, the desk key, the person's per-licence
+ *  pseudonym, the person's code, issued and until (ms), and the key id that signs, then the line "desk-only" where the
+ *  certificate says deskOnly: true (a desk-only licence's), and nothing where it does not, so every other is as before.
+ *  Signed by the service's delegated key; a
+ *  lead's Studio checks it under the delegation (src/desk-seat.mjs restates these bytes, held equal by tests/desk-seats.mjs). */
+/* `pooled`, only ever true, marks a pooled desk's certificate for the relay's grace (relay/core.cjs POOLED_GRACE_MS): the line "pooled"
+   after the key id, before any "desk-only"; `member`, only ever true, marks a Studio's certificate for its member key (core.mjs
+   memberCertificate), the line "member" last; without any the bytes are as before. */
+const seatCertBytes = c => lines(DOMAINS.seatCert, [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig && c.sig.keyId]
+  .concat(c.pooled === true ? ["pooled"] : []) /* plant:seat-cert-pooled */
+  .concat(c.deskOnly === true ? ["desk-only"] : []) /* plant:seat-cert-desk-only */
+  .concat(c.member === true ? ["member"] : [])); /* plant:seat-cert-member */
+/** The doors handed beside a seat certificate, signed by the key that signed it (decision 35): the certificate's signature value,
+ *  so they belong to that certificate alone, the number of doors, then each door's team id, relay team id, relay address, lead key
+ *  id, lead key and box, one a line, in the order handed. The desk restates these bytes (the engine's shell/main.js
+ *  signinDoorsSigned), held equal by tests/licence-service.mjs s104. */
+const seatDoorsBytes = ({ certificate, doors }) => lines(DOMAINS.seatDoors, [certificate.sig.value, doors.length]
+  .concat(doors.flatMap(d => [d.team, d.rt, d.url, d.keyId, d.lead, d.box])));
+/** An ID token's hash as the sign-in bytes carry it: plain SHA-256 of the token's own characters, as lower-case hex. */
+const tokenHash = idToken => sha256Hex(String(idToken));
+/* AN ORGANISATION a licence admits, as kept: a provider's id and the organisation's own value (Microsoft's tenant id,
+   Google's hd domain, lower case), under the line HASH_LINES.org, plain SHA-256 so that the admin script that attaches an
+   invoice's seats finds it without the Worker's HASH_KEY (core.mjs, ORGANISATIONS). */
+const orgHash = (provider, value) => hashLine(HASH_LINES.org, String(provider) + "\n" + String(value).toLowerCase());
+/** A lead freeing a seat at once (board 980, the join; Claude alpha's decision 14): the seat's kind, "lead" or "desk", the
+ *  person as the service named them to this lead (the per-licence pseudonym), the lead, t. Signed by the lead. */
+const seatFreeBytes = ({ kind, person, lead, t }) => lines(DOMAINS.seatFree, [kind, person, lead, t]);
+/** The owner or a co-lead naming who stays when a kind's seats in force fall below the people seated (Claude alpha's ruling of
+ *  2026-11-18): the kind ("lead" or "desk"), how many persons, then each person in the order named (the per-licence pseudonym the
+ *  lead's list gives, the same hex for a desk and for a lead), the lead, t. The order is the choice's order, oldest first, so the
+ *  same names in another order are other bytes. An empty list is a count of 0 and no person line, which clears the choice. Signed
+ *  by the lead. Studio's client (piece c) signs these bytes and no others. */
+const seatStayBytes = ({ kind, persons, lead, t }) => lines(DOMAINS.seatStay, [kind, persons.length].concat(persons, [lead, t]));
+/** A quiet renewal of a lead seat (board 980, stage H; Claude alpha's decision 15): the provider's id, the refreshed ID token's
+ *  SHA-256, the lead, t. Signed by the Studio key already bound to that seat, since a refreshed token carries no nonce. */
+/** `member`, where given, is the Studio's member key (src/member.mjs), certified beside the lead key on a licence whose seats follow
+ *  Entra; signin's and this one's bytes gain it as a last line, and without it are as before. */
+const signinRenewBytes = ({ provider, tokenHash, lead, t, member }) => lines(DOMAINS.signinRenew, [provider, tokenHash, lead, t].concat(member === undefined ? [] : [member]));
+/** A person asking to be erased (section 13; Claude alpha's decision 50): the provider's id, the fresh ID token's SHA-256, the key
+ *  that asks (a desk's or a Studio's public half, whose signinNonce the token carries), t. Signed by that key. */
+const personEraseBytes = ({ provider, tokenHash, key, t }) => lines(DOMAINS.personErase, [provider, tokenHash, key, t]);
+/** A signed-in desk asking for its person's store grant (section 14.12): the desk's public half, the store's relay team id, the store's
+ *  lead key S's public half, t; then "company" where the desk's policy makes it the company's store, and "replace" where this desk made
+ *  the store because the folder held none, so it replaces the person's others. Signed by the desk. */
+const storeGrantBytes = ({ desk, rt, lead, t, company, replace }) => lines(DOMAINS.storeGrant, [desk, rt, lead, t]
+  .concat(company === true ? ["company"] : [], replace === true ? ["replace"] : []));
+/** A signed-in desk ending its person's store everywhere: the desk's public half, the store's relay team id, t. Signed by the desk. */
+const storeEndBytes = ({ desk, rt, t }) => lines(DOMAINS.storeEnd, [desk, rt, t]);
+/* THE ONE ACT (part S2). A team absent is the line "-", which no team id (t- and 16 hex) is. */
+/** A signed-in person asking a lead: the asking key's kind ("desk" or "studio"), the key, the licence's public reference, the lead as the
+ *  sign-in answer named them (the per-licence pseudonym), the team or "-", t. Signed by the asking key. */
+const askBytes = ({ kind, key, licence, lead, team, t }) => lines(DOMAINS.ask, [kind, key, licence, lead, team || "-", t]);
+/** The asker's status, and the asker taking their open ask back: the kind, the key, t. Signed by the asking key. */
+const askStatusBytes = ({ kind, key, t }) => lines(DOMAINS.askStatus, [kind, key, t]);
+const askBackBytes = ({ kind, key, t }) => lines(DOMAINS.askBack, [kind, key, t]);
+/** A lead refusing an ask: the ask's id, the lead, t; the administrator passing one to a lead beneath: the id, that lead's pseudonym, the
+ *  administrator's key, t. Signed by the lead's key. */
+const askRefuseBytes = ({ ask, lead, t }) => lines(DOMAINS.askRefuse, [ask, lead, t]);
+const askPassBytes = ({ ask, to, lead, t }) => lines(DOMAINS.askPass, [ask, to, lead, t]);
+/** A lead inviting an address, and withdrawing it: the address as sent, the team or "-" (invite only), the lead, t. An address holds no
+ *  newline (core.mjs addressOf). Signed by the lead's key. */
+const inviteBytes = ({ address, team, lead, t }) => lines(DOMAINS.invite, [address, team || "-", lead, t]);
+const inviteWithdrawBytes = ({ address, lead, t }) => lines(DOMAINS.inviteWithdraw, [address, lead, t]);
+/** A lead withdrawing an invitation by the handle invite and person/list answered (32 hex), the lead, t. Signed by the lead's key. */
+const inviteWithdrawHandleBytes = ({ invite, lead, t }) => lines(DOMAINS.inviteWithdrawHandle, [invite, lead, t]);
+/** The owner naming a lead (board 1017): by an address as sent (no newline, core.mjs addressOf), or by the person's pseudonym on its licence
+ *  (64 hex); withdrawing a naming by address by its handle (32 hex); confirming a candidate of one: the handle, the candidate's pseudonym.
+ *  Each then the lead, t, and signed by the owner's key. */
+const leadNameAddressBytes = ({ address, lead, t }) => lines(DOMAINS.leadNameAddress, [address, lead, t]);
+const leadNamePersonBytes = ({ person, lead, t }) => lines(DOMAINS.leadNamePerson, [person, lead, t]);
+const leadNameWithdrawBytes = ({ naming, lead, t }) => lines(DOMAINS.leadNameWithdraw, [naming, lead, t]);
+const leadConfirmBytes = ({ naming, person, lead, t }) => lines(DOMAINS.leadConfirm, [naming, person, lead, t]);
+/** A lead accepting an ask (person/admit by an ask, its own line, so a code's bytes stay as they were): the ask's id, the team or "-", the
+ *  lead, t. Signed by the lead's key. */
+const personAdmitAskBytes = ({ ask, team, lead, t }) => lines(DOMAINS.personAdmitAsk, [ask, team || "-", lead, t]);
+/** The owner of a licence asking for its lead seats by their codes (stage H): the lead, t. Signed by the lead. */
+const seatListBytes = ({ lead, t }) => lines(DOMAINS.seatList, [lead, t]);
+/** The vendor asking for an organisation as admits keeps it, keyed (stage H): the provider's id, the organisation's own value
+ *  in lower case, t. Signed by a root key, so nobody else can ask the service to hash a guess. */
+const adminOrgBytes = ({ provider, org, t }) => lines(DOMAINS.adminOrg, [provider, String(org).toLowerCase(), t]);
+/** The vendor asking for an address as an invitation or a naming keeps it, keyed (scripts/erase-person.mjs, for a person who can no longer
+ *  sign in): the address as given, t. Signed by a root key, as admin/org is, so nobody else can have a guess hashed. */
+const adminAddressBytes = ({ address, t }) => lines(DOMAINS.adminAddress, [address, t]);
+/* THE SIGN-IN'S NONCE, BOUND TO THE KEY THAT SIGNS (board 980, the join): the SHA-256, as lower-case hex, of a line naming it,
+   the lead's public half and a fresh random seed of 64 lower-case hex. Studio sends the nonce in the provider's authorization
+   request and the seed beside the ID token; the service recomputes it from the signed lead, so a token captured for one Studio
+   key is no token for another (the open gap of stage 1's report). Nothing in it is secret. A desk's sign-in makes its nonce the
+   same way of its own public key and seed, which signin/desk recomputes from the desk key that signed. */
+const signinNonce = (lead, seed) => hashLine(HASH_LINES.nonce, String(lead) + "\n" + String(seed));
+
+export { DOMAINS, HASH_LINES, CROCKFORD, checkBytes,
+  grantFetchBytes, signinBytes, seatDeskBytes, signinDeskBytes, signoutDeskBytes, personListBytes, personAdmitBytes, personWithdrawBytes, doorSetBytes, leadNameBytes, leadAcceptBytes, licenceSetBytes, licenceAdminBytes, signinManagedBytes, signinDeskManagedBytes, signinRenewManagedBytes, licenceAdminManagedBytes, signinDeskPooledBytes, signinDeskManagedPooledBytes, personEraseBytes, storeGrantBytes, storeEndBytes, askBytes, askStatusBytes, askBackBytes, askRefuseBytes, askPassBytes, inviteBytes, inviteWithdrawBytes, inviteWithdrawHandleBytes, leadNameAddressBytes, leadNamePersonBytes, leadNameWithdrawBytes, leadConfirmBytes, personAdmitAskBytes, leadKeyId, seatCertBytes, seatDoorsBytes, seatFreeBytes, seatStayBytes, signinRenewBytes, seatListBytes, adminOrgBytes, adminAddressBytes, signinNonce, tokenHash, orgHash,
+  sha256Hex, hashLine, toHex };

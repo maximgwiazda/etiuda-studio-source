@@ -1,0 +1,277 @@
+# Studio's gates, on a machine that is not this desk.
+#
+# WHY. Every gate here has only ever run in one place: a Windows desk with the engine checked out
+# beside Studio, node_modules already present, and a built product in a sibling folder. A gate
+# that needs one of those and passes because the desk happens to have it is a green for the wrong
+# reason. A clean clone has none of them, and this file is where that difference is measured.
+#
+# THE FIRST THING IT PROVES is the pin. Studio holds no copy of the engine, only a commit hash
+# and tools/engine-fetch.mjs. On the desk that fetch reads the sibling checkout's object database;
+# here there is no sibling, so it mirrors the public engine remote and reads the blobs out of the
+# mirror. That arm is unreachable on the one desk that has a checkout, and an arm that cannot be
+# reached cannot be proved, so it is proved here. The step asserts the fetch's own line says
+# "bare mirror of": a run whose fetch found a checkout is a run that proved nothing about a clean
+# clone, and it goes red rather than quietly passing.
+#
+# WHAT RUNS is the ten gates that need nothing but the tree and that remote - nine when this was
+# written, and adapt joined at 92d769f without this sentence being touched, which is what a count
+# in prose does. Eight of them were measured in a clean clone on a scratch path with no sibling
+# engine, 2026-09-17, after npm ci and one fetch; acceptance was added on 2026-09-20 with board 606
+# and is 1.9 s on the desk, unmeasured in a clean clone, and adapt is unmeasured in one too. Both
+# are here because they need exactly what review needs - the tree, the pin and the fixture
+# generator - and nothing a runner has to be assumed to have:
+#
+#     eol-attrs 86/86 in 0.2 s   drift 0 problems in 4.3 s   lint-pairs 7 asserted 5 not run
+#     import 31/0 in 19.5 s      publish 30/0 in 5.0 s       review 37/0 in 3.0 s
+#     export-csv 6/0 in 5.1 s    launch-door 7/0 in 0.3 s    all eight, 38 s
+#
+# WHAT STANDS DOWN, and it says so in the job summary rather than passing quietly:
+#
+#   the screen suites, tests/shell-launch.mjs and tests/installer.mjs open a real Electron window
+#     or install the product. Their claim is a painted screen. Whether one paints on a runner has
+#     not been driven and read back from this desk, and a check whose environment is assumed is
+#     the thing this file exists to catch, so they stay on the desk and in the desk's own pass.
+#   tests/round-trip.mjs drives an installed engine desk, which no runner has.
+#
+# THE NAME SCAN does not arise here and must not be made to. It lives in tools/pre-commit, it is
+# installed by hand as a git hook, hooks are not cloned, and the list it reads sits inside .git,
+# which no clone carries, because a list of words that may not be published is itself a thing that
+# may not be published. No step below invokes it and none may be changed to.
+#
+# THE ELECTRON BINARY IS NOT DOWNLOADED. npm ci still installs the whole lock file, 326 packages,
+# and still fails on a lock that does not install; ELECTRON_SKIP_BINARY_DOWNLOAD only skips the
+# 100 MB postinstall for a binary nothing below launches. Measured both ways in the clean clone:
+# exit 0, node_modules/electron/dist empty, and the eight gates green with it empty.
+#
+# THE BUDGET is ten minutes of a private repository's free Actions quota. The gates are 38 s on
+# this desk; the rest is checkout, setup-node and npm ci. timeout-minutes is the hard stop.
+#
+# AND A LINUX JOB, board item 629, added 2026-09-20. WHY A SECOND JOB RATHER THAN A MATRIX: the
+# two jobs do not run the same list and never will. The Windows job's fifteen steps include nine
+# gates that could in principle be joined by the screen suites one day; the Linux job's list is
+# the gates that hold nothing platform-shaped at all, and the difference between the lists is the
+# finding rather than an inconvenience. A matrix would hide it behind an `if`.
+#
+# WHAT THE LINUX JOB IS FOR, and it is not coverage. Every one of these ten gates already runs on
+# the Windows job, so a green here adds no assertion about the product. What it adds is an answer
+# to a question nobody could answer before: whether the harness itself carries a Windows assumption
+# that nothing here has noticed, because the desk that runs it always satisfies the assumption.
+# Measured on this desk 2026-09-20 with process.platform patched to linux, all ten passed with the
+# same counts as the Windows run, to the assertion - but a patched platform does NOT reach a child
+# process, so a patch can see a path built in Node and cannot see a spawn of cmd.exe, a taskkill or
+# electron-builder. This job is what sees those, and until it has run once, that half is unproved
+# and says so.
+#
+# THE NOTICE IS A STEP OF ITS OWN and it runs with if: always(), because the thing it says is what
+# a green here means, and a green is exactly when a reader stops reading. `node tests/off-windows.mjs`
+# prints nothing on Windows and the seven-item list off it, so the same step in both jobs writes
+# the difference into the summary without an `if` deciding anything.
+#
+# NO ELECTRON BINARY HERE EITHER, same reason and the same variable: nothing in this list launches
+# one, and the ten gates were measured green with node_modules/electron/dist empty on the Windows
+# job already.
+name: gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      # E6 (tests/licence-service.mjs) reads its base's service files from tests/fixtures/e6-base, so a depth-1 checkout needs no
+      # fetch for it (2026-11-23: the tree is published without its history).
+
+      # The pin, and the assertion that it came from the remote rather than from something this
+      # runner happened to have. bash rather than the default shell, because Actions runs it with
+      # -eo pipefail, so a red node still fails the step through the pipe into tee.
+      - name: the pin, from the public engine remote
+        shell: bash
+        run: |
+          node tools/engine-fetch.mjs 2>&1 | tee gate-engine-fetch.log
+          grep -q 'from the bare mirror of' gate-engine-fetch.log || {
+            echo 'the fetch did not read the remote, so this run proves nothing about a clean clone'
+            exit 1
+          }
+
+      - name: drift
+        shell: bash
+        run: node tests/drift.mjs 2>&1 | tee gate-drift.log
+
+      - name: eol-attrs
+        shell: bash
+        run: node tests/eol-attrs.mjs 2>&1 | tee gate-eol-attrs.log
+
+      - name: lint-pairs
+        shell: bash
+        run: node tests/lint-pairs.mjs 2>&1 | tee gate-lint-pairs.log
+
+      - name: import
+        shell: bash
+        run: node tests/import.mjs 2>&1 | tee gate-import.log
+
+      - name: publish
+        shell: bash
+        run: node tests/publish.mjs 2>&1 | tee gate-publish.log
+
+      - name: review
+        shell: bash
+        run: node tests/review.mjs 2>&1 | tee gate-review.log
+
+      - name: acceptance
+        shell: bash
+        run: node tests/acceptance.mjs 2>&1 | tee gate-acceptance.log
+
+      - name: export-csv
+        shell: bash
+        run: node tests/export-csv.mjs 2>&1 | tee gate-export-csv.log
+
+      - name: launch-door
+        shell: bash
+        run: node tests/launch-door.mjs 2>&1 | tee gate-launch-door.log
+
+      - name: adapt
+        shell: bash
+        run: node tests/adapt.mjs 2>&1 | tee gate-adapt.log
+
+      # A green run says out loud which halves of it were not checked, and which gates were never
+      # asked. if: always(), so a red run says it too.
+      - name: what did not run
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Not checked in this run'
+            grep -h 'NOT RUN' gate-*.log || echo 'no NOT RUN line in any gate log'
+            echo ''
+            echo '### Gates this job never asks for, and why'
+            echo '- the screen suites, shell-launch and installer: they open a real Electron window'
+            echo '  or install the product, and no run here has driven one. They stay on the desk.'
+            echo '- round-trip: it drives an installed engine desk, which no runner has.'
+            echo '- the name scan: it is a hand-installed hook reading a list inside .git, and a'
+            echo '  runner is the last place to hand that list.'
+            echo ''
+            echo '### What a run off Windows has not looked at'
+            node tests/off-windows.mjs || echo 'the notice command refused'
+            echo '(empty above means this job ran on Windows, which is the whole of what it says)'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # THE SAME TREE-ONLY GATES ON LINUX. See the header: this job adds no assertion about the
+  # product and one about the harness, which is whether any of these carries a Windows assumption
+  # a patched process.platform on the desk could not see.
+  gates-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      # E6 (tests/licence-service.mjs) reads its base's service files from tests/fixtures/e6-base, so a depth-1 checkout needs no
+      # fetch for it (2026-11-23: the tree is published without its history).
+
+      - name: the pin, from the public engine remote
+        shell: bash
+        run: |
+          node tools/engine-fetch.mjs 2>&1 | tee gate-engine-fetch.log
+          grep -q 'from the bare mirror of' gate-engine-fetch.log || {
+            echo 'the fetch did not read the remote, so this run proves nothing about a clean clone'
+            exit 1
+          }
+
+      - name: drift
+        shell: bash
+        run: node tests/drift.mjs 2>&1 | tee gate-drift.log
+
+      - name: eol-attrs
+        shell: bash
+        run: node tests/eol-attrs.mjs 2>&1 | tee gate-eol-attrs.log
+
+      - name: lint-pairs
+        shell: bash
+        run: node tests/lint-pairs.mjs 2>&1 | tee gate-lint-pairs.log
+
+      - name: import
+        shell: bash
+        run: node tests/import.mjs 2>&1 | tee gate-import.log
+
+      - name: publish
+        shell: bash
+        run: node tests/publish.mjs 2>&1 | tee gate-publish.log
+
+      - name: review
+        shell: bash
+        run: node tests/review.mjs 2>&1 | tee gate-review.log
+
+      - name: acceptance
+        shell: bash
+        run: node tests/acceptance.mjs 2>&1 | tee gate-acceptance.log
+
+      - name: export-csv
+        shell: bash
+        run: node tests/export-csv.mjs 2>&1 | tee gate-export-csv.log
+
+      # THE ONE GATE THIS JOB EXISTS FOR AS MUCH AS FOR THE REST. It drives tests/installer.mjs,
+      # which off Windows must declare itself NOT RUN in under a second rather than reaching for
+      # electron-builder, and it holds tests/off-windows.mjs's own figures to the tree. On this
+      # runner the drive needs no patched platform: the platform is the real one.
+      - name: launch-door
+        shell: bash
+        run: node tests/launch-door.mjs 2>&1 | tee gate-launch-door.log
+
+      - name: adapt
+        shell: bash
+        run: node tests/adapt.mjs 2>&1 | tee gate-adapt.log
+
+      # THE INSTALLER GATE, ASKED FOR ON PURPOSE, because the answer is the point: off Windows it
+      # must print NOT RUN and exit 0 without building anything. A step that went red here would
+      # mean the not-run path had rotted, and one that took a minute would mean it had moved below
+      # the build. Nothing else in this job costs a minute, so the wall-clock is legible.
+      - name: installer says it did not run
+        shell: bash
+        run: node tests/installer.mjs 2>&1 | tee gate-installer.log
+
+      - name: what did not run
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Not checked in this run'
+            grep -h 'NOT RUN' gate-*.log || echo 'no NOT RUN line in any gate log'
+            echo ''
+            echo '### What a run off Windows has not looked at'
+            node tests/off-windows.mjs || echo 'the notice command refused'
+            echo ''
+            echo '### Gates this job never asks for, and why'
+            echo '- every suite that opens an Electron window: no run anywhere has driven one off'
+            echo '  Windows, and a window that has never been driven is not a window this job may'
+            echo '  assume. They stay on the desk and in the desk/Windows pass.'
+            echo '- round-trip: it drives an installed engine desk, which no runner has.'
+            echo '- release, catalog-sig, request, icons, licence: they run on the Windows job and'
+            echo '  none of them is what this job is for, which is the harness rather than the'
+            echo '  product. Adding one is a line here and a measurement beside it.'
+          } >> "$GITHUB_STEP_SUMMARY"

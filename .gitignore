@@ -1,0 +1,14 @@
+node_modules/
+scratch/
+*-catalog.js
+*-catalog.json
+catalogs/
+*.ec
+.env
+engine/pinned/
+*.7z
+.wrangler/
+.plant-hold/
+dist/
+.signin/
+agy-brief-*.md

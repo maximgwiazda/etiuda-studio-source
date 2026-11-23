@@ -1,0 +1,234 @@
+# Studio's area, run on hosted Windows machines instead of the desk, cut into shards.
+#
+# NEVER RUN WITHOUT CLAUDE ALPHA'S WORD. This repository is private, so every minute here is billed
+# against its Actions quota, and a Windows minute counts double. Built 2026-11-22 and not run: no
+# branch named below has been pushed, nothing has dispatched it, and no line of it has been read
+# back from a runner. Each run is asked for, by name, before the push that starts it.
+#
+# THE MODEL is the engine's .github/workflows/hosted-area.yml, read and run there from 2026-11-17.
+# Where this file differs, it says why beside the difference.
+#
+# WHY. The desk takes two heavy runs at a time while its owner works at it, and a built piece then
+# waits for a lane. A hosted machine runs the same command the desk runs, `node tools/gate-run.mjs
+# area <base>`, on the same tree, and the desk stays free. An area is long because its gates run one
+# after another; here its plan is cut into SHARDS machines, each given every SHARDS-th gate
+# (ETIUDA_AREA_SHARD, tools/gate-run.mjs), so the wall-clock is the slowest shard's and not the sum.
+#
+# WHEN IT RUNS. Only on a push to a branch whose name begins `hosted-test-`. Such a branch exists
+# only to be tested: the tree under test with this file on top, pushed through the same guard and
+# scan as any push, read, and deleted. Nothing here runs on main, on a pull request or on a tag.
+#
+# WHAT IT RUNS. The node gates the area names for the diff against where the branch left main. A
+# window gate is left out by gate-run itself (walled: ETIUDA_WINDOWS is never set here), and no
+# installer runs. No fixture, no name list and no secret reaches a runner: ETIUDA_FIXTURES is unset,
+# so the catalog halves say NOT RUN, as in gates.yml.
+#
+# THE ENGINE COPY comes as gates.yml brings it: tools/engine-fetch.mjs, with no sibling checkout on
+# a runner, mirrors the public engine remote into scratch/engine-mirror.git and reads the pin's
+# blobs out of it, and the step goes red unless the fetch's own line says "from the bare mirror of".
+# Every gate that later asks tools/engine-fetch.mjs for the engine finds that mirror.
+#
+# THE ELECTRON BINARY IS DOWNLOADED, unlike gates.yml. gates.yml's ten gates launch nothing; an
+# area's node gates include legs that build or read an unpacked app from node_modules/electron/dist
+# (tests/sign-all.mjs, tests/sbom.mjs), so skipping it would make them red for the runner's reason.
+#
+# WHAT IS LEFT TO THE DESK, by name, and said in every shard's log and in the joined summary: a gate
+# that needs what no runner is ever handed (the name list in .git, see gates.yml THE NAME SCAN; a
+# catalog through ETIUDA_FIXTURES) or what only the desk has. The list is DESK_ONLY below; an entry
+# is added only with its reason beside it. The engine's list was read off its runs; this one is read
+# off the tree, since nothing here has run, and the first run's reds are what will correct it.
+#
+# THE LOGS LIVE OUTSIDE THE CHECKOUT, in runner.temp\hosted. gate-run reads the tree as git ls-files -co
+# --exclude-standard, and this repository ignores no *.log as the engine's does, so a log teed into the
+# checkout is an untracked file: the first run read "the tree is not a clean
+# commit" in every shard for engine-fetch.log and shard.log, and shard.log, growing while each shard's
+# first gate ran, was the one file every shard named under "the tree moved", NO VERDICT, eight times.
+# The step "the tree reads clean" says so before any gate runs, naming the paths.
+#
+# WHAT A GREEN HERE IS NOT. A shard is not an area: nothing on the desk inherits a green from it, and
+# its records stay on the runner. And it is not the desk's run until the two have been read side by
+# side: a gate red here and green there, or the other way, is named before this is trusted.
+name: hosted-area
+
+on:
+  push:
+    branches: ['hosted-test-**']
+  # tools/publish-tree.mjs dispatches the area on the public repository for the branch it pushed, naming the private commit
+  # the tree came from. GitHub finds a dispatchable workflow on the default branch, so the first published tree lands on main.
+  workflow_dispatch:
+    inputs:
+      private_sha:
+        description: the commit of the private repository this tree was published from
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-area-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SHARDS: 8
+  # Each entry with its reason, read off the tree and then off the first run that reached a verdict:
+  #   tests/sbom.mjs: reads node_modules/electron/dist/version, which the engine's runner, set up as this one is (setup-node with
+  #   the npm cache, then npm ci), left absent; refused there, exit 78 (engine run 44286005787). Not measured for Studio.
+  #   tests/studio-one-line.mjs: reads single pixels of a one-pixel glass rim where it bends round a 12 px corner at 1x, in a
+  #   headless Chrome on a machine with no graphics card; there the corner's line is drawn dimmer than the leg's threshold (the
+  #   pop-up and the Paths panel read peaks of 36 and 32 against a ground of about 31, wanted above 41), while the same rim at
+  #   2x and every other surface pass. How a hairline is antialiased is the machine's raster path, and the desk, whose screen is
+  #   the eye's, is the oracle for it.
+  # Read off the first run and mended in the legs instead, so the desk keeps them whole: a deny ACE that does not stop the
+  # runner's account (tests/deny-binds.mjs: tests/folder-check.mjs fc3 and fc9, tests/shell-guards.mjs 7g, tests/stats-export.mjs
+  # sxe4 say SKIP with why there), and a machine with animations off reporting reduced motion (tests/review-door.mjs states no
+  # preference on its pages).
+  # Looked for and not entered: no node gate reads the real .git/etiuda-names (tests/scan-date.mjs writes its own list in a lab
+  # repository); tests/import.mjs reads ETIUDA_FIXTURES and says its catalog halves NOT RUN without it, green in gates.yml;
+  # tests/shipped-sample.mjs reads the sample from the pinned engine, not from fixtures; tests/round-trip.mjs, which drives an
+  # installed engine desk, is in no chain an area plans.
+  DESK_ONLY: tests/sbom.mjs,tests/studio-one-line.mjs
+
+jobs:
+  area:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      # Whole history: the base is a merge-base with main, or the tree before (see the shard). E6 reads its base from
+      # tests/fixtures/e6-base, so no commit of history is needed for it; in a repository of published trees the depth is harmless.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # Gates that commit in a scratch repository need an identity; a runner has none (engine run 44176389525).
+      - name: an identity for scratch commits
+        shell: bash
+        run: |
+          git config --global user.name "hosted test"
+          git config --global user.email "hosted-test@users.noreply.github.com"
+
+      - name: npm ci
+        shell: bash
+        run: |
+          s=$(date +%s)
+          npm ci
+          echo "#hosted shard=${{ matrix.shard }} npm-ci-s=$(( $(date +%s) - s ))"
+
+      # The pin, from the public engine remote, as gates.yml proves it: red unless the fetch read the mirror.
+      - name: the pin, from the public engine remote
+        shell: bash
+        env:
+          HOSTED_LOGS: ${{ runner.temp }}\hosted
+        run: |
+          s=$(date +%s)
+          mkdir -p "$HOSTED_LOGS"
+          node tools/engine-fetch.mjs 2>&1 | tee "$HOSTED_LOGS/engine-fetch.log"
+          grep -q 'from the bare mirror of' "$HOSTED_LOGS/engine-fetch.log" || {
+            echo 'the fetch did not read the remote, so this run proves nothing about a clean clone'
+            exit 1
+          }
+          echo "#hosted shard=${{ matrix.shard }} engine-fetch-s=$(( $(date +%s) - s ))"
+
+      # A clean checkout plus the fetched pin (engine/pinned/, ignored) and node_modules (ignored) is a clean commit, as gate-run
+      # reads one (gitTree: git status --porcelain, then no skip-worktree or assume-unchanged entry). Anything else here is the
+      # runner's or this file's, never the tree under test's, so it stops the shard before a gate and names the paths.
+      # Written to shard.log too, so the joined summary names a dirty shard rather than only counting its log missing.
+      - name: the tree reads clean
+        shell: bash
+        env:
+          HOSTED_LOGS: ${{ runner.temp }}\hosted
+        run: |
+          mkdir -p "$HOSTED_LOGS"
+          dirty=$( { git --no-optional-locks status --porcelain --untracked-files=normal --ignore-submodules=none; git ls-files -v | grep -E '^(S|[a-z]) ' || true; } )
+          if [ -n "$dirty" ]; then
+            { echo "#hosted shard=${{ matrix.shard }} tree NOT CLEAN before any gate:"; echo "$dirty" | sed 's/^/  FAIL dirty: /'; } | tee "$HOSTED_LOGS/shard.log"
+            exit 1
+          fi
+          echo "#hosted shard=${{ matrix.shard }} tree clean at $(git rev-parse 'HEAD^{tree}')"
+
+      # The base is where this branch left main, so the plan is the tree's own diff plus this branch's harness files.
+      - name: the shard
+        shell: bash
+        env:
+          HOSTED_LOGS: ${{ runner.temp }}\hosted
+          ETIUDA_LOCK_PATH: ${{ runner.temp }}\machine.lock
+          ETIUDA_RUNS: ${{ runner.temp }}\hosted\etiuda-runs
+          ETIUDA_AREA_SHARD: ${{ matrix.shard }}/${{ env.SHARDS }}
+          ETIUDA_AREA_DESK_ONLY: ${{ env.DESK_ONLY }}
+          # The whole plan every time: a shard's records carry no shard mark, so a resume could read another shard's greens as
+          # this one's.
+          ETIUDA_AREA_RESUME: 'off'
+        run: |
+          # A PUBLISHED TREE (tools/publish-tree.mjs) shares no history with the private repository, only with the trees
+          # published before it. On a branch off main the base is still where it left main. On main itself, or a branch at
+          # main's tip, it is the tree published before this one. With no tree before (the first), or no main at all, it is the
+          # empty tree: every file is in the diff and the plan fails closed to the whole chain. Never a base that resolves to
+          # nothing: gate-run then reads no changed file and plans only the floor.
+          log="$HOSTED_LOGS/shard.log"
+          mkdir -p "$HOSTED_LOGS" "$ETIUDA_RUNS"
+          base=$(git merge-base origin/main HEAD 2>/dev/null || true)
+          if [ "$base" = "$(git rev-parse HEAD)" ]; then base=$(git rev-parse -q --verify 'HEAD^' || true); fi
+          if [ -z "$base" ]; then base=$(git hash-object -t tree /dev/null); echo "#hosted no tree before this one: the base is the empty tree, so the plan is the whole tree"; fi
+          [ -n "${{ inputs.private_sha }}" ] && echo "#hosted published from ${{ inputs.private_sha }}"
+          echo "#hosted shard=${{ matrix.shard }} base=$base head=$(git rev-parse HEAD) tree=$(git rev-parse 'HEAD^{tree}') cores=$(nproc)" | tee "$log"
+          s=$(date +%s)
+          set +e
+          node tools/gate-run.mjs area "$base" 2>&1 | tee -a "$log"
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "#hosted shard=${{ matrix.shard }} exit=$code s=$(( $(date +%s) - s ))" | tee -a "$log"
+          exit $code
+
+      - name: the shard's records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}\hosted
+          if-no-files-found: warn
+          retention-days: 3
+
+  # The shards read as one: each shard's line, what was left to the desk, every gate's own result
+  # line and every FAIL line, in the job summary and the log. Red where any shard was.
+  joined:
+    needs: area
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: shards
+
+      - name: the area, joined
+        shell: bash
+        run: |
+          {
+            echo "## hosted area, ${{ env.SHARDS }} shards: ${{ needs.area.result }}"
+            echo '```'
+            find shards -name shard.log | sort > logs.txt
+            while read -r f; do
+              grep -h '^#hosted' "$f" || echo "#hosted NO LINES in $f"
+            done < logs.txt
+            echo "--- left to the desk"
+            xargs -a logs.txt cat | grep -h 'LEFT TO THE DESK' | sort -u || true
+            echo "--- gates"
+            xargs -a logs.txt cat | grep -h '^  gate-run: .*exit [0-9]* in [0-9]* ms' | sed 's/, tree .*//' | sort || true
+            echo "--- flakes (red, then green at the one rerun; each is named, none is counted)"
+            xargs -a logs.txt cat | grep -h 'gate-run: FLAKE ' || echo "none"
+            echo "--- reds"
+            xargs -a logs.txt cat | grep -hE '^  FAIL |^RESULT: FAIL|goes on after' || echo "none"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          n=$(wc -l < logs.txt)
+          if [ "$n" != "${{ env.SHARDS }}" ]; then echo "::error::$n of ${{ env.SHARDS }} shard logs arrived"; exit 1; fi
+          [ "${{ needs.area.result }}" = "success" ]

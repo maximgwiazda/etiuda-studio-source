@@ -1,0 +1,229 @@
+/* STRIPE, ONE OF THE PAYMENT CORE'S PROVIDERS (pay.mjs; Claude alpha's decision 48, the design's section 10, every Stripe fact read
+ * at Stripe's own pages on 2026-11-13 and cited there).
+ *
+ *     POST <API_PREFIX>pay/stripe      Stripe's event, its raw body signed in the Stripe-Signature header
+ *
+ * What is Stripe's own and nothing more; every write is pay.mjs's. It needs STRIPE_WEBHOOK_SECRET and STRIPE_API_KEY (Worker
+ * secrets: the endpoint's whsec_ secret, and a RESTRICTED key, rk_test_ or rk_live_, reading Checkout Sessions, Invoices, Invoice
+ * Payments, Subscriptions, Charges, Payment Intents, Payment Methods and Disputes and writing nothing), STRIPE_PRICES and
+ * STRIPE_VERSION (wrangler.toml: each price id to what it buys, and the API version pinned on every read, the event destination's
+ * own, 2025-03-31.basil or later for Managed Payments), and "stripe" in PAY_PROVIDERS.
+ *
+ * THE SIGNATURE: `Stripe-Signature: t=<s>,v1=<hex>[,v1=...]`, entries in any order and count, unknown ones accepted ("must accept
+ * unknown entries and must not depend on a fixed entry count or order"); each v1 the HMAC-SHA256, keyed by the endpoint's secret, of
+ * t, "." and the raw body; v0, sent on sandbox events, "isn't valid for signature verification" and is never read.
+ *
+ * THE BUYER rides only on the Checkout Session, as client_reference_id from the order page's Payment Link (a subscription's metadata
+ * reaches its invoices only as a snapshot), so checkout.session.completed binds the subscription to the code (pay.mjs bind), with
+ * whether the link was Managed Payments (managed_payments.enabled); invoice.paid reads the code from that binding, and a first one
+ * arriving before it answers 500 until Stripe's retry finds it bound ("doesn't guarantee the delivery of events in the order").
+ *
+ * THE EVENTS: invoice.paid is a payment, its invoice (status paid; billing_reason subscription_create, subscription_cycle or
+ * subscription_update, the last what proration_behavior always_invoice bills at once; every line a subscription item at a mapped
+ * price; the period's end the latest line's) and subscription (active or trialing) read back; customer.subscription.updated a
+ * status; customer.subscription.deleted a cancel (a Managed Payments data-deletion request ends one this way too); charge.refunded
+ * a refund, acted on only where refunded whole; charge.dispute.created held; charge.dispute.closed lost for the whole charge a chargeback, won or
+ * warning_closed listed and nothing else. A refund finds its invoice through the charge's payment intent, and one payment paying
+ * several invoices is held.
+ *
+ * THE COUNTRY (the design's 10.6): a first payment through a direct link (Managed Payments off) reads its payment method; a billing
+ * country other than PL is applied and listed "country:<billing>/<card>", a Polish address with a foreign card is not; a Managed
+ * Payments sale is never checked, Stripe being its seller.
+ */
+import { hmacHolds, joined } from "./pay.mjs";
+
+const STRIPE_API = "https://api.stripe.com/v1";
+const STRIPE_KEY_RE = /^rk_(test|live)_[A-Za-z0-9]{10,240}$/;
+const STRIPE_VERSION_RE = /^20[0-9]{2}-[0-9]{2}-[0-9]{2}\.[a-z]{3,20}$/;
+/* THE OLDEST VERSION READ RIGHT HERE: 2025-03-31.basil added invoices' parent.subscription_details and line items' pricing.price_details,
+   removing the old top-level fields (docs.stripe.com/changelog/basil/2025-03-31/adds-new-parent-field-to-invoicing-objects and
+   .../invoice-pricing-configurations), and Managed Payments needs it too; an older pin answers 500 rather than misread. */
+const STRIPE_VERSION_FLOOR = "2025-03-31";
+const STRIPE_KINDS = Object.freeze(["lead", "desk", "desk-only"]);
+const STRIPE_ORIGINS = Object.freeze({ subscription_create: "first", subscription_cycle: "renewal", subscription_update: "rise" });
+const STRIPE_EVENTS = Object.freeze({ "checkout.session.completed": "bind", "invoice.paid": "payment", "customer.subscription.updated": "status",
+  "customer.subscription.deleted": "cancel", "charge.refunded": "refund", "charge.dispute.created": "refund", "charge.dispute.closed": "refund" });
+/* Stripe's ids: a prefix and letters and digits (Checkout Sessions carry cs_test_ or cs_live_). */
+const SID = Object.freeze({ evt: /^evt_[A-Za-z0-9]{8,64}$/, cs: /^cs_(test|live)_[A-Za-z0-9]{8,120}$/, in: /^in_[A-Za-z0-9]{8,64}$/,
+  sub: /^sub_[A-Za-z0-9]{8,64}$/, ch: /^(ch|py)_[A-Za-z0-9]{8,64}$/, du: /^du_[A-Za-z0-9]{8,64}$/, pi: /^pi_[A-Za-z0-9]{8,64}$/,
+  pm: /^pm_[A-Za-z0-9]{8,64}$/, price: /^price_[A-Za-z0-9]{8,64}$/ });
+const ID_OF = Object.freeze({ bind: SID.cs, payment: SID.in, status: SID.sub, cancel: SID.sub });
+const COUNTRY = /^[A-Z]{2}$/;
+/* A licence's name where none was typed or one outside the bound was (the copywriter's, 2026-11-13,
+   3a): Polish on a direct link, English on a Managed Payments one, told apart by the binding's managed flag. */
+const STRIPE_ORG_DEFAULT = Object.freeze({ direct: "Organizacja", managed: "Organisation" });
+
+const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
+
+function stripeProvider() {
+  let memo = null;
+  function config(env) {
+    const id = [env.STRIPE_WEBHOOK_SECRET, env.STRIPE_API_KEY, env.STRIPE_PRICES, env.STRIPE_VERSION].map(String).join("\n");
+    if (memo && memo.id === id) return memo.cfg;
+    memo = { id, cfg: judgeConfig(env) };
+    return memo.cfg;
+  }
+  function judgeConfig(env) {
+    const secret = env.STRIPE_WEBHOOK_SECRET, key = env.STRIPE_API_KEY, version = env.STRIPE_VERSION;
+    if (typeof secret !== "string" || !/^whsec_[\x21-\x7e]{8,200}$/.test(secret)) return null;
+    if (typeof key !== "string" || !STRIPE_KEY_RE.test(key)) return null; /* plant:stripe-key-restricted */
+    if (typeof version !== "string" || !STRIPE_VERSION_RE.test(version)) return null; /* plant:stripe-version */
+    if (version.slice(0, 10) < STRIPE_VERSION_FLOOR) return null; /* plant:stripe-version-floor */
+    let prices;
+    try { prices = typeof env.STRIPE_PRICES === "string" ? JSON.parse(env.STRIPE_PRICES) : null; } catch { return null; }
+    if (!plain(prices) || !Object.entries(prices).every(([p, k]) => SID.price.test(p) && STRIPE_KINDS.includes(k))) return null;
+    return { secret, key, version, prices: new Map(Object.entries(prices)) };
+  }
+
+  /** The Stripe-Signature header as {t, v1: [..]}, or null where it holds no t or no v1: unknown entries and v0 passed over. */
+  function signatureOf(headers) {
+    const header = headers.get("stripe-signature");
+    if (typeof header !== "string" || header.length > 2000) return null;
+    let t = null; const v1 = [];
+    for (const part of header.split(",")) {
+      const eq = part.indexOf("=");
+      if (eq < 0) continue;
+      const k = part.slice(0, eq).trim(), v = part.slice(eq + 1).trim();
+      if (k === "t") { if (t !== null || !/^[0-9]{1,12}$/.test(v)) return null; t = v; }
+      else if (k === "v1" && /^[0-9a-f]{64}$/.test(v)) v1.push(v); /* plant:stripe-v1-only */
+    }
+    if (t === null || v1.length < 1 || v1.length > 8) return null;
+    return { t: Number(t), ts: t, v1 };
+  }
+  const verify = (cfg, sig, raw) => hmacHolds(cfg.secret, joined(sig.ts + ".", raw), sig.v1);
+
+  /** The event as Stripe sends it, as {id, type, occurred, data: the object}, or null where it is not one this route reads. */
+  function eventOf(raw) {
+    let ev;
+    try { ev = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw)); } catch { return null; }
+    if (!plain(ev) || typeof ev.id !== "string" || !SID.evt.test(ev.id) || typeof ev.type !== "string" || !/^[a-z_.]{3,80}$/.test(ev.type)
+        || !Number.isSafeInteger(ev.created) || !plain(ev.data) || !plain(ev.data.object) || typeof ev.data.object.id !== "string"
+        || ev.data.object.id.length > 160) return null;
+    const act = STRIPE_EVENTS[ev.type];
+    if (act && ID_OF[act] && !ID_OF[act].test(ev.data.object.id)) return null;
+    if (act === "refund" && !(ev.type === "charge.refunded" ? SID.ch : SID.du).test(ev.data.object.id)) return null;
+    return { id: ev.id, type: ev.type, occurred: new Date(ev.created * 1000).toISOString(), data: ev.data.object };
+  }
+  const classify = ev => (STRIPE_EVENTS[ev.type] ? { act: STRIPE_EVENTS[ev.type], id: ev.data.id, type: ev.type } : null);
+
+  /** GET a path from Stripe's API with the restricted key and the pinned version: the object, or null where Stripe has none. */
+  const get = (io, cfg, path) => io.getJson(STRIPE_API + path, { authorization: "Bearer " + cfg.key, "stripe-version": cfg.version });
+  const list = async (io, cfg, path) => {
+    const doc = await get(io, cfg, path);
+    if (doc === null) return null;
+    if (!Array.isArray(doc.data)) throw io.retry("no list");
+    return doc;
+  };
+
+  /** A Checkout Session read back: {subscription, code, managed}, or {held}; a retry while it is not complete. */
+  async function readBinding(io, cfg, id) {
+    const s = await get(io, cfg, "/checkout/sessions/" + id);
+    if (s === null || s.id !== id) return { held: "not-found" };
+    if (s.status !== "complete") throw io.retry("session " + s.status);
+    if (s.mode !== "subscription") return { held: "session-mode" };
+    if (typeof s.subscription !== "string" || !SID.sub.test(s.subscription)) return { held: "subscription" };
+    /* The organisation's name, an optional text field keyed "org" on the team links (the design's 10.8); pay.mjs bounds it. */
+    const field = Array.isArray(s.custom_fields) ? s.custom_fields.find(f => plain(f) && f.key === "org" && f.type === "text") : null;
+    const org = field && plain(field.text) ? field.text.value : undefined; /* plant:stripe-org-read */
+    return { subscription: s.subscription, code: s.client_reference_id, managed: plain(s.managed_payments) && s.managed_payments.enabled === true, org };
+  }
+
+  /** The payment method that paid an invoice, as {billing, card}: the billing address's country and a card's own. */
+  async function countryOf(io, cfg, invoiceId) {
+    const pays = await list(io, cfg, "/invoice_payments?invoice=" + encodeURIComponent(invoiceId));
+    const paid = pays && pays.data.find(x => plain(x) && plain(x.payment) && typeof x.payment.payment_intent === "string" && SID.pi.test(x.payment.payment_intent));
+    if (!paid) return { billing: "-", card: "-" };
+    const pi = await get(io, cfg, "/payment_intents/" + paid.payment.payment_intent);
+    if (pi === null || typeof pi.payment_method !== "string" || !SID.pm.test(pi.payment_method)) return { billing: "-", card: "-" };
+    const pm = await get(io, cfg, "/payment_methods/" + pi.payment_method);
+    const billing = pm && plain(pm.billing_details) && plain(pm.billing_details.address) && COUNTRY.test(String(pm.billing_details.address.country))
+      ? pm.billing_details.address.country : "-";
+    const card = pm && plain(pm.card) && COUNTRY.test(String(pm.card.country)) ? pm.card.country : "-";
+    return { billing, card };
+  }
+
+  /** An invoice paid, read back: {subscription, status, origin, periodEnd, code, items, applied}, or {held}; a retry where it is not
+   *  paid yet, or a first one whose subscription is not yet bound. */
+  async function readPayment(io, cfg, id, look) {
+    const inv = await get(io, cfg, "/invoices/" + id);
+    if (inv === null || inv.id !== id) return { held: "not-found" };
+    if (inv.status !== "paid") throw io.retry("invoice " + inv.status); /* plant:stripe-paid */
+    const origin = STRIPE_ORIGINS[inv.billing_reason];
+    if (!origin) return { held: "origin" }; /* plant:stripe-origin */
+    const subId = plain(inv.parent) && plain(inv.parent.subscription_details) ? inv.parent.subscription_details.subscription : undefined;
+    if (typeof subId !== "string" || !SID.sub.test(subId)) return { held: "subscription" };
+    const lines = plain(inv.lines) && Array.isArray(inv.lines.data) ? inv.lines.data : [];
+    if (!lines.length || (plain(inv.lines) && inv.lines.has_more === true)) return { held: "lines" };
+    const priceOf = l => (plain(l.pricing) && plain(l.pricing.price_details) ? l.pricing.price_details.price : undefined);
+    if (!lines.every(l => plain(l) && plain(l.parent) && l.parent.type === "subscription_item_details" && cfg.prices.has(priceOf(l)))) /* plant:stripe-line-one-time */
+      return { held: "price" };
+    const ends = lines.map(l => (plain(l.period) ? l.period.end : NaN));
+    if (!ends.every(e => Number.isSafeInteger(e) && e > 0)) return { held: "period" };
+    const periodEnd = Math.max(...ends) * 1000;
+    const s = await get(io, cfg, "/subscriptions/" + subId);
+    if (s === null || s.id !== subId) return { held: "not-found" };
+    if (s.status !== "active" && s.status !== "trialing") return { held: "subscription-status" };
+    if (!plain(s.items) || !Array.isArray(s.items.data) || s.items.data.length > 100 || s.items.has_more === true) return { held: "items" };
+    const items = s.items.data.map(it => ({ price: plain(it) && plain(it.price) ? it.price.id : undefined, quantity: plain(it) ? it.quantity : undefined }));
+    const bound = await look.binding(subId);
+    if (!bound) {
+      if (origin === "first") throw io.retry("unbound"); /* plant:stripe-unbound-retry */
+      return { held: "unbound" };
+    }
+    let applied = "applied";
+    if (inv.total === 0) applied = "zero-total:" + (Array.isArray(inv.discounts) && typeof inv.discounts[0] === "string" ? inv.discounts[0] : "no-discount");
+    else if (origin === "first" && bound.managed !== 1) { /* plant:stripe-managed-skip */
+      const c = await countryOf(io, cfg, id); /* plant:stripe-country-read */
+      if (c.billing !== "PL") applied = "country:" + c.billing + "/" + c.card;
+    }
+    return { subscription: subId, status: s.status, origin, periodEnd, code: bound.code, items, applied,
+      teamOrg: typeof bound.org === "string" ? bound.org : undefined, defaultOrg: bound.managed === 1 ? STRIPE_ORG_DEFAULT.managed : STRIPE_ORG_DEFAULT.direct };
+  }
+
+  async function readSubscription(io, cfg, id) {
+    const s = await get(io, cfg, "/subscriptions/" + id);
+    if (s === null || s.id !== id) return null;
+    return { status: s.status };
+  }
+
+  /** The invoice a charge paid, through its payment intent: {invoice}, or {held}. */
+  async function invoiceOfCharge(io, cfg, ch) {
+    if (typeof ch.payment_intent !== "string" || !SID.pi.test(ch.payment_intent)) return { held: "no-invoice" };
+    const pays = await list(io, cfg, "/invoice_payments?payment%5Btype%5D=payment_intent&payment%5Bpayment_intent%5D=" + encodeURIComponent(ch.payment_intent));
+    const invs = pays ? [...new Set(pays.data.filter(x => plain(x) && typeof x.invoice === "string").map(x => x.invoice))] : [];
+    if (invs.length === 0) return { held: "no-invoice" };
+    if (invs.length > 1) return { held: "several-invoices" }; /* plant:stripe-several-invoices */
+    return { invoice: invs[0] };
+  }
+
+  /** A charge refunded, or a dispute: {subscription, payment} where the money went back whole, {listed} for a dispute closed in our
+   *  favour or as a warning, else {held}. */
+  async function readRefund(io, cfg, id, what) {
+    let chargeId, dispute = null;
+    if (what.type === "charge.dispute.created") return { held: "dispute:opened" }; /* plant:stripe-dispute-opened */
+    if (what.type === "charge.dispute.closed") {
+      const d = await get(io, cfg, "/disputes/" + id);
+      if (d === null || d.id !== id) return { held: "not-found" };
+      if (d.status === "won" || d.status === "warning_closed") return { listed: "dispute:" + d.status };
+      if (d.status !== "lost") return { held: "dispute:" + (typeof d.status === "string" && /^[a-z_]{1,32}$/.test(d.status) ? d.status : "unnamed") }; /* plant:stripe-dispute-lost */
+      chargeId = d.charge;
+      if (typeof chargeId !== "string" || !SID.ch.test(chargeId)) return { held: "not-found" };
+      dispute = d;
+    } else chargeId = id;
+    const ch = await get(io, cfg, "/charges/" + chargeId);
+    if (ch === null || ch.id !== chargeId) return { held: "not-found" };
+    if (what.type === "charge.refunded" && !(ch.refunded === true && ch.amount_refunded === ch.amount)) return { held: "refund:partial" }; /* plant:stripe-refund-full */
+    /* A refund must be whole, and a dispute can be partial: one lost for less than the charge is held (the test architect's read). */
+    if (dispute && !(Number.isSafeInteger(dispute.amount) && dispute.amount === ch.amount)) return { held: "dispute:partial" }; /* plant:stripe-dispute-whole */
+    const f = await invoiceOfCharge(io, cfg, ch);
+    if (f.held) return f;
+    const inv = await get(io, cfg, "/invoices/" + f.invoice);
+    const subId = inv && plain(inv.parent) && plain(inv.parent.subscription_details) ? inv.parent.subscription_details.subscription : undefined;
+    if (typeof subId !== "string" || !SID.sub.test(subId)) return { held: "subscription" };
+    return { subscription: subId, payment: f.invoice };
+  }
+
+  return Object.freeze({ name: "stripe", config, signatureOf, verify, eventOf, classify, readBinding, readPayment, readSubscription, readRefund });
+}
+
+export { stripeProvider, STRIPE_API, STRIPE_EVENTS };

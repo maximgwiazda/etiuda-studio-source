@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+# Refuses a commit while a plant hold is present, then runs the pinned content scan.
+# tools/pre-commit stays the pin, byte for byte. This file is what .git/hooks/pre-commit
+# should exec, installed by hand. With no mark it only execs the scan.
+set -u
+root=$(git rev-parse --show-toplevel) || exit 1
+dir="$root/.plant-hold"
+if [ -d "$dir" ]; then
+  held=0
+  for f in "$dir"/*; do
+    [ -f "$f" ] || continue
+    case "$f" in *.tmp) continue ;; esac
+    rel=$(sed -n '1p' "$f")
+    sum=$(sed -n '2p' "$f")
+    bak=$(sed -n '3p' "$f")
+    name=$(basename "$f")
+    echo "plant hold: $rel was planted and has not been put back." >&2
+    echo "sha256 was $sum" >&2
+    echo "backup copy: $bak" >&2
+    echo "restore: copy the backup over $rel, then remove .plant-hold/$name once the sha256 matches." >&2
+    held=1
+  done
+  if [ "$held" = 1 ]; then
+    exit 1
+  fi
+fi
+exec "$root/tools/pre-commit" "$@"

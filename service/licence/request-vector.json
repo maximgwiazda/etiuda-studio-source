@@ -1,0 +1,325 @@
+{
+ "note": "Test keys from fixed seeds, signing nothing real: the bytes of each signed request to the licence service (service/licence/requests.mjs), for Studio and the service to be held to. Written by node tests/licence-service.mjs --write-vector.",
+ "lead": {
+  "seed": "1111111111111111111111111111111111111111111111111111111111111111",
+  "pub": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737"
+ },
+ "proof": {
+  "seed": "2222222222222222222222222222222222222222222222222222222222222222",
+  "pub": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+ },
+ "t": 1793610000000,
+ "provider": "microsoft",
+ "idToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.bm90LWEtc2lnbmF0dXJl",
+ "root": {
+  "seed": "4444444444444444444444444444444444444444444444444444444444444444",
+  "pub": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48"
+ },
+ "seatCode": "7K3MQ9TV2XRBHN4W",
+ "org": "AAAABBBB-0000-CCCC-1111-DDDD2222EEEE",
+ "desk": {
+  "seed": "5555555555555555555555555555555555555555555555555555555555555555",
+  "pub": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242"
+ },
+ "service": {
+  "seed": "6666666666666666666666666666666666666666666666666666666666666666",
+  "pub": "34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746"
+ },
+ "seed": "7777777777777777777777777777777777777777777777777777777777777777",
+ "door": [
+  {
+   "team": "t-9b9b9b9b9b9b9b9b",
+   "rt": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+   "url": "https://etiuda.dev/relay/v1",
+   "keyId": "studio-10ba682c8ad13513",
+   "box": "8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c"
+  },
+  {
+   "team": "t-1d1d1d1d1d1d1d1d",
+   "rt": "2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e",
+   "url": "https://etiuda.dev/relay/v1/",
+   "keyId": "studio-10ba682c8ad13513",
+   "box": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f"
+  }
+ ],
+ "certificate": {
+  "format": 1,
+  "licence": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+  "desk": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+  "person": "3333333333333333333333333333333333333333333333333333333333333333",
+  "code": "7K3MQ9TV2XRBHN4W",
+  "issued": 1793610000000,
+  "until": 1796202000000,
+  "sig": {
+   "keyId": "studio-f7b7676c94df7e8f"
+  }
+ },
+ "entries": [
+  {
+   "route": "check",
+   "domain": "etiuda-licence-check",
+   "signer": "lead",
+   "text": "etiuda-licence-check\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000\na09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+   "sig": "7993cb1a3e7a471195dcbbdad6e9b27c04d3ed8ef1a86358e5b23e6687628dfb7c1b98bfa4a5360414b59aa1ea09b7b274102b95105e5772ae35c5f3d4d5dd02"
+  },
+  {
+   "route": "grant",
+   "domain": "etiuda-licence-grant-fetch",
+   "signer": "proof",
+   "text": "etiuda-licence-grant-fetch\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\na09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0\n1793610000000",
+   "sig": "f5cd1f073b57c0a4a8a9a98850143e86e9078958d34d4baaa21a5c0c559a41ee71c3f099926e1ec49dd305202fd1fa5a883badfebef2fd7feb83a1752093900a"
+  },
+  {
+   "route": "signin",
+   "domain": "etiuda-licence-signin",
+   "signer": "lead",
+   "text": "etiuda-licence-signin\nmicrosoft\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "14fc0e3cfb0efc36111ece9a8de94da9248339f965a54813be7f75bb54e948fa778510a3dcfe05a2329868424a3e6911c9a8929b424a69329d328704f05f3a02"
+  },
+  {
+   "route": "seat/desk",
+   "domain": "etiuda-licence-seat-desk",
+   "signer": "lead",
+   "text": "etiuda-licence-seat-desk\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "1ff883f662db92102b9c83f9032151f4eb2c8ed3cada14482be4ce7b377db5d069076fee31b5769aaf0be3dd0d1dcaa5ce6dfec4b917ccde777b1e42c249820b"
+  },
+  {
+   "route": "seat/free",
+   "domain": "etiuda-licence-seat-free",
+   "signer": "lead",
+   "text": "etiuda-licence-seat-free\ndesk\n3333333333333333333333333333333333333333333333333333333333333333\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "bad8789290616379133a95ffb682faec5f726069fed00a9aece55191ce80db7a30059ff1fda40ce5e34445192e4148f746c3ef4065d0212014c8d04ffb98b702"
+  },
+  {
+   "route": "signin/renew",
+   "domain": "etiuda-licence-signin-renew",
+   "signer": "lead",
+   "text": "etiuda-licence-signin-renew\nmicrosoft\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "cc79dffc5c8b96821917a8c545f61ffa7f9dc7ce39e861780ce144077cab1048b26d45e7fb3ecb364ad5f63b5e0a9c040adce2bedbe8d0d0d00a9ea460757601"
+  },
+  {
+   "route": "seat/list",
+   "domain": "etiuda-licence-seat-list",
+   "signer": "lead",
+   "text": "etiuda-licence-seat-list\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "5f99d8a52c7994313fba4643d56d4f97d3f821a93cb0166605ce71b8a3a507d0878685f1e117bb2f73ec3f01e84b268c83707a426a6803dcde7c9189546d4e06"
+  },
+  {
+   "route": "seat/free",
+   "domain": "etiuda-licence-seat-free",
+   "signer": "lead",
+   "text": "etiuda-licence-seat-free\nlead\n7K3MQ9TV2XRBHN4W\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "b2fe6c5c2c9a4712e1dd269043096c96244ec23ee8c9a82a8a79c67e1de0e24772c2fdef2f90021716f10fc828db43d1149dba5a6d42b060e6f04d82bef8180a"
+  },
+  {
+   "route": "admin/org",
+   "domain": "etiuda-licence-admin-org",
+   "signer": "root",
+   "text": "etiuda-licence-admin-org\nmicrosoft\naaaabbbb-0000-cccc-1111-dddd2222eeee\n1793610000000",
+   "sig": "4232be3c00aceb83716c8fe45d918db7f1bec36d927f63c0eda0b7abb417f8d6458be18202d5ea9d1f47dc9f17d126a77f03e12de16df6cacd9f8fd284de130c"
+  },
+  {
+   "route": "admin/address",
+   "domain": "etiuda-licence-admin-address",
+   "signer": "root",
+   "text": "etiuda-licence-admin-address\nada@contoso.example\n1793610000000",
+   "sig": "c6ec6a97fa10bf74feb9810b531439d7c505edcf9a5eb9b10b99afcccd6805f6b21d39041b737a6d047cea131c199496508956fb9d7361fe1f5c6ed04871a700"
+  },
+  {
+   "route": "signin/desk",
+   "domain": "etiuda-licence-signin-desk",
+   "signer": "desk",
+   "text": "etiuda-licence-signin-desk\nmicrosoft\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n1793610000000",
+   "sig": "6507dcf60546fce248a07a55aa42e19148f979980ea381e5890c4ca6fdffc75aeebe5d4b4e06c52fe065779159d1287ad800d5e8feeed5dec1d1adfc8bde500e"
+  },
+  {
+   "route": "person/admit",
+   "domain": "etiuda-licence-person-admit",
+   "signer": "lead",
+   "text": "etiuda-licence-person-admit\n7K3MQ9TV2XRBHN4W\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "e2ac0a907c516891da9afe0f80074224b34182e44f324149896427d2e8fc596d7e41223991d6886fb86162bdb2b5f324b1f6c924b3b33bac85eb82a6be47cd06"
+  },
+  {
+   "route": "certificate",
+   "domain": "etiuda-seat-certificate",
+   "signer": "service",
+   "text": "etiuda-seat-certificate\n1\n5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n3333333333333333333333333333333333333333333333333333333333333333\n7K3MQ9TV2XRBHN4W\n1793610000000\n1796202000000\nstudio-f7b7676c94df7e8f",
+   "sig": "663dfd3fab7c5b43af66c75e34c621783ff9391ba8b97df7d2d93a9457544bda1af21ea230ee4b0302345cafa3f1676ba320c8b3bc8065c6e87779183207410e"
+  },
+  {
+   "route": "signout/desk",
+   "domain": "etiuda-licence-signout-desk",
+   "signer": "desk",
+   "text": "etiuda-licence-signout-desk\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n1793610000000",
+   "sig": "30cdc0968f5279838da2d7e7318d502fc6c0cee0e32876b4a874c29fcdc590fcc8a59d25d794ba7dbad7a4401eff2b469a03ce3bb86376bcf6e7a0ad83a7d409"
+  },
+  {
+   "route": "person/list",
+   "domain": "etiuda-licence-person-list",
+   "signer": "lead",
+   "text": "etiuda-licence-person-list\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "957bb75f7c9643f565d19e67d2674a8bdf7a04f4ace43acbdfad951024d1bb3f6edb955e16c59f564c719f290ac1ecf2f8fbb0745fbb06875edc54037c83fa01"
+  },
+  {
+   "route": "person/withdraw",
+   "domain": "etiuda-licence-person-withdraw",
+   "signer": "lead",
+   "text": "etiuda-licence-person-withdraw\n3333333333333333333333333333333333333333333333333333333333333333\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "3426c343be579edec1c64d6f10fe81896da45262794912c5742e22b40ea389c8eb5543d09f65c94bc2386fcffdfcf4110a5edef33d34b45f64318e893804b205"
+  },
+  {
+   "route": "door/set",
+   "domain": "etiuda-licence-door-set",
+   "signer": "lead",
+   "text": "etiuda-licence-door-set\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000\n2\nt-1d1d1d1d1d1d1d1d\n2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e\nhttps://etiuda.dev/relay/v1/\nstudio-10ba682c8ad13513\n3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\nt-9b9b9b9b9b9b9b9b\n7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\nhttps://etiuda.dev/relay/v1\nstudio-10ba682c8ad13513\n8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c",
+   "sig": "4a9d77cf167970737485e3298caa9abdf1732f6797d4373cdccacab8561b310b588d38418bb3328f909c1259717bb51d0d3fbfdef47720bc77c6f2257461cd00"
+  },
+  {
+   "route": "signin/desk",
+   "domain": "etiuda-licence-signin-desk-pooled",
+   "signer": "desk",
+   "text": "etiuda-licence-signin-desk-pooled\nmicrosoft\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n1793610000000",
+   "sig": "d2d3008690f14ca0b56c55277c104ae91f2e19114308367729c43c810a849f9f567b6684964a949af3495183aa2d4f5a5582b481b684e41e5af5d56d8e333e09"
+  },
+  {
+   "route": "signin/desk",
+   "domain": "etiuda-licence-signin-desk-managed-pooled",
+   "signer": "desk",
+   "text": "etiuda-licence-signin-desk-managed-pooled\nmicrosoft\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\n352628385ab340a5ba0cceef33cb05f542908e099944a7bec7f8689756c5568d\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n1793610000000",
+   "sig": "13c747bbe7c1e842e70acccd8bcfd5eba3aa7496d2560cc4d849b4c2eee4b26d5a9e18f2264b680a72bcf209bf33b425b9c8e2738da6050630d052372ea74606"
+  },
+  {
+   "route": "signin",
+   "domain": "etiuda-licence-signin",
+   "signer": "lead",
+   "text": "etiuda-licence-signin\nmicrosoft\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000\nseed:7777777777777777777777777777777777777777777777777777777777777777",
+   "sig": "08515245d185f362ea04a79b369648f5c29bc63cf057ee9ce5cee3a2112277a894267eb2f765b98f5b2e3142fd28f357b523c865cd98f0487d01af3fafd43a0a"
+  },
+  {
+   "route": "signin/desk",
+   "domain": "etiuda-licence-signin-desk",
+   "signer": "desk",
+   "text": "etiuda-licence-signin-desk\nmicrosoft\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n1793610000000\nseed:7777777777777777777777777777777777777777777777777777777777777777",
+   "sig": "117a61566234713ca52fd384e9cb8602b36da4510423556ab883714315d9c3b9f3ab1b1ca8989c9505bc206e51148f8b5faf94d8d73212417210e7de6087a106"
+  },
+  {
+   "route": "licence/admin",
+   "domain": "etiuda-licence-licence-admin",
+   "signer": "lead",
+   "text": "etiuda-licence-licence-admin\nmicrosoft\n9cd2c40d48941240d78f67c06e195d051f14269007ae3ca874beb996a20b0351\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000\nseed:7777777777777777777777777777777777777777777777777777777777777777",
+   "sig": "6fdc1fb99941a39e71707dfe6e5999a29095c4c9aa05e235367aa5d3e03a6ec263574230b589c8fbfdc3e97e72f25bc5cfc00a239f13108c43ad8cd694ece705"
+  },
+  {
+   "route": "ask",
+   "domain": "etiuda-licence-ask",
+   "signer": "desk",
+   "text": "etiuda-licence-ask\ndesk\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\n3333333333333333333333333333333333333333333333333333333333333333\nt-9b9b9b9b9b9b9b9b\n1793610000000",
+   "sig": "1c17644caa37ed3c5aaa141364c1674286b0fcab438d8e64a0bfaa31865554d9659ce917f3799736d51637054f439f967f85364b087b96984a13a98d9b246c0a"
+  },
+  {
+   "route": "ask/status",
+   "domain": "etiuda-licence-ask-status",
+   "signer": "desk",
+   "text": "etiuda-licence-ask-status\ndesk\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n1793610000000",
+   "sig": "e4a6a14bafe8b3ffe7d47c2129519b85d97ce30ad36bfc7fa06767f04b82ed58a7c18bb87308065422f9e98252579e99f9f060333a8d06c8539df739235f4d09"
+  },
+  {
+   "route": "ask/refuse",
+   "domain": "etiuda-licence-ask-back",
+   "signer": "desk",
+   "text": "etiuda-licence-ask-back\ndesk\nc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242\n1793610000000",
+   "sig": "302822a6756d1130c7439c8d1c0fd495961b2242670bc33baa5898fb1d1d8818a2c54fad9a1f1ac4f24daa3519f7ecc69784fe8a26e7daceb2ed9da2feb89408"
+  },
+  {
+   "route": "ask/refuse",
+   "domain": "etiuda-licence-ask-refuse",
+   "signer": "lead",
+   "text": "etiuda-licence-ask-refuse\n5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "c986eb5f621ed6118ac6f21ebc2037620b7806ca4d053301c4302791151dc113d21e8da48ec4d684cd313beb663e23f32e6596b59e48d3cf3f2b7df831f12f08"
+  },
+  {
+   "route": "ask/pass",
+   "domain": "etiuda-licence-ask-pass",
+   "signer": "lead",
+   "text": "etiuda-licence-ask-pass\n5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b\n3333333333333333333333333333333333333333333333333333333333333333\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "658100ac2982cddc10395bcb4260749766f41ef52163a9d9d25b5e2d79df621a7a9a25946b3aacb7e5a061d62570429bb226035d210afa97c56451da2bd79100"
+  },
+  {
+   "route": "invite",
+   "domain": "etiuda-licence-invite",
+   "signer": "lead",
+   "text": "etiuda-licence-invite\nnew.person@example.com\nt-9b9b9b9b9b9b9b9b\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "7414102f67231b0b3b4b2c1b71dd9606b37e36dd6b5d61da55a15def1cf768cfd1d3b438deb84e99e393c0e7548f27d7e9f13ece7739ce116f7057b13ffc950b"
+  },
+  {
+   "route": "invite/withdraw",
+   "domain": "etiuda-licence-invite-withdraw",
+   "signer": "lead",
+   "text": "etiuda-licence-invite-withdraw\nnew.person@example.com\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "b893055442a200b666b077f622530f76418cef4c0d31c333e8c8b1bbad88038c69e83f21144821d12fcc9a8357058eeb0e10337c8ad8821487a7e961fa99c705"
+  },
+  {
+   "route": "person/admit",
+   "domain": "etiuda-licence-person-admit-ask",
+   "signer": "lead",
+   "text": "etiuda-licence-person-admit-ask\n5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b\nt-9b9b9b9b9b9b9b9b\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "c4df3fd40c9c8ade4dfa8f431711e862f6cc906c4f3364567a6a0e75ba01ad3221c9f2f437254a5db5724d84798d89e388917777f3086df50811beafc4ea6605"
+  },
+  {
+   "route": "door/set",
+   "domain": "etiuda-licence-door-set",
+   "signer": "lead",
+   "text": "etiuda-licence-door-set\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000\n2\nt-1d1d1d1d1d1d1d1d\n2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e\nhttps://etiuda.dev/relay/v1/\nstudio-10ba682c8ad13513\n3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\nlabel:\nt-9b9b9b9b9b9b9b9b\n7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\nhttps://etiuda.dev/relay/v1\nstudio-10ba682c8ad13513\n8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c\nlabel:Support north",
+   "sig": "0490f3ed53ffd15b02a997de5c561a1d4116b49652edecea9b135904da5377b4ac8c9399c6fd44d587ff3b3511cd4cd7fcc27bd6c57a1d07f0e406316f421006"
+  },
+  {
+   "route": "seat/stay",
+   "domain": "etiuda-licence-seat-stay",
+   "signer": "lead",
+   "text": "etiuda-licence-seat-stay\ndesk\n1\n3333333333333333333333333333333333333333333333333333333333333333\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "28d1b970b81783ba1c236a60e4bd76aa71d51413c7c72686f14935aea04a6eb453013e958ad87d59cec9d47a35b5c9521a5bdd42da2760db20ebfc151e97a508"
+  },
+  {
+   "route": "seat/stay",
+   "domain": "etiuda-licence-seat-stay",
+   "signer": "lead",
+   "text": "etiuda-licence-seat-stay\nlead\n2\n3333333333333333333333333333333333333333333333333333333333333333\n4444444444444444444444444444444444444444444444444444444444444444\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "4c6c79666182791807ab62a42ea30ce7fe44a4f0bb5102257c7d1eec501b8774d551b6aeffc5c6e333c2da43588d620c7b01b0dbefc642029fc6dbcce0db740a"
+  },
+  {
+   "route": "lead/invite",
+   "domain": "etiuda-licence-lead-name-address",
+   "signer": "lead",
+   "text": "etiuda-licence-lead-name-address\nnew.lead@example.com\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "2c656bcbe942d8425d5191f55c3b3401352ef9ccc6cabfc406d38d339f7678936ab570f8c387ae06cb4ebc240b8bb208cb4da2948c65612b27842c1051b9ad05"
+  },
+  {
+   "route": "lead/pick",
+   "domain": "etiuda-licence-lead-name-person",
+   "signer": "lead",
+   "text": "etiuda-licence-lead-name-person\n5555555555555555555555555555555555555555555555555555555555555555\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "065899b2c4d8610801aed48069131eebea5be7c32215fd76900254a3618e7a74a2cf4ec06c74b2bf31c6b6411570a45bcf29904cf8c668473fd9c4617ec9ad09"
+  },
+  {
+   "route": "lead/withdraw",
+   "domain": "etiuda-licence-lead-name-withdraw",
+   "signer": "lead",
+   "text": "etiuda-licence-lead-name-withdraw\n6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "c7c891510b443806d91f1f2c49cdcfd4f9e513aac37fc3633f9d733716821391f0ee8918c271a0381fa488e9d5283d5297f343480b6499f4d4a5d39a0eacac05"
+  },
+  {
+   "route": "lead/confirm",
+   "domain": "etiuda-licence-lead-confirm",
+   "signer": "lead",
+   "text": "etiuda-licence-lead-confirm\n6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a\n5555555555555555555555555555555555555555555555555555555555555555\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "ec6555f2b6c2eff7a293c1824e6637dec171f778dcbc19dda87008be266aa17888edc3ad48ee9a09ef321ef4458196d9baa69bebd740aa0e32f4fb56fb86c303"
+  },
+  {
+   "route": "invite/withdraw",
+   "domain": "etiuda-licence-invite-withdraw-handle",
+   "signer": "lead",
+   "text": "etiuda-licence-invite-withdraw-handle\n7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b\nd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\n1793610000000",
+   "sig": "76fefd0bbe1997d51ae4651250dd62b991c00a242b52ef6929273d8b6446966368e9defe64615b63ccd155ccb5cc452476a5f85fe8223980c59b7e87a17dbf0c"
+  }
+ ]
+}

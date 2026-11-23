@@ -1,0 +1,4 @@
+# The public repository this tree is published to, one tree per commit and no history (tools/publish-tree.mjs). Its one home:
+# the first line that is not a comment is the remote's URL. While a repository is not yet named the line is PLACEHOLDER, and
+# the tool refuses while it stands; it also refuses a URL that is this repository's own private remote.
+https://github.com/maximgwiazda/etiuda-studio-source

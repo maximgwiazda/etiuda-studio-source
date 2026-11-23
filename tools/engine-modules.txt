@@ -1,0 +1,133 @@
+# WHAT STUDIO FETCHES FROM THE PINNED ENGINE, as data rather than as code.
+#
+# One path per line. A line ending in "/" is a folder prefix and takes every blob under it;
+# a line ending in " ?build" (one space, then "?build") is copied from the pin's tree where
+# present and built from the pin's source with the pin's own tools/build.mjs where absent;
+# any other line is one exact path. A line without " ?build" that matches nothing in the pin's
+# tree is a hard failure (refusal 5), because a module that has been renamed away is exactly
+# the drift this file exists to make loud. Blank lines and lines starting with "#" are ignored.
+#
+# THE RULE BEHIND THE LIST: Studio re-implements no reader, no writer, no lint rule and no
+# count. Each entry below is here because something in tests/ or src/ here calls into it, and
+# an entry with no caller is removed rather than kept "in case".
+
+# The catalog reader and writer of format 2. src/modules/catalog-v2.js is the join itself;
+# the rest of src/ comes with it because the harness's slicer builds one composite document
+# out of every module file and src/main.js, and a missing file changes the offsets it reports.
+src/template.html
+src/main.js
+src/modules/
+
+# The lint. tests/test.js exports lintCatalog(), which validates a format 2 file through the
+# engine's own reader before it applies a rule; tests/engine.js is the only thing it requires.
+tests/engine.js
+tests/test.js
+
+# The shell's main process, where the desk states the rules about files on disk: the counts its
+# Library row shows (ecCounts, ecBlocks), a desk's own file, the team key's wrap, the sealed
+# envelope and a request to join. The package does not ship it (electron-builder.js); the fetch
+# cuts the declarations src/engine.mjs runs into engine/pinned/.shell-slices.js, which it does.
+shell/main.js
+
+# The shell's four files Studio runs as they stand, and ships (electron-builder.js): Windows' proxy
+# setting read before Chromium starts, a company proxy's sign-in and the relay's socket through the
+# proxy Chromium names (src/wire.cjs alone requires it), the recovery window with the watch that
+# raises it, and the shared tray and notification helper (run S5, board 969).
+shell/win-proxy.cjs
+shell/proxy-net.cjs
+shell/page-watch.cjs
+shell/tray.cjs
+
+# The desk's own sample catalog, offered on Studio's empty first screen and opened through the
+# ordinary catalog-file upgrade; never edited and never planted in code.
+shell/sample-catalog.ec
+
+# The desk's Group Policy template, the ADMX and its ADML in each language, which the Desks screen's "For your IT
+# department" row saves filled in with the team's folder and the lead's key (src/studio.mjs savePolicy), and which the
+# Windows installer carries beside the program (electron-builder.js). Read as data; Studio writes no template of its own.
+shell/policy/
+
+# The format 2 vocabulary and the one-off converter, for a fixture that has to be built or
+# read outside the engine: slug, id shapes, the canonical form and the content hash.
+tools/catalog-v2/
+
+# The desk's own NSIS additions. The fetch cuts the five hooks into engine/pinned/.installer-hooks.nsh
+# and Studio's installer includes that cut (sense pass item 41: the licence page shown once on an
+# all-users install, InstallLocation written, the updater's copy of the setup taken back). The file
+# itself is not included and is not shipped: it also carries the desk's customInit, welcome page
+# and turning script.
+shell/installer.nsh
+shell/installer/allusers-folder.nsh
+
+# The writer of the install's own list, etiuda-files.ini: from engine fold 131 the installer hooks read that list (an update swaps in
+# a stage only when every listed file is there, and the copy set aside goes by its list), so electron-builder.js writes it with this
+# module after packing and after signing, and refuses the build where the pin's installer reads the list and this is not fetched.
+# The package leaves the writer out of the asar. tests/studio-installer-mends.mjs sm1 holds it.
+shell/install-files.cjs
+
+# Required by the pinned shell/main.js when a test loads that shell. Studio's own code does not read
+# it, and the package leaves it out (electron-builder.js), as it leaves out shell/main.js.
+shell/clip-suggest.cjs
+
+# The same, for the tray helper that shell requires as it loads. Pure Node, with Electron passed in.
+shell/tray.cjs
+
+# The same, for the desk's reset (engine fold 23), which that shell requires as it loads. Pure Node, no Electron.
+# Studio's own code does not read it, and the package leaves it out, as it leaves out shell/main.js.
+shell/desk-reset.cjs
+
+# The same, for the desk's customer model (engine fold 43), which that shell requires as it loads. Pure Node, no Electron.
+# Studio's own code does not read it, and the package leaves it out, as it leaves out shell/main.js.
+shell/desk-ai.cjs
+
+# The same, for the desk's sync store, which that shell requires when it builds its sign-in view (StoreLib,
+# storePolicyNow); tests/relay-e2e.mjs signs its desks in. Pure Node, no Electron. Studio's own code does not read
+# it, and the package leaves it out, as it leaves out shell/main.js.
+shell/sync/
+
+# The built artefact. Nothing in the lint path reads it, and tests/engine.js refuses loudly
+# rather than quietly where it is absent, so it is copied where present and built where absent.
+engine/etiuda.html ?build
+
+# The bubble's stylesheet, which the engine's build publishes out of the marked span of
+# src/template.html. It is the ONE thing here a second program renders from: Studio's tour
+# splices these bytes into ui/index.html's single <style> and renders .bub with the engine's
+# own placeBubble() from src/modules/bubble.js above. Fetched rather than copied for the
+# reason the whole file exists - a copy drifts on the first fix, and this one would drift
+# invisibly, because nothing about a tour's pointer shows up in a count.
+engine/bubble.css ?build
+
+# THE RELAY'S CHANNEL LAYER AND ITS BLOB RULES (board 900, relay slice 1): the same two files the desk's shell runs keep a
+# led team's mirror in step with the relay while Studio runs (src/relay.mjs, shell/main.js), and the package ships them.
+shell/relay/
+
+# The relay's own message bytes: the lead-signed calls to make a team's space, enrol its desks and register an
+# invitation (createBytes, devicesBytes, invitesBytes), taken from the relay that checks them (src/relay.mjs), and shipped.
+relay/core.cjs
+
+# The relay itself, run in memory over its own stand-ins by Studio's relay legs (tests/relay-studio.mjs); never shipped
+# (electron-builder.js).
+relay/worker.mjs
+relay/team.cjs
+relay/test/stand-ins.cjs
+
+# THE RELAY'S GRANT KIT AND ITS SHARED VECTOR (board 935, slice G3): the invented test root and delegated key, and the grant
+# and create a leg makes over them, so Studio's relay legs run the pinned relay under a test root and the vector verifies
+# through Studio's own path. Test keys that sign nothing real; never shipped (electron-builder.js leaves out relay/test/).
+relay/test/grant-kit.cjs
+relay/test/grant-vector.json
+
+# THE DESK'S FOLDER SYNCER (board 945 stage 3 (b)): the program that judges what a shared folder holds with the desk's own
+# checks, its worker that stages whole files off the main thread, and the outbox that takes this program's writes to the share
+# with its rev floors. Studio runs it for every folder team it leads (src/folder-sync.cjs), so the share is read and written by
+# the same rules a desk's mirror is, and the package ships it.
+shell/folder/
+
+# THE SAMPLES THE SERVICE AND THE DESK ARE BOTH HELD TO, as the engine holds them: the door relays (decision 31; s98e compares
+# tests/fixtures/door-relays.json with this copy), every answer the licence service gives the desk's sign-in (s110c compares
+# tests/fixtures/signin-answers.json, which tests/licence-service.mjs --write-answers writes from the service's core, with this
+# copy, the one the engine's tests/desk-signin.mjs ds23 reads its desk against), and the card-flag vectors (tests/flags.mjs holds
+# Studio's seen and f hashes to this copy). Data for the legs; never shipped (electron-builder.js).
+tests/card-flag-vectors.json
+tests/door-relays.json
+tests/signin-answers.json

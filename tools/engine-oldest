@@ -1,0 +1,21 @@
+# THE OLDEST DESK STUDIO STILL WRITES FOR, AS A FIXTURE (the version policy Max adopted 2026-11-01 01:27, point 1, and
+# the test architect's leg: "Studio main's published edition, team file and envelopes are read by the oldest supported
+# desk, 2.0.0's readers as pinned in a fixture, with nothing refused and nothing shown as corrupt").
+#
+# tests/publish.mjs section p1 reads this commit's own readers out of the engine's object database (git cat-file, never
+# a checkout), and holds what Studio writes to them. Studio's engine pin (tools/engine-pin) is a different line and moves
+# on its own; this one moves only when the oldest desk a customer may hold changes.
+#
+# A PLACEHOLDER THAT PROVES NOTHING ABOUT OLDER DESKS (the test architect's note on policy point 1, 2026-11-01): pinning
+# engine main bfa4cb5f says only that Studio writes what the engine's main of that morning reads. No desk a customer holds
+# runs it, so section p1 passing here is no evidence that any released desk reads what Studio writes. It moves to the first
+# released engine's commit when that is tagged, and that move is a release condition: no Studio is released while this
+# line still names bfa4cb5f.
+#
+# WHY THIS COMMIT AND NOT 2.0.0: no 2.0.0 exists yet. The engine has no tag, and its E_VERSION reads "2.0.0-dev" at this
+# commit, so no released desk is in anybody's hands and no 2.0.0 reader can be named at a known commit. The oldest desk a
+# first release can carry is the engine's main as this fixture was set (2026-11-01 06:02, the commit below), because every
+# release is cut from main at or after it. When 2.0.0 is tagged, this line moves to that tag's commit and stays there for
+# the whole 2.x line.
+OLDEST_COMMIT=bfa4cb5f86a4a8c148b753d919e0f4ada705c49c
+OLDEST_VERSION=2.0.0

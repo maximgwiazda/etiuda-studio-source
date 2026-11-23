@@ -1,0 +1,3 @@
+# The engine commit Studio builds against. One line, the full hash; see CLAUDE.md.
+ENGINE_PIN=9835527ef86e7ed14a9c0bcb9ef792749a281a3a
+DRIFT_MAX_COMMITS=20

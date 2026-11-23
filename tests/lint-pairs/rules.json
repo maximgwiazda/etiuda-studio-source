@@ -1,0 +1,120 @@
+{
+ "comment": [
+  "THE RULES OF SPEC SECTION 3.4, ONE ROW EACH, AS DATA. The runner is tests/lint-pairs.mjs and",
+  "reads nothing but this file and the fixtures beside it, so adding a rule is a row and two",
+  "files rather than a patch to a test.",
+  "",
+  "`implemented` says whether the PINNED engine has the rule today, and it is not taken on",
+  "trust: the runner asserts that a rule marked false is silent on its own failing fixture, so a",
+  "rule that lands in the engine turns this file red rather than sitting here stale. That is the",
+  "recorded trap - an excuse list keyed by a name goes quiet when its subject changes - made",
+  "into a check.",
+  "",
+  "`expect` is a regular expression over one finding's text, and `severity` says which of the",
+  "linter's three lists it must appear in: errors, warnings, or the awaiting class board 505",
+  "added, which is a state rather than a fault and is counted apart for that reason. The twin",
+  "must produce nothing at all, in any of the three.",
+  "",
+  "A ROW NAMING A LIST THE PINNED ENGINE DOES NOT RETURN FAILS LOUDLY rather than quietly: the",
+  "runner reads a missing list as empty and reports the failing fixture uncaught. That is the",
+  "wanted direction. missing-second-language reads `awaiting` since the pin moved to 4c377cb;",
+  "on an engine before board 505, which called every such card an error, this row is wrong and",
+  "this file says so on the first run."
+ ],
+ "rules": [
+  {
+   "key": "duplicate-card-id",
+   "spec": "duplicate card ids",
+   "implemented": true,
+   "severity": "errors",
+   "expect": "^card c-tosan: the id is claimed twice$"
+  },
+  {
+   "key": "duplicate-card-title",
+   "spec": "duplicate card titles",
+   "implemented": true,
+   "severity": "errors",
+   "expect": "same title as card 1 in this category, so at the desk the two are hard to tell apart; one needs a title of its own, or the two can become one card$"
+  },
+  {
+   "key": "dangling-intent-ref",
+   "spec": "dangling intent refs",
+   "implemented": true,
+   "severity": "errors",
+   "expect": "^card c-tosan: requests names t-nowhere, which is no tag$"
+  },
+  {
+   "key": "dangling-category-ref",
+   "spec": "dangling category refs",
+   "implemented": true,
+   "severity": "errors",
+   "expect": "^card c-farlil: shelf t-nowhere names no tag$"
+  },
+  {
+   "key": "missing-second-language",
+   "spec": "empty or missing second-language texts",
+   "implemented": true,
+   "severity": "awaiting",
+   "expect": "^pl: 1 card\\(s\\) lacking text$"
+  },
+  {
+   "key": "duplicate-role-entry",
+   "spec": "orphaned who entries, the duplicate half",
+   "implemented": true,
+   "severity": "warnings",
+   "expect": "^who: duplicate entry "
+  },
+  {
+   "key": "legacy-role-token",
+   "spec": "beyond 3.4: the token renamed in 1.5.0, which the engine no longer resolves",
+   "implemented": true,
+   "severity": "errors",
+   "expect": "token in 1 place\\(s\\)"
+  },
+  {
+   "key": "placeholder-parity",
+   "spec": "placeholder parity: a placeholder in one language and not the other",
+   "implemented": false,
+   "why": "the pinned linter compares block counts across languages and no placeholder set",
+   "severity": "errors",
+   "expect": "parity"
+  },
+  {
+   "key": "unknown-placeholder",
+   "spec": "unknown placeholders",
+   "implemented": true,
+   "severity": "warnings",
+   "expect": "^card 1: \\{VORNIL\\} in the EN body is not a token the desk fills, so it is copied as written$"
+  },
+  {
+   "key": "length-outlier",
+   "spec": "length outliers",
+   "implemented": false,
+   "why": "the pinned linter measures the length of nothing but a line of facts",
+   "severity": "warnings",
+   "expect": "outlier"
+  },
+  {
+   "key": "unused-intent",
+   "spec": "unused intents",
+   "implemented": false,
+   "why": "the pinned linter walks links from the card outwards and never the other way",
+   "severity": "warnings",
+   "expect": "no card"
+  },
+  {
+   "key": "orphaned-role-entry",
+   "spec": "orphaned who entries, the orphan half",
+   "implemented": false,
+   "why": "the pinned linter reports a duplicate role entry and not one nothing uses",
+   "severity": "warnings",
+   "expect": "orphan"
+  }
+ ],
+ "curve": {
+  "file": "near-duplicate-title.curve.json",
+  "implemented": false,
+  "why": "near-duplicate detection has a threshold rather than an answer, so the fixture is a curve and not a pair; the pinned engine has no such rule at all",
+  "steps": [1, 2, 3, 5, 8]
+ }
+}

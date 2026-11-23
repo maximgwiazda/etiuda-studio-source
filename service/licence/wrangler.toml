@@ -1,0 +1,84 @@
+# The licence service (board 936). Nothing deploys this file yet: a deploy, and every Cloudflare resource named here, waits
+# for a chief under Maxim's word (S7). It holds no account id and no secret. This is the STAGING Worker, with its own D1 and
+# its own secrets, at its own route, etiuda.dev/licence-staging/v1/* on the etiuda.dev zone (Claude α's ruling on the test
+# architect's C5, 2026-10-25); API_PREFIX below names that path, and core.mjs answers under it alone. The production Worker,
+# its D1 and its route, etiuda.dev/licence/v1/* (the address Studio calls by default, src/wire.cjs LICENCE_ORIGIN), are made
+# later under names of their own, in a file of their own; nothing here is theirs.
+#
+# Before any build: node tools/engine-fetch.mjs from Studio's root, since worker.mjs imports the pinned engine's licence
+# and grant forms from engine/pinned/.
+#
+# Three Worker secrets, each put by `wrangler secret put` with its value on wrangler's stdin, and never written here or on disk
+# in the clear: the one command Maxim runs, node tools/sign.mjs secrets --root <root key file> --staging, puts them (the test
+# architect's A5 and C1), HASH_KEY only where the Worker holds none or --new-hash-key asks (E1):
+#   SERVICE_KEY   the service key's private half, PKCS#8 DER in hex, made in that command's memory and nowhere else
+#   DELEGATION    the root-signed delegation of that key for "licence" and "relay-grant", as JSON
+#   HASH_KEY      32 random bytes in hex, the HMAC key every kept IP, person and answered request is hashed under
+# Without all three, or with a delegation that is not the root's, does not certify that key or is not running, every route
+# answers "unavailable" and nothing is signed or kept.
+#
+# Two more for payments through Paddle (service/licence/pay.mjs and pay-paddle.mjs), put the same way and never written here:
+#   PADDLE_WEBHOOK_SECRET   the secret key of the notification destination Paddle signs each notification with
+#   PADDLE_API_KEY          the read-only API key (transaction, subscription and adjustment reads), pdl_sdbx_apikey_ or pdl_live_apikey_
+# Without both, or with PADDLE_ENV or PADDLE_PRICES below misshapen, POST .../pay/paddle answers 500 and Paddle retries; every other
+# route is untouched. Stripe's two, for payments through Stripe (pay-stripe.mjs), are never written here: Maxim puts them with
+# node tools/sign.mjs stripe --staging, from the keyring entries etiuda-stripe/test-* the office's tools/stripe-keep.py keeps:
+#   STRIPE_WEBHOOK_SECRET   the event destination's signing secret, whsec_
+#   STRIPE_API_KEY          a RESTRICTED key, rk_test_ or rk_live_, reading Checkout Sessions, Invoices, Invoice Payments, Subscriptions,
+#                           Charges, Payment Intents, Payment Methods and Disputes, and writing nothing
+# and its two variables below (Max chose Stripe, 2026-11-13 17:38): STRIPE_PRICES, each price id (price_...) to "lead", "desk" or
+# "desk-only" as PADDLE_PRICES; and STRIPE_VERSION, the API version pinned on every read, which the event destination is made on too.
+# A payment provider answers only where the variable PAY_PROVIDERS names it (decision 48): unset, as here until
+# Max chooses, every POST .../pay/<provider> is "not there" (404) and reads nothing.
+#
+# One optional variable, STORE_OFFER (core.mjs, signin/desk): set to exactly "closed", no answer of signin/desk says "storeOffer", so
+# sync ends on every desk at its next seating answer, a daily renewal included, with no deploy of code and no pin move (store/grant
+# and store/end are unchanged, so a person can still end their store). Unset, empty or any other text: the offer is as built. Use it
+# on a bad first day: `wrangler deploy --var STORE_OFFER:closed`, and a deploy without it opens the offer again.
+#
+# One optional variable, CONTACT: the way to reach us that the refusal of a full licence names; "etiuda.dev" unless set.
+name = "etiuda-licence-staging"
+main = "worker.mjs"
+compatibility_date = "2026-09-01"
+# relay/core.cjs, whose grant and delegation forms the service signs, uses node:crypto.
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+# Staging answers at its own path, and the site on etiuda.dev keeps every other path.
+routes = [{ pattern = "etiuda.dev/licence-staging/v1/*", zone_name = "etiuda.dev" }]
+
+# The path core.mjs answers under: the route's own, so the Worker and its route cannot disagree.
+[vars]
+API_PREFIX = "/licence-staging/v1/"
+# Sign-in's providers (board 980; core.mjs PROVIDERS): each id's issuer, keys and claims are core.mjs PROVIDER_DEFAULTS', and
+# the client id is the one Max's registration gave (Microsoft's Application (client) ID, Google's Desktop client's ID), which
+# is no secret. A provider with no client id is not trusted. A third provider is one more entry stating every field.
+PROVIDERS = '[{"id":"microsoft","clientId":""},{"id":"google","clientId":""}]'
+# Payments through Paddle (pay-paddle.mjs), answered only once PAY_PROVIDERS names "paddle": Paddle's sandbox or live API, which the API key's prefix must match; and each price id to what it buys,
+# "lead" (a lead's seat with Studio), "desk" (a desk seat on a team's licence) or "desk-only" (one person's desk licence), monthly
+# and yearly each its own price. A price not named here is held for Max; with none named, every payment is.
+PADDLE_ENV = "sandbox"
+PADDLE_PRICES = '{}'
+# Payments through Stripe (pay-stripe.mjs), answered only once PAY_PROVIDERS names "stripe": 2025-03-31.basil is the version whose
+# invoices carry parent.subscription_details and whose line items carry pricing.price_details, the shapes the route reads, and the
+# oldest it accepts; with none named in STRIPE_PRICES, every payment is held.
+STRIPE_VERSION = "2025-03-31.basil"
+STRIPE_PRICES = '{}'
+# Whether this Worker takes Stripe's test money or live (Grok's review 6, finding 7): the key must be of this mode, and an event or an
+# object read back of the other is held. Staging is "test"; the production Worker's own configuration says "live".
+STRIPE_MODE = "test"
+
+# The retention purge (worker.mjs scheduled, core.mjs purgeRetention): once a day, since what it removes is a year old.
+[triggers]
+crons = ["17 3 * * *"]
+
+# The service logs nothing per request.
+[observability]
+enabled = false
+
+# The database. schema.sql is its shape; a chief makes it in the EU jurisdiction (wrangler d1 create --jurisdiction eu),
+# applies migrations/, and writes its id here before the deploy (S7).
+[[d1_databases]]
+binding = "DB"
+database_name = "etiuda-licence-staging"
+database_id = "27cfcd42-3704-4eda-b27c-e45d4f88da61"
+migrations_dir = "migrations"

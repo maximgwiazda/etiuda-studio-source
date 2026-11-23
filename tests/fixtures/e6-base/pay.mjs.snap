@@ -1,0 +1,452 @@
+/* THE PAYMENT CORE (Claude alpha's decision 48, 2026-11-13: one shared core, two providers; the design's section 10.4).
+ *
+ *     POST <API_PREFIX>pay/<provider>      a provider's notification, its raw body signed as that provider signs
+ *
+ * THE CRITERION, the service's own: a customer who buys ends up, with no hand of ours, holding a licence Studio accepts. Bounded:
+ * a payment changes a licence only through what the provider's API says when read back, each event and each payment applies once,
+ * and anything unclear is held for Max and changes nothing.
+ *
+ * THE SPLIT. This file keeps everything a payment does to the record, whoever took it: the order of the checks, the shared writes
+ * (attach.mjs's statements), the seat difference against pay_subs, the floor of one, the grace, sole source, held and once. A
+ * provider (pay-paddle.mjs, and a second beside it) gives only what is its own: its configuration, `signatureOf` and `verify`,
+ * `eventOf` and `classify` (what an event is, and the id it names), and the reads (`readPayment`, `readSubscription`,
+ * `readRefund`), each answering one normalised record, a {held: reason}, or a retry.
+ *
+ * WHICH PROVIDERS ANSWER. PAY_PROVIDERS, a variable, names those switched on, comma-separated; a provider not named, and every one
+ * where the variable is unset or empty, answers "not there" (404), as a route that does not exist does, and reads nothing (Claude
+ * alpha's condition: the provider not chosen stays dead-safe behind an unset variable). A name no provider has is a misconfigured
+ * Worker: every payment route answers 500, so a provider retries.
+ *
+ * WHY IT IS NOT A SIGNED ROUTE. core.mjs route() hands it the request before ROUTES and before the delegation's window: a provider
+ * signs with an HMAC, not Ed25519; its body may pass BODY_MAX; and a payment never waits on our signing key.
+ *
+ * AN UNSIGNED REQUEST COSTS NOTHING: no signature header, or one whose time is outside SIGNATURE_WINDOW_S, is refused before the
+ * body is read; the body is read to PAY_BODY_MAX and no further; and nothing touches D1 or the provider until the signature holds.
+ *
+ * THE WEBHOOK IS A DOORBELL: a valid signature proves the provider rang; what is done is what its API says when read back, never
+ * the body, so a leaked webhook secret mints nothing and an event out of order applies the provider's current state.
+ *
+ * WHAT EACH KIND OF EVENT DOES:
+ *   payment   the read must be a payment completed (else 500, retried), of a subscription active or trialing; its origin first (the
+ *             subscription new here), renewal or rise (the subscription known here, by the same buyer); a period end; every item a
+ *             recurring price the provider's price map names; the buyer's sign-in code, one a person holds. A first purchase is one
+ *             batch (attach.mjs): the buyer's organisation's paid licence raised in place, or a new one made, paid until the period's
+ *             end plus GRACE_DAYS, never shortened, its seats added; the buyer's trial superseded and their seat and keys moved. A
+ *             known subscription's renewal or rise (one paid here before, or one Max attached by hand, attach-seats.mjs --paddle-sub)
+ *             moves the seats of the licence pay_subs names by its quantities now against what it held, never below one, and extends
+ *             its dates. Either applies once per payment (orders, tag <provider>:<payment id>).
+ *   bind      a provider that names the buyer only at checkout (Stripe's client_reference_id on the Checkout Session): the
+ *             subscription bound to that code, and whether its link was Managed Payments, in pay_binds, once; a first payment of a
+ *             subscription not yet bound answers 500 and is retried until it is, and the payment then reads the code from there.
+ *   status    the subscription's status recorded, nothing else: seats change only on money received.
+ *   cancel    the read's status must be "canceled" (else 500); this subscription's seats taken off; paid_until kept.
+ *   refund    a full refund or a chargeback lost (a dispute closed lost), of the payment that bought the subscription's current
+ *             period, once per subscription period: its seats taken off,
+ *             and the licence ended where this subscription is its sole source; otherwise paid_until and updates_until fall to what
+ *             the sources still paying cover and the licence stays, applied and listed as "refund-one-source".
+ * A TOTAL OF ZERO (a full discount, a trial on a price) is applied as any other and listed as "zero-total:<discount id>".
+ * A TEAM IS ITS LEAD'S OWN (decision 47, held for Max's ruling, in place of decision 45's hold): a first payment whose buyer's
+ * organisation already holds a paid licence the buyer does not own makes a licence of the buyer's own, admitting them by name alone.
+ *
+ * HELD is a row in pay_events with outcome "held:<reason>", answered 200 so the provider does not retry; nothing else is written
+ * ("held" keeps one meaning everywhere, Claude alpha 2026-11-13). Max's list is every held row and every outcome in PAY_LISTED.
+ * ANSWERS: a bad signature or a body of the wrong shape 401; an event seen before 200 at once; the provider's API unreachable,
+ * refusing the key or answering in a shape not read, or D1 failing, 500 with nothing kept (every write is one batch); else 200.
+ */
+import { attachStatements, statement } from "./attach.mjs";
+
+/* The providers' SDKs default to between five seconds (Paddle's) and five minutes (Stripe's); a replay here is a no-op by the event
+   id, the payment's tag and the state read back, so the window is the design's 300 seconds (Claude alpha's edit of 15:05). */
+const SIGNATURE_WINDOW_S = 300;
+const PAY_BODY_MAX = 65536, PAY_READ_MAX = 262144;
+/* Two reads inside the providers' answering time (Paddle's five seconds). */
+const PAY_TIMEOUT_MS = 2000;
+/* "fourteen days' grace after the paid year" (2026-09-24 02:36), which also covers a renewal paid late and a provider's retries. */
+const GRACE_DAYS = 14;
+const DAY = 24 * 3600000;
+const PAY_KINDS = Object.freeze(["lead", "desk", "desk-only"]);
+/* A new licence's name where the order page sent no organisation: the copywriter's word, both languages, is owed. */
+const ORG_DEFAULT = "Etiuda";
+const ORG_MAX = 200;
+/* A NAME TYPED ON A PROVIDER'S PAGE (the design's 10.8), bound at the binding, or carried by Paddle's order (to ORG_MAX): trimmed,
+   1 to ORG_TYPED_MAX characters, and none of the C0 or C1 controls, DEL, a bidirectional override, isolate or mark (LRM, RLM,
+   ALM), a line or paragraph separator, or U+FEFF, so a name cannot reorder or break what Studio shows beside it. */
+const ORG_TYPED_MAX = 100;
+const orgCharBad = cp => cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f) || (cp >= 0x202a && cp <= 0x202e) || (cp >= 0x2066 && cp <= 0x2069) || cp === 0xfeff
+  || cp === 0x200e || cp === 0x200f || cp === 0x061c || cp === 0x2028 || cp === 0x2029;
+/** {org} within the bound, {org: null} where none was typed, {org: null, bad: true} outside it. */
+function typedOrg(v, max) {
+  if (v === undefined || v === null) return { org: null };
+  if (typeof v !== "string") return { org: null, bad: true };
+  const t = v.trim();
+  if (!t) return { org: null };
+  const cps = Array.from(t);
+  if (cps.length > (max || ORG_TYPED_MAX) || cps.some(ch => orgCharBad(ch.codePointAt(0)))) return { org: null, bad: true }; /* plant:pay-org-bound */
+  return { org: t };
+}
+/* Outcomes applied and listed for Max beside every "held:" one, each a prefix: a full refund of one source on a licence another still
+   pays for; a payment completed at a total of zero; a direct sale whose payer's billing country is not the link's (the design's 10.6);
+   a dispute closed in our favour or as a warning, which changes nothing; and a binding whose typed organisation was outside the bound,
+   the licence then taking the default name. */
+const PAY_LISTED = Object.freeze(["refund-one-source", "zero-total:", "country:", "dispute:", "org-name"]);
+
+const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
+const dayOf = ms => new Date(ms).toISOString().slice(0, 10);
+const retry = why => Object.assign(new Error("retry: " + why), { retry: true });
+const reply = (status, obj) => new Response(JSON.stringify(obj), {
+  status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+const unsigned = () => reply(401, { ok: false, reason: "signature" });
+const fault = () => reply(500, { ok: false, reason: "fault" });
+const done = () => reply(200, { ok: true });
+const notThere = () => new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
+
+/** The raw body, read to `max` bytes and no further: the bytes, or null where it is longer or absent. */
+async function rawOf(request, max) {
+  if (!request.body) return null;
+  const reader = request.body.getReader();
+  const parts = [];
+  let size = 0;
+  for (;;) {
+    const { done: end, value } = await reader.read();
+    if (end) break;
+    size += value.byteLength;
+    if (size > max) { try { await reader.cancel(); } catch { /* gone already */ } return null; } /* plant:paddle-cap */
+    parts.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) { all.set(p, at); at += p.byteLength; }
+  return all;
+}
+
+/** HMAC-SHA256 under `secret` (its UTF-8 bytes) of `signed`, checked against each hex in `macs` by crypto.subtle.verify. */
+async function hmacHolds(secret, signed, macs) {
+  const enc = new TextEncoder();
+  const k = await globalThis.crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+  for (const h of macs) {
+    const mac = Uint8Array.from(String(h).match(/../g) || [], x => parseInt(x, 16));
+    if (await globalThis.crypto.subtle.verify("HMAC", k, mac, signed)) return true; /* plant:paddle-hmac */
+  }
+  return false;
+}
+/** `head` then the raw body, as one array: what a provider's HMAC is taken over. */
+function joined(head, raw) {
+  const h = new TextEncoder().encode(head), data = new Uint8Array(h.length + raw.length);
+  data.set(h, 0); data.set(raw, h.length);
+  return data;
+}
+
+/** The providers PAY_PROVIDERS switches on: a Set, empty where unset or empty, null where it names one no provider is. */
+function providersOn(env, known) {
+  const v = env ? env.PAY_PROVIDERS : undefined;
+  if (v === undefined || v === null || v === "") return new Set();
+  if (typeof v !== "string") return null;
+  const names = v.split(",").map(s => s.trim()).filter(Boolean);
+  if (!names.every(n => Object.prototype.hasOwnProperty.call(known, n))) return null;
+  return new Set(names);
+}
+
+/** The route over `o.clock` (ms), `o.fetch` (the service's one way out), `o.timeoutMs` and `o.providers` ({name: provider}); core.mjs
+ *  hands NO_KEY, PERSON, PERSONAL and SEAT_CODE_RE as `o.consts`. */
+function makePayRoute(o) {
+  const clock = o.clock, fetchOut = o.fetch, timeoutMs = o.timeoutMs || PAY_TIMEOUT_MS, providers = o.providers;
+  const { NO_KEY, PERSON, PERSONAL, SEAT_CODE_RE, ORG_DESKS_DEFAULT } = o.consts;
+
+  /* ---- the providers' APIs, read back ---------------------------------------------------------------------------------- */
+
+  /** GET `url` with `headers`: the JSON document, null where the API answers 404, and a retry for anything else unread. */
+  async function getJson(url, headers) {
+    const ctl = typeof AbortController === "function" ? new AbortController() : null;
+    let timer;
+    const late = new Promise((_, no) => { timer = setTimeout(() => { if (ctl) ctl.abort(); no(retry("timeout")); }, timeoutMs); });
+    try {
+      const res = await Promise.race([fetchOut(url, { method: "GET", redirect: "manual", signal: ctl ? ctl.signal : undefined,
+        headers: Object.assign({ accept: "application/json" }, headers) }), late]);
+      if (res.status === 404) return null;
+      if (!res.ok) throw retry("api " + res.status); /* plant:paddle-api-status */
+      const text = await Promise.race([res.text(), late]);
+      if (text.length > PAY_READ_MAX) throw retry("too long");
+      let doc;
+      try { doc = JSON.parse(text); } catch { throw retry("not json"); }
+      if (!plain(doc)) throw retry("not an object");
+      return doc;
+    } catch (e) {
+      throw e && e.retry ? e : retry("unreachable");
+    } finally { clearTimeout(timer); }
+  }
+  const io = Object.freeze({ getJson, retry, plain });
+
+  /* ---- the record ------------------------------------------------------------------------------------------------------- */
+
+  const eventRow = (db, p, ev, outcome, now) => db.prepare("INSERT INTO pay_events (provider, event_id, type, occurred_at, outcome, at) "
+    + "VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (provider, event_id) DO NOTHING").bind(p.name, ev.id, ev.type, ev.occurred, outcome, now);
+  /* HELD: the event recorded with its reason, and nothing else written. */
+  async function held(c, reason) {
+    await eventRow(c.db, c.p, c.ev, "held:" + reason, c.now).run();
+    return done();
+  }
+  /** An event-row statement whose outcome is SQL, for the end of a batch. */
+  const eventStatement = (c, outcomeSql) => {
+    const s = statement(q => "INSERT INTO pay_events (provider, event_id, type, occurred_at, outcome, at) SELECT " + q(c.p.name) + ", " + q(c.ev.id)
+      + ", " + q(c.ev.type) + ", " + q(c.ev.occurred) + ", " + outcomeSql(q) + ", " + q(c.now) + " ON CONFLICT (provider, event_id) DO NOTHING");
+    return c.db.prepare(s.sql).bind(...s.values);
+  };
+  const bound = (db, list) => list.map(s => db.prepare(s.sql).bind(...s.values));
+  const runId = () => { const b = new Uint8Array(12); globalThis.crypto.getRandomValues(b); return Array.from(b, x => x.toString(16).padStart(2, "0")).join(""); };
+
+  /* ---- a payment ------------------------------------------------------------------------------------------------------- */
+
+  /** What the subscription's items buy, by kind, or {held} naming why not. Every item a price the provider's map names. */
+  function itemsOf(prices, items) {
+    if (!Array.isArray(items) || items.length > 100) return { held: "items" };
+    const n = { lead: 0, desk: 0, "desk-only": 0 };
+    for (const it of items) {
+      const kind = prices.get(it.price);
+      if (!kind) return { held: "price" }; /* plant:paddle-price-known */
+      if (!Number.isSafeInteger(it.quantity) || it.quantity < 1 || it.quantity > 10000) return { held: "quantity" };
+      n[kind] += it.quantity;
+    }
+    if (n.lead + n.desk + n["desk-only"] === 0) return { held: "no-items" };
+    if (n["desk-only"] > 0 && n.lead + n.desk > 0) return { held: "mixed" };
+    return n;
+  }
+
+  async function payment(c, id) {
+    const { db, p, cfg, now } = c, tag = p.name + ":" + id;
+    if (await db.prepare("SELECT 1 AS o FROM orders WHERE tag = ?1").bind(tag).first()) {
+      await eventRow(db, p, c.ev, "once", now).run(); /* plant:paddle-once-read */
+      return done();
+    }
+    const r = await p.readPayment(io, cfg, id, lookOf(c)); /* plant:paddle-doorbell */
+    if (r.held) return held(c, r.held);
+    const code = r.code;
+    if (typeof code !== "string" || !SEAT_CODE_RE.test(code)) return held(c, "code"); /* plant:paddle-code-shape */
+    /* The name: a provider's own default where it gives one (Stripe's, by its link), else ORG_DEFAULT; then what the buyer named. */
+    let name = typeof r.defaultOrg === "string" ? r.defaultOrg : ORG_DEFAULT;
+    if (r.org !== undefined) {
+      const typed = typedOrg(r.org, ORG_MAX);
+      if (!typed.org) return held(c, "org");
+      name = typed.org;
+    }
+    const n = itemsOf(cfg.prices, r.items);
+    if (n.held) return held(c, n.held);
+    const deskOnly = n["desk-only"] > 0; /* plant:paddle-desk-only */
+    const lead = deskOnly ? 0 : n.lead, desk = deskOnly ? n["desk-only"] : n.desk;
+    const subId = r.subscription;
+    /* An organisation typed on the provider's page, bound at the binding, names a team's new licence; a one-person licence ignores it. */
+    if (!deskOnly && typeof r.teamOrg === "string" && r.teamOrg) name = r.teamOrg;
+
+    const buyer = await db.prepare("SELECT person, provider FROM persons WHERE code = ?1").bind(code).first();
+    if (!buyer) return held(c, "unknown-code"); /* plant:paddle-code-known */
+    const row = await db.prepare("SELECT licence, person FROM pay_subs WHERE provider = ?1 AND sub = ?2").bind(p.name, subId).first();
+    if (r.origin === "first" ? !!row : !row) return held(c, r.origin === "first" ? "subscription-known" : "subscription-unknown"); /* plant:paddle-origin-row */
+    if (row && row.person !== buyer.person) return held(c, "buyer-differs");
+    const end = r.periodEnd + GRACE_DAYS * DAY, endDay = dayOf(end), run = runId();
+    const k = { id, subId, code, row, lead, desk, deskOnly, end, endDay, tag, run, status: r.status, applied: r.applied };
+    if (row) return knownSubscription(c, k);
+    /* A FIRST PURCHASE. The organisation: the buyer's own lead seat's, else the buyer by name (core.mjs personOf). */
+    const seat = deskOnly ? null : await db.prepare("SELECT provider, org FROM seats WHERE kind = 'lead' AND person = ?1").bind(buyer.person).first();
+    const orgPaid = deskOnly ? null
+      : await db.prepare("SELECT l.id AS id, l.owner AS owner FROM admits a JOIN licences l ON l.id = a.licence WHERE a.provider = ?1 AND a.org = ?2 "
+        + "AND l.trial_ends IS NULL AND l.refunded = 0 ORDER BY a.licence LIMIT 1").bind(seat ? seat.provider : buyer.provider, seat ? seat.org : PERSON + buyer.person).first();
+    /* A TEAM IS ITS LEAD'S OWN (board 1000; Claude alpha's decision 47, held for Max's ruling, in place of decision 45's hold): a buyer
+       who does not own their organisation's paid licence buys a licence of their own, admitting them by name and no organisation, so
+       unrelated buyers never share one; its renewals and rises are a known subscription's. The hold it replaces, and its plant
+       (plant:paddle-second-buyer), are retired. */
+    const own = !!orgPaid && orgPaid.owner !== buyer.person; /* plant:paddle-own */
+
+    const OWNER = q => "(SELECT person FROM persons WHERE code = " + q(code) + ")";
+    const tenant = {
+      provider: q => "COALESCE((SELECT provider FROM seats WHERE kind = 'lead' AND person = " + OWNER(q) + "), (SELECT provider FROM persons WHERE code = " + q(code) + "))",
+      org: q => "COALESCE((SELECT org FROM seats WHERE kind = 'lead' AND person = " + OWNER(q) + "), " + q(PERSON) + " || " + OWNER(q) + ")",
+    };
+    /* The buyer's own licence admits the buyer by name alone, and is the one the buyer owns that admits no organisation. */
+    const org = deskOnly ? null : own ? { provider: tenant.provider, org: q => q(PERSON) + " || " + OWNER(q) } : tenant; /* plant:paddle-own-admits */
+    const ORG_PAID = q => "(SELECT a.licence FROM admits a JOIN licences l ON l.id = a.licence WHERE a.provider = " + tenant.provider(q) + " AND a.org = "
+      + tenant.org(q) + " AND l.trial_ends IS NULL AND l.refunded = 0 ORDER BY a.licence LIMIT 1)";
+    const OWN_PAID = q => "(SELECT id FROM licences WHERE owner = " + OWNER(q) + " AND desk_only = 0 AND trial_ends IS NULL AND refunded = 0 "
+      + "AND NOT EXISTS (SELECT 1 FROM admits a WHERE a.licence = licences.id AND substr(a.org, 1, " + q(PERSON.length) + ") <> " + q(PERSON) + ") ORDER BY id LIMIT 1)";
+    const made = attachStatements({ tag, run, now, code, deskOnly, org, noKey: NO_KEY, personPrefix: PERSON, personal: PERSONAL,
+      paid: own ? OWN_PAID : undefined,
+      /* The conditions read above, held again inside the statement that records the order (core.mjs's rule: nothing reads and
+         then writes on a decision): the organisation's licence the buyer's own, or another's for a licence of the buyer's own. */
+      orderWhere: (q, e) => (deskOnly ? "" : own ? "EXISTS (SELECT 1 FROM licences WHERE id = " + ORG_PAID(q) + " AND owner IS NOT " + e.OWNER(q) + ") AND " : "NOT EXISTS (SELECT 1 FROM licences WHERE id = " + e.PAID(q) + " AND owner IS NOT " + e.OWNER(q) + ") AND ") /* plant:paddle-second-buyer-sql */
+        + "NOT EXISTS (SELECT 1 FROM pay_subs WHERE provider = " + q(p.name) + " AND sub = " + q(subId) + ")",
+      /* The subscription is new here, so it held nothing before: its seats are added whole. */
+      raise: q => (deskOnly ? "" : "lead_seats = lead_seats + " + q(lead) + ", ") + "seats = seats + " + q(desk) + ", "
+        + "paid_until = MAX(paid_until, " + q(end) + "), updates_until = MAX(updates_until, " + q(endDay) + ")",
+      fresh: { org: name, seats: q => q(Math.max(1, desk)), leadSeats: q => q(Math.max(1, lead)), paidUntil: q => q(end), updatesUntil: q => q(endDay), invoicedUntil: q => q(0), invoicedUpdatesUntil: q => q(null),
+        orgDesks: deskOnly ? undefined : q => q(ORG_DESKS_DEFAULT ? 1 : 0) } });
+    const E = made.expr;
+    const sub = statement(q => "INSERT INTO pay_subs (provider, sub, licence, person, lead_seats, seats, paid_until, status, txn, updated_at) SELECT "
+      + [q(p.name), q(subId), E.L(q), E.OWNER(q), q(lead), q(desk), q(end), q(r.status), q(id), q(now)].join(", ") + " WHERE " + E.G(q) + " ON CONFLICT (provider, sub) DO NOTHING");
+    await db.batch(bound(db, made.statements.concat([sub])).concat([eventStatement(c, q => "CASE WHEN " + E.G(q) + " THEN " + q(r.applied) + " "
+      + "WHEN EXISTS (SELECT 1 FROM orders WHERE tag = " + q(tag) + ") THEN 'once' ELSE 'held:changed' END")]));
+    return done();
+  }
+
+  /* A KNOWN SUBSCRIPTION's renewal or rise (Claude alpha, 2026-11-13: one Max attached by hand, scripts/attach-seats.mjs
+     --paddle-sub, is "any known subscription"): the licence is the one pay_subs names, never the organisation's by lookup,
+     so whose licence it raises was settled when the subscription became known. One batch moves that licence's seats by the subscription's
+     quantities now against what it held, never below one, and extends its dates, applied once per payment. */
+  async function knownSubscription(c, k) {
+    const { db, p, now } = c;
+    const lic = await db.prepare("SELECT desk_only, refunded, trial_ends FROM licences WHERE id = ?1").bind(k.row.licence).first();
+    if (!lic || lic.refunded || lic.trial_ends !== null) return held(c, "licence-ended");
+    if ((lic.desk_only === 1) !== k.deskOnly) return held(c, "kind-changed");
+    const R = (q, col) => "(SELECT " + col + " FROM pay_subs WHERE provider = " + q(p.name) + " AND sub = " + q(k.subId) + ")";
+    const G = q => "EXISTS (SELECT 1 FROM orders WHERE tag = " + q(k.tag) + " AND run = " + q(k.run) + ")";
+    await db.batch(bound(db, [
+      statement(q => "INSERT INTO orders (tag, run, at) SELECT " + q(k.tag) + ", " + q(k.run) + ", " + q(now) + " WHERE EXISTS (SELECT 1 FROM pay_subs s "
+        + "JOIN licences l ON l.id = s.licence WHERE s.provider = " + q(p.name) + " AND s.sub = " + q(k.subId) + " AND s.person = (SELECT person FROM persons WHERE code = " + q(k.code) + ") "
+        + "AND l.refunded = 0 AND l.trial_ends IS NULL) ON CONFLICT (tag) DO NOTHING"), /* plant:paddle-known-once */
+      statement(q => "UPDATE licences SET " + (k.deskOnly ? "" : "lead_seats = MAX(1, lead_seats + " + q(k.lead) + " - " + R(q, "lead_seats") + "), ")
+        + "seats = MAX(1, seats + " + q(k.desk) + " - " + R(q, "seats") + "), " /* plant:paddle-seat-diff */
+        + "paid_until = MAX(paid_until, " + q(k.end) + "), updates_until = MAX(updates_until, " + q(k.endDay) + ") " /* plant:paddle-paid-max */
+        + "WHERE id = " + R(q, "licence") + " AND " + G(q)),
+      statement(q => "UPDATE pay_subs SET lead_seats = " + q(k.lead) + ", seats = " + q(k.desk) + ", txn = CASE WHEN " + q(k.end) + " >= paid_until THEN "
+        + q(k.id) + " ELSE txn END, paid_until = MAX(paid_until, " + q(k.end) + "), status = " + q(k.status) + ", updated_at = " + q(now)
+        + " WHERE provider = " + q(p.name) + " AND sub = " + q(k.subId) + " AND " + G(q)),
+    ]).concat([eventStatement(c, q => "CASE WHEN " + G(q) + " THEN " + q(k.applied) + " "
+      + "WHEN EXISTS (SELECT 1 FROM orders WHERE tag = " + q(k.tag) + ") THEN 'once' ELSE 'held:changed' END")]));
+    return done();
+  }
+
+  /* ---- a subscription's status, and its end ------------------------------------------------------------------------------ */
+
+  async function status(c, id) {
+    const { db, p, cfg, now } = c;
+    const s = await p.readSubscription(io, cfg, id);
+    if (s === null) return held(c, "not-found");
+    if (typeof s.status !== "string" || !/^[a-z_]{1,24}$/.test(s.status)) return held(c, "subscription-status");
+    await db.batch([
+      db.prepare("UPDATE pay_subs SET status = ?1, updated_at = ?2 WHERE provider = ?3 AND sub = ?4 AND status NOT IN ('canceled', 'refunded')").bind(s.status, now, p.name, id),
+      eventStatement(c, q => "CASE WHEN EXISTS (SELECT 1 FROM pay_subs WHERE provider = " + q(p.name) + " AND sub = " + q(id) + ") THEN 'recorded' ELSE 'unknown' END"),
+    ]);
+    return done();
+  }
+
+  async function cancel(c, id) {
+    const { db, p, cfg, now } = c;
+    const s = await p.readSubscription(io, cfg, id);
+    if (s === null) return held(c, "not-found");
+    if (s.status !== "canceled") throw retry("subscription " + s.status); /* plant:paddle-canceled */
+    const row = await db.prepare("SELECT licence FROM pay_subs WHERE provider = ?1 AND sub = ?2").bind(p.name, id).first();
+    if (!row) return held(c, "subscription-unknown");
+    /* Its own seats off, never another source's; a repeat takes off nothing, its contribution being nothing by then. */
+    const S = "(SELECT seats FROM pay_subs WHERE provider = ?1 AND sub = ?2)";
+    await db.batch([
+      db.prepare("UPDATE licences SET seats = MAX(1, seats - " + S + "), " /* plant:paddle-cancel-own */
+        + "lead_seats = MAX(1, lead_seats - (SELECT lead_seats FROM pay_subs WHERE provider = ?1 AND sub = ?2)) "
+        + "WHERE id = (SELECT licence FROM pay_subs WHERE provider = ?1 AND sub = ?2)").bind(p.name, id),
+      db.prepare("UPDATE pay_subs SET seats = 0, lead_seats = 0, status = CASE WHEN status = 'refunded' THEN status ELSE 'canceled' END, "
+        + "updated_at = ?3 WHERE provider = ?1 AND sub = ?2").bind(p.name, id, now),
+      eventRow(db, p, c.ev, "applied", now),
+    ]);
+    return done();
+  }
+
+  /* ---- a refund, or a chargeback lost ---------------------------------------------------------------------------------- */
+
+  async function refund(c, id) {
+    const { db, p, cfg, now } = c;
+    const a = await p.readRefund(io, cfg, id, c.what);
+    if (a.held) return held(c, a.held);
+    if (a.listed) { await eventRow(db, p, c.ev, a.listed, now).run(); return done(); }
+    const subId = a.subscription, txn = a.payment, tag = p.name + ":" + id, run = runId();
+    const row = await db.prepare("SELECT licence, txn, status FROM pay_subs WHERE provider = ?1 AND sub = ?2").bind(p.name, subId).first();
+    if (!row) return held(c, "subscription-unknown");
+    if (row.txn !== txn) return held(c, "not-current-period"); /* plant:paddle-refund-current */
+    /* A period's money goes back once, whether a refund or a chargeback says so first. */
+    if (row.status === "refunded") { await eventRow(db, p, c.ev, "once", now).run(); return done(); } /* plant:pay-refund-period-once */
+    const G = q => "EXISTS (SELECT 1 FROM orders WHERE tag = " + q(tag) + " AND run = " + q(run) + ")";
+    const R = (q, col) => "(SELECT " + col + " FROM pay_subs WHERE provider = " + q(p.name) + " AND sub = " + q(subId) + ")";
+    const others = q => "FROM pay_subs o WHERE o.licence = licences.id AND NOT (o.provider = " + q(p.name) + " AND o.sub = " + q(subId) + ")";
+    /* SOLE SOURCE: made by a payment provider, no invoice beside it, holding exactly this subscription's seats, paid no later than it,
+       and no other subscription contributing; anything else is not known to be this payment's alone, so the licence stays. */
+    const sole = q => "substr(key_hash, 1, 7) IN ('paddle:', 'stripe:') AND COALESCE(invoiced_until, 0) = 0 AND seats = MAX(1, " + R(q, "seats") + ") AND lead_seats = MAX(1, " + R(q, "lead_seats") + ") "
+      + "AND paid_until <= " + R(q, "paid_until") + " AND NOT EXISTS (SELECT 1 " + others(q)
+      + " AND (o.seats > 0 OR o.lead_seats > 0))"; /* plant:paddle-sole */
+    const L = q => R(q, "licence");
+    await db.batch(bound(db, [
+      statement(q => "INSERT INTO orders (tag, run, at) SELECT " + q(tag) + ", " + q(run) + ", " + q(now)
+        + " WHERE EXISTS (SELECT 1 FROM pay_subs WHERE provider = " + q(p.name) + " AND sub = " + q(subId) + " AND txn = " + q(txn) + " AND status <> 'refunded') ON CONFLICT (tag) DO NOTHING"), /* plant:paddle-refund-once */
+      statement(q => "UPDATE licences SET refunded = 1, refunded_at = COALESCE(refunded_at, " + q(now) + ") WHERE id = " + L(q) + " AND " + G(q) + " AND " + sole(q)),
+      statement(q => "UPDATE licences SET seats = MAX(1, seats - " + R(q, "seats") + "), lead_seats = MAX(1, lead_seats - " + R(q, "lead_seats") + ") "
+        + "WHERE id = " + L(q) + " AND " + G(q)),
+      /* Where the licence stays, its dates are what the sources still paying cover (Claude alpha, 2026-11-13: "never leave a date that
+         no remaining payment covers"; the updates too, "the money for that period went back, so the updates it bought go with it"): the
+         invoice's (invoiced_until, invoiced_updates_until) and each other subscription's not refunded, never later than they were. */
+      statement(q => "UPDATE licences SET paid_until = MIN(paid_until, MAX(COALESCE(invoiced_until, 0), COALESCE((SELECT MAX(o.paid_until) " + others(q)
+        + " AND o.status <> 'refunded'), 0))), "
+        + "updates_until = MIN(updates_until, MAX(COALESCE(invoiced_updates_until, ''), COALESCE((SELECT MAX(date(o.paid_until / 1000, 'unixepoch')) " + others(q)
+        + " AND o.status <> 'refunded'), ''), '1970-01-01')) " /* plant:paddle-refund-updates */
+        + "WHERE id = " + L(q) + " AND refunded = 0 AND " + G(q)), /* plant:paddle-refund-date */
+      statement(q => "UPDATE pay_subs SET seats = 0, lead_seats = 0, status = 'refunded', updated_at = " + q(now) + " WHERE provider = " + q(p.name) + " AND sub = " + q(subId) + " AND " + G(q)),
+    ]).concat([eventStatement(c, q => "CASE WHEN " + G(q) + " AND (SELECT refunded FROM licences WHERE id = " + L(q) + ") = 1 THEN 'applied' "
+      + "WHEN " + G(q) + " THEN 'refund-one-source' WHEN EXISTS (SELECT 1 FROM orders WHERE tag = " + q(tag) + ") THEN 'once' ELSE 'held:changed' END")]));
+    return done();
+  }
+
+  /* ---- a binding, where a provider names the buyer only at checkout ---------------------------------------------------- */
+
+  /** What a provider's readPayment may ask of the record: the code and the link a subscription was bound to, or null. */
+  const lookOf = c => Object.freeze({
+    binding: subId => c.db.prepare("SELECT code, managed, org FROM pay_binds WHERE provider = ?1 AND sub = ?2").bind(c.p.name, subId).first(),
+  });
+
+  async function bind(c, id) {
+    const { db, p, cfg, now } = c;
+    const r = await p.readBinding(io, cfg, id);
+    if (r.held) return held(c, r.held);
+    /* A code that is no code is kept as none, so the payment is held as "code" rather than retried for want of a binding. */
+    const code = typeof r.code === "string" && SEAT_CODE_RE.test(r.code) ? r.code : ""; /* plant:pay-bind-code */
+    /* A name typed outside the bound becomes the default, applied and listed "org-name": never held, so no payer is stranded over it. */
+    const typed = typedOrg(r.org);
+    const prior = await db.prepare("SELECT code FROM pay_binds WHERE provider = ?1 AND sub = ?2").bind(p.name, r.subscription).first();
+    if (prior && prior.code !== code) return held(c, "binding-differs");
+    await db.batch([
+      db.prepare("INSERT INTO pay_binds (provider, sub, code, managed, org, at) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (provider, sub) DO NOTHING")
+        .bind(p.name, r.subscription, code, r.managed ? 1 : 0, typed.org, now),
+      eventRow(db, p, c.ev, !code ? "bound:no-code" : typed.bad ? "org-name" : "bound", now),
+    ]);
+    return done();
+  }
+
+  /* ---- the route ------------------------------------------------------------------------------------------------------- */
+
+  const ACTS = { payment, status, cancel, refund, bind };
+
+  return async function payRoute(request, env, name) {
+    const on = providersOn(env, providers);
+    if (on === null) return fault();
+    if (!Object.prototype.hasOwnProperty.call(providers, name) || !on.has(name)) return notThere(); /* plant:pay-provider-on */
+    const p = providers[name];
+    if (request.method !== "POST") return notThere();
+    const cfg = p.config(env);
+    if (!cfg || !env.DB) return fault();
+    const now = clock(env);
+    if (!Number.isSafeInteger(now)) return fault();
+    /* Nothing below reaches D1 or the provider until the signature holds. */
+    const sig = p.signatureOf(request.headers);
+    if (!sig) return unsigned(); /* plant:paddle-unsigned-first */
+    if (Math.abs(now - sig.t * 1000) > SIGNATURE_WINDOW_S * 1000) return unsigned(); /* plant:paddle-window */
+    const raw = await rawOf(request, PAY_BODY_MAX);
+    if (!raw) return unsigned();
+    if (!await p.verify(cfg, sig, raw)) return unsigned(); /* plant:paddle-signature */
+    const ev = p.eventOf(raw);
+    if (!ev) return unsigned();
+    const c = { db: env.DB, p, cfg, now, ev };
+    try {
+      const seen = await env.DB.prepare("SELECT outcome FROM pay_events WHERE provider = ?1 AND event_id = ?2").bind(p.name, ev.id).first();
+      if (seen) return done(); /* plant:paddle-event-once */
+      const what = p.classify(ev);
+      if (!what) return await held(c, "event-type");
+      c.what = what;
+      return await ACTS[what.act](c, what.id);
+    } catch { return fault(); }
+  };
+}
+
+export { makePayRoute, providersOn, hmacHolds, joined, SIGNATURE_WINDOW_S, PAY_BODY_MAX, GRACE_DAYS, PAY_TIMEOUT_MS, PAY_KINDS, ORG_DEFAULT,
+  PAY_LISTED };

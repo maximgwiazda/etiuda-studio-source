@@ -1,0 +1,48 @@
+{
+ "note": "The shapes of the ID tokens tests/licence-service.mjs signs with its own test keys, standing in for Microsoft's and Google's (board 980, stage 1). Each claim is one its provider documents, read 2026-11-11; every value is invented (example GUIDs from Microsoft's own pages, example.com-style names) and signs nothing real. A leg overrides what it varies; `uti` and `at_hash` are drawn fresh per token.",
+ "microsoft": {
+  "source": "https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference (updated 2026-06-15): header typ, alg, kid; v2.0 payload claims.",
+  "header": { "typ": "JWT", "alg": "RS256", "kid": "{kid}" },
+  "claims": {
+   "aud": "{clientId}",
+   "iss": "https://login.microsoftonline.com/{tid}/v2.0",
+   "iat": "{now}",
+   "nbf": "{now}",
+   "exp": "{now+3600}",
+   "aio": "AXQAi/8IAAAAtAaZLo3ChMif6KOnttRB7eBq4/DccQzjcJGxPYy/C3jDaNGxXd6wNIIVGRghNRnwJ1lOcAnNZcjvkoyrFxCttv33140RioOFJ4bCCGVuoCag1uOTT22222gHwLPYQ/uf79QX+0KIijdrmp69RctzmQ==",
+   "name": "Test Person",
+   "nonce": "{nonce}",
+   "oid": "{oid}",
+   "preferred_username": "test.person@contoso.example",
+   "rh": "I",
+   "sid": "00000000-0000-0000-0000-000000000000",
+   "sub": "{sub}",
+   "tid": "{tid}",
+   "uti": "{uti}",
+   "ver": "2.0"
+  },
+  "keysDocument": "https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens (updated 2026-07-17): common/discovery/v2.0/keys returns kty, use, kid, x5t, n, e, x5c and issuer per key, templated https://login.microsoftonline.com/{tenantid}/v2.0 or exact for the consumers tenant 9188040d-6c67-4c5b-b112-36a304b66dad."
+ },
+ "google": {
+  "source": "https://developers.google.com/identity/openid-connect/openid-connect (read 2026-11-11): an ID token's payload; iss https://accounts.google.com or accounts.google.com; hd absent for an account outside a Google hosted domain.",
+  "header": { "alg": "RS256", "kid": "{kid}", "typ": "JWT" },
+  "claims": {
+   "iss": "https://accounts.google.com",
+   "azp": "{clientId}",
+   "aud": "{clientId}",
+   "sub": "{sub}",
+   "hd": "{hd}",
+   "email": "test.person@acme-tools.example",
+   "email_verified": true,
+   "at_hash": "{uti}",
+   "nonce": "{nonce}",
+   "name": "Test Person",
+   "picture": "https://lh3.googleusercontent.com/a/example",
+   "given_name": "Test",
+   "family_name": "Person",
+   "iat": "{now}",
+   "exp": "{now+3600}"
+  },
+  "keysDocument": "the jwks_uri of https://accounts.google.com/.well-known/openid-configuration (https://www.googleapis.com/oauth2/v3/certs as the page shows it): keys with kty, alg RS256, use sig, kid, n, e."
+ }
+}

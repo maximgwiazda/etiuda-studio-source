@@ -1,0 +1,92 @@
+{
+ "format": 2,
+ "kind": "etiuda-catalog",
+ "id": "vornil-pile",
+ "name": "Vornil pile",
+ "rev": 1,
+ "date": "2026-09-16",
+ "langs": [
+  {
+   "code": "en",
+   "label": "EN"
+  },
+  {
+   "code": "pl",
+   "label": "PL"
+  }
+ ],
+ "tags": [
+  {
+   "id": "t-glemule",
+   "kind": "shelf",
+   "label": {
+    "en": "Glemule",
+    "pl": "Glemule"
+   }
+  },
+  {
+   "id": "t-norvira",
+   "kind": "shelf",
+   "label": {
+    "en": "Norvira",
+    "pl": "Norvira"
+   }
+  },
+  {
+   "id": "t-krenan",
+   "kind": "request",
+   "clause": {
+    "en": "a krenan",
+    "pl": "krenanem"
+   }
+  },
+  {
+   "id": "t-widesk",
+   "kind": "request",
+   "clause": {
+    "en": "a widesk",
+    "pl": "wideskiem"
+   }
+  }
+ ],
+ "cards": [
+  {
+   "id": "c-tosan",
+   "shelf": "t-glemule",
+   "bodyShape": "plain",
+   "title": {
+    "en": "Tosan widil",
+    "pl": "Tosan widil"
+   },
+   "body": {
+    "en": "Brumoss fysud mirqave.",
+    "pl": "Voriss brumib ustule."
+   },
+   "requests": [
+    "t-krenan"
+   ],
+   "role": "Vornil"
+  },
+  {
+   "id": "c-farlil",
+   "shelf": "t-norvira",
+   "bodyShape": "plain",
+   "title": {
+    "en": "Farlil zubork",
+    "pl": "Farlil zubork"
+   },
+   "body": {
+    "en": "Elqave fysuma sarnynt.",
+    "pl": "Grelude widave doviss."
+   },
+   "requests": [
+    "t-widesk"
+   ],
+   "role": "Vornil"
+  }
+ ],
+ "role": [
+  "Vornil",
+  "Ondrave"
+ ]
+}
