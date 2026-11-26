@@ -43,8 +43,46 @@
 !endif
 !include "${BUILD_RESOURCES_DIR}\installer\turning.nsh"
 
+# ONE SETUP AT A TIME, the desk's etiudaOneSetup (its shell/installer.nsh) as it stands; the cut stops before it. electron-builder's
+# guard (installer.nsi) refuses a second copy only on ERROR_ALREADY_EXISTS, and a mutex an elevated copy holds answers an unelevated
+# one ERROR_ACCESS_DENIED; this refuses on either, the running copy brought forward, exit 1618. The inner, elevated half is that run.
+!ifmacrondef etiudaOneSetup
+!macro etiudaOneSetup
+  ${IfNot} ${UAC_IsInnerInstance}
+    Push $0
+    Push $1
+    Push $2
+    System::Call 'kernel32::CreateMutex(p 0, i 0, t "${APP_GUID}.etiuda-setup") p .r1 ?e'
+    Pop $0
+    ${If} $0 = 183
+    ${OrIf} $0 = 5 # plant:one-setup-denied
+      StrLen $0 "$(^SetupCaption)"
+      IntOp $0 $0 + 1
+      StrCpy $1 ""
+      ${Do}
+        FindWindow $1 "#32770" "" "" $1
+        ${If} $1 == 0
+          ${ExitDo}
+        ${EndIf}
+        System::Call 'user32::GetWindowText(p r1, t .r2, i r0)'
+        ${If} $2 == "$(^SetupCaption)"
+          System::Call 'user32::SetForegroundWindow(p r1)'
+          ${ExitDo}
+        ${EndIf}
+      ${Loop}
+      SetErrorLevel 1618
+      Quit # plant:one-setup-quits
+    ${EndIf}
+    Pop $2
+    Pop $1
+    Pop $0
+  ${EndIf}
+!macroend
+!endif
+
 !macro customInit
   StrCpy $etiudaFinishText "$(MUI_TEXT_FINISH_INFO_TEXT)"
+  !insertmacro etiudaOneSetup
   !insertmacro etiudaTrimSlashes $INSTDIR
   ${IfNot} ${Silent}
     ${IfNot} ${UAC_IsInnerInstance}
@@ -361,6 +399,11 @@
   FunctionEnd
 
   Function RecogniseExistingInstallation
+    # ONE QUESTION PER RUN, whatever calls this.
+    ${If} $RecogniseAsked == "1"
+      Return # plant:recognise-once
+    ${EndIf}
+    StrCpy $RecogniseAsked "1"
     Push $0
     Push $1
     Push $R1
@@ -469,6 +512,7 @@
 !ifndef BUILD_UNINSTALLER
 Var InstalledVersion
 Var RecogniseMsg
+Var RecogniseAsked
 # THE FINISH PAGE'S TEXT, Modern UI's own unless etiudaOldUserCopy met a per-user copy. With the Run box on the page
 # the label is 195 by 40 dialog units, about five lines, so the case's text replaces the whole of it rather than adding.
 Var etiudaFinishText
@@ -588,6 +632,34 @@ Var UnRemoveLabel
     ${EndIf}
   FunctionEnd
 
+  # NO TICK WHILE A SECTION RUNS: NSIS runs the sections on a second thread, and its script engine is not safe on two threads at
+  # once (one stack, one set of registers, one plug-in state). The files page stops the timer and shows the still before that
+  # thread starts, and the timer starts again only once the work is done (customPageAfterChangeDir, customUninstallPage, below).
+  Function ${TURN_PFX}TurnStill
+    Push $0
+    StrCpy $TurnReady "0"
+    GetFunctionAddress $0 ${TURN_PFX}TurnTick
+    nsDialogs::KillTimer $0 # plant:turn-still-kills
+    Pop $0
+    Call ${TURN_PFX}TurnPage
+    ${If} $TurnKind != ""
+      StrCpy $TurnKey $TurnNext
+      StrCpy $TurnFrame 0
+      Call ${TURN_PFX}TurnPaint
+    ${EndIf}
+  FunctionEnd
+
+  Function ${TURN_PFX}TurnResume
+    ${If} $TurnReady != "1"
+    ${AndIf} ${FileExists} "$PLUGINSDIR\turn\sidebar-000.bmp"
+      StrCpy $TurnReady "1"
+      Push $0
+      GetFunctionAddress $0 ${TURN_PFX}TurnTick
+      nsDialogs::CreateTimer $0 ${TURN_INTERVAL}
+      Pop $0
+    ${EndIf}
+  FunctionEnd
+
   Function ${TURN_PFX}TurnPage
     Push $0
     Push $1
@@ -689,6 +761,10 @@ Var UnRemoveLabel
   FunctionEnd
 
   Function ${TURN_PFX}TurnTick
+    # A tick already queued when TurnStill ran does nothing.
+    ${If} $TurnReady != "1"
+      Return # plant:turn-tick-stopped
+    ${EndIf}
     Push $0
     Push $1
     Call ${TURN_PFX}TurnPage
@@ -757,6 +833,7 @@ Var UnRemoveLabel
     LangString TurnWelcomeText ${ID} "W Etiuda Studio katalog zespołu powstaje, jest sprawdzany i trafia do stanowisk.$\r$\n$\r$\nEtiudę Studio można zainstalować dla tego konta Windows, bez uprawnień administratora w folderze proponowanym przez instalator, albo dla wszystkich użytkowników tego komputera, co ich wymaga. Jeśli Etiuda Studio jest otwarta, instalator najpierw poprosi o jej zamknięcie.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
     LangString TurnUnWelcomeTitle ${ID} "Usuwanie: Etiuda Studio"
     LangString TurnUnWelcomeText ${ID} "Program Etiuda Studio zostanie usunięty z tego komputera. Jego katalogi i ustawienia zostają na miejscu, więc po ponownej instalacji będą takie jak wcześniej.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
+    LangString etiudaUninstallLeft ${ID} "Część plików programu ${PRODUCT_NAME} jest wciąż w użyciu, więc folder $INSTDIR na razie zostaje. Po ponownym uruchomieniu komputera wystarczy jeszcze raz usunąć program ${PRODUCT_NAME} w Ustawieniach systemu Windows." ; placeholder: Claudette
     LangString RemoveDataCheckbox ${ID} "Usuń także dane z tego komputera"
     LangString RemoveDataSubtext ${ID} "Usuwa również pamięć podręczną Etiudy Studio z tego komputera. Zostają: licencja i okres próbny, klucz podpisu, zespoły, miejsce biblioteki, język i motyw oraz foldery katalogów."
   !else
@@ -774,6 +851,7 @@ Var UnRemoveLabel
     LangString TurnWelcomeText ${ID} "Etiuda Studio is where a team's catalog is written, checked and published to its desks.$\r$\n$\r$\nEtiuda Studio can be installed for this Windows account, with no administrator rights in the folder Setup suggests, or for everyone on this computer, which needs them. If Etiuda Studio is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
     LangString TurnUnWelcomeTitle ${ID} "Removing Etiuda Studio"
     LangString TurnUnWelcomeText ${ID} "This removes Etiuda Studio from this computer. Its catalogs and settings stay where they are, so installing it again finds them as they were.$\r$\n$\r$\nPress Next to go on."
+    LangString etiudaUninstallLeft ${ID} "Some of ${PRODUCT_NAME}'s files are still in use, so the folder $INSTDIR stays for now. Once the computer has restarted, removing ${PRODUCT_NAME} again in Windows Settings finishes the job." ; placeholder: Claudette
     LangString RemoveDataCheckbox ${ID} "Remove my data"
     LangString RemoveDataSubtext ${ID} "Also removes Etiuda Studio's caches on this computer. What stays: the licence and the trial, the signing key, the teams, the library's place, the language and theme, and the catalogs' own folders."
   !endif
@@ -887,10 +965,23 @@ Var UnRemoveLabel
         StrCpy $UnRemoveData "0"
       ${EndIf}
     ${EndIf}
+    # The last page before the uninstall's files page, which the template's install-mode page (a custom page, no section) alone
+    # stands between: the turning stops here, as the installer's does on its files page.
+    Call un.TurnStill # plant:turn-unfiles-still
   FunctionEnd
   !ifdef BUILD_UNINSTALLER
     !insertmacro studioRemoveUserDataSection
   !endif
+!macroend
+
+# THE FILES PAGE RUNS WITH THE TURNING STILL (TurnStill, in TurnEmit). electron-builder inserts the first macro straight before
+# MUI_PAGE_INSTFILES and the second between MUI_UNPAGE_INSTFILES and MUI_UNPAGE_FINISH, so each define is that page's own.
+!macro customPageAfterChangeDir
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW TurnStill # plant:turn-files-still
+  !define MUI_PAGE_CUSTOMFUNCTION_LEAVE TurnResume # plant:turn-files-resume
+!macroend
+!macro customUninstallPage
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.TurnResume # plant:turn-unfinish-resume
 !macroend
 
 # THE REMOVE MY DATA SECTION is declared from customUnWelcomePage, not here: this file is included at the very top of

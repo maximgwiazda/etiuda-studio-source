@@ -24,7 +24,10 @@
  *          uninstaller at that account's next sign-in, /currentuser /S /KEEP_APP_DATA, and runs nothing of that account's
  *       b  Studio's uninstaller run silent keeps the person's data: only the page's box removes it
  *   sm5 THE ALL-USERS FOLDER WARNING resolves ".." before it trusts a Program Files prefix
+ *   sm6 THE ACCOUNT TEST OF tools/patch-nsis.cjs FIX 5 RUNS: its whoami | findstr line, through cmd.exe as nsExec passes it, hands
+ *       whoami's output to findstr (Windows alone, else not run)
  * Each check is followed by its controls: one deciding line changed in memory, which must read red alone. */
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -325,8 +328,42 @@ try {
   fs.rmSync(lab, { recursive: true, force: true });
 }
 
-const EXPECTED = 27;
+/* ---- sm6: tools/patch-nsis.cjs fix 5's account test, run as nsExec runs it (the engine's installer-mends im10) ----
+   With this account's own SID in the system account's place the line finds it, and S-9-9-9 not, which tells a whoami that ran from
+   a line cmd.exe could not parse: it strips the first and last quote after /C, so the line needs one more pair around the rest. */
+let notRun = 0;
+const SYS = path.join(process.env.SystemRoot || "C:\\Windows", "System32");
+const PATCH = read("tools/patch-nsis.cjs");
+const whoamiOf = text => {
+  const src = String(text).split("\n").find(l => l.indexOf("whoami.exe") > -1 && /^\s*"/.test(l)) || "";
+  let s = ""; try { s = JSON.parse(src.trim().replace(/\s*\/\*[^*]*\*\/$/, "").replace(/,$/, "")); } catch (e) { s = ""; }
+  return (/^\s*nsExec::Exec `(.*)`$/.exec(s) || [])[1] || "";
+};
+const viaCmd = line => {
+  const full = line.split("$SYSDIR").join(SYS), exe = full.slice(1, full.indexOf("\"", 1)), rest = full.slice(full.indexOf("\"", 1) + 2);
+  const r = spawnSync(exe, [rest], { windowsVerbatimArguments: true, encoding: "utf8", windowsHide: true, timeout: 30000 });
+  return { exit: r.status, out: String(r.stdout || "") + String(r.stderr || "") };
+};
+const whoamiRuns = text => {
+  const line = whoamiOf(text);
+  if (!line || line.indexOf("S-1-5-18") < 0) return { ok: false, line };
+  const me = spawnSync(path.join(SYS, "whoami.exe"), ["/user", "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true });
+  const sid = (/"(S-1-[0-9-]+)"/.exec(String(me.stdout || "")) || [])[1] || "";
+  if (!sid) return { ok: false, why: "whoami gave no SID of its own" };
+  const any = viaCmd(line.split("S-1-5-18").join(sid)), none = viaCmd(line.split("S-1-5-18").join("S-9-9-9"));
+  return { ok: any.exit === 0 && none.exit === 1, any: any.exit, none: none.exit, said: any.out.trim().slice(0, 80) };
+};
+if (process.platform !== "win32") { notRun += 2; console.log("  --   sm6 not run: cmd.exe and whoami are Windows's"); }
+else {
+  const w6 = whoamiRuns(PATCH);
+  check(w6.ok, "sm6 tools/patch-nsis.cjs fix 5's account test, run through cmd.exe as nsExec passes it, hands whoami's SID to findstr:"
+    + " this account's SID put in the system account's place is found, and one nobody holds is not", JSON.stringify(w6));
+  const bare = PATCH.replace(/(nsExec::Exec `\\"\$SYSDIR\\\\cmd\.exe\\" \/C )\\"(\\"\$SYSDIR\\\\whoami\.exe[^`]*)\\"`/, "$1$2`");
+  check(bare !== PATCH && !whoamiRuns(bare).ok, "sm6 control: the line without the outer pair of quotes cmd.exe takes away reads red");
+}
+
+const EXPECTED = 29 - notRun;
 if (asserted !== EXPECTED) { failed++; console.log("  FAIL ran " + asserted + " checks, expected " + EXPECTED); }
-console.log("\n#counts checks=" + asserted + " failed=" + failed + " notRun=0");
+console.log("\n#counts checks=" + asserted + " failed=" + failed + " notRun=" + notRun);
 console.log("studio-installer-mends " + (failed ? failed + " failure(s)" : "passed " + asserted + " check(s)"));
 process.exit(Math.min(failed, 63));
