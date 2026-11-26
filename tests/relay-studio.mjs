@@ -179,13 +179,13 @@
  *   rsr1b the control: a project that never published moves as before, and the admitted desk gets no catalog and no error
  *   rsr1c an edition signed by another key, or by none, is not carried, and the move is made as before
  *   rsr1d (RETIRED 2026-11-26 with studio:team-relay) a press that fails after the edition was carried is taken back whole, the sealed edition and the ring with it
- *   rsr1e an undo after the draft id changed takes back the edition carry wrote, named from the archived catalog id, and a
- *        file already in the mirror is left as it was
+ *   rsr1e (RETIRED 2026-11-26 with the project half of undoRelayTeam) an undo after the draft id changed takes back the edition carry wrote, named from the archived
+ *        catalog id, and a file already in the mirror is left as it was
  *   rsr1f an edition whose signature names the lead key and does not verify is not carried, and the move is made as before
  *   rsce1 board 962 stage 5, section 4: carryEdition into a team's place holding another catalog's file of the same name (sealed
  *        for the team, in the clear, or sealed for a team not held here) is refused in its own frame and writes nothing
  *   rsce2 the control: carryEdition over an older edition of the same catalog, sealed for the team, still writes the latest
- *   rsce3 the same through startRelayTeam: another catalog sealed for the team being made stays byte for byte, the undo included
+ *   rsce3 (RETIRED 2026-11-26 with the carry in startRelayTeam) the same through startRelayTeam: another catalog sealed for the team being made stays byte for byte, the undo included
  *   s922down, s922owed E1 of the test architect's verdict on the Studio half: with the relay not answering the refusal stands, the
  *        invitation is withdrawn at once, the answer is kept owed and the lead is told; the shell's sync writes it when the relay is
  *        reached and the hold on the drop counts from then
@@ -4652,8 +4652,10 @@ LEGS.rs926b = async () => {
   fs.writeFileSync(path.join(path.dirname(U.keyAt), "team-revs.json"), JSON.stringify({ format: 1, kind: "etiuda-studio-team-revs",
     teams: { [teamId]: { [U.made.public]: { epoch: 2, rev: 5 } } } }, null, 1) + "\n");
   let threw = null;
+  /* MOVED 2026-11-26 with the folder remnants' retirement. Was: startRelayTeam(U.proj, ...), the team made through the catalog. Now: the team is made on its own (null), and the
+     project's place stays null because no catalog is read at all. */
   try {
-    await U.S.startRelayTeam(U.proj, { key: U.keyAt, passphrase: labSecret(U.keyAt), teamId, rt, url: Relay.RELAY_URL, mirror, teamKeys: K.teamKeysOf(U.teamsFile, U.vault) });
+    await U.S.startRelayTeam(null, { key: U.keyAt, passphrase: labSecret(U.keyAt), teamId, rt, url: Relay.RELAY_URL, mirror, teamKeys: K.teamKeysOf(U.teamsFile, U.vault) });
   } catch (e) { threw = e; }
   const undone = { threw: !!threw && threw.older === true, mirror: !fs.existsSync(mirror), place: U.projectJson().folder === null };
   check(have && twice.first && twice.refused && twice.one && Object.keys(none).every((k) => none[k]) && Object.keys(undone).every((k) => undone[k]),
@@ -4723,7 +4725,9 @@ LEGS.rs962s6g = async () => {
   K.keepTeamKey(R.teamsFile, R.vault, teamId, 1, teamKey);
   const mirror = K.keepRelay(R.teamsFile, teamId, rt, Relay.RELAY_URL);
   const keys = () => K.teamKeysOf(R.teamsFile, R.vault);
-  const made = await R.S.startRelayTeam(R.proj, { key: R.keyAt, passphrase: labSecret(R.keyAt), teamId, rt, url: Relay.RELAY_URL, mirror, teamKeys: keys(), userData: R.ud });
+  /* MOVED 2026-11-26 with the folder remnants' retirement. Was: startRelayTeam(R.proj, ...) made the team and took A in one call. Now: the team is made on its own and A joins it by chooseTeam, as B does. */
+  await R.S.startRelayTeam(null, { key: R.keyAt, passphrase: labSecret(R.keyAt), teamId, rt, url: Relay.RELAY_URL, mirror, teamKeys: keys(), userData: R.ud });
+  const made = await R.S.chooseTeam(R.proj, { key: R.keyAt, passphrase: labSecret(R.keyAt), teamId, folder: mirror, work: mirror, relay: { rt, url: Relay.RELAY_URL }, elsewhere: [], teamKeys: keys(), userData: R.ud });
   K.chooseSealed(R.teamsFile, teamId, true, mirror, made.written);
   const B = (await R.S.newProject(path.join(lab, "projects"), "Harbour Notes", [{ code: "en", name: "English" }])).dir;
   const shelfB = (await R.S.addTag(B, "shelf", { en: "Notes" })).tag.id;
@@ -5778,66 +5782,10 @@ LEGS.rsr1c = async () => {
    untouched; the next press carries the edition into one team whose key, file and place agree. */
 /* rsr1d RETIRED 2026-11-26 with studio:team-relay: a press that fails after the edition was carried is taken back whole, with the sealed edition and the ring gone from the
    relay folder, and the next press carries it. The carry at a team's start is the retired press's; the choose carries the edition as its fifth step (a stop after it is
-   team-choose's own leg), and the module function startRelayTeam keeps the undo that rsr1e and rsr1f read. */
-/* An undo after the draft id has changed still takes back the file carryEdition wrote. The name follows the catalog id
-   where the project has no fixed file name and the archived report names none, a publish from before file names were
-   kept; with a fixed name the draft id does not change the file, so this leg takes that name off before the move.
-   A note already in the mirror is left byte for byte. The team file and the ring go with the undo, as they do for a
-   press that is taken back whole. */
-LEGS.rsr1e = async () => {
-  const lab = labDir("relay-rsr1e"), R = await leadAtRest(lab, "Lantern Quay");
-  const { share, pub } = await publishedBefore(R, lab);
-  const project = R.projectJson();
-  delete project.fileName;
-  fs.writeFileSync(path.join(R.proj, "project.json"), JSON.stringify(project, null, 1) + "\n");
-  const report = JSON.parse(fs.readFileSync(path.join(pub.archive, "report.json"), "utf8"));
-  delete report.file;
-  fs.writeFileSync(path.join(pub.archive, "report.json"), JSON.stringify(report, null, 1) + "\n");
-  const previousId = String(JSON.parse(fs.readFileSync(path.join(R.proj, project.draft || "draft.json"), "utf8")).id || "");
-  const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
-  let reply = null;
-  try { { reply = await madeWithCatalog(shell, R.proj); await shellSettled(shell); } } finally { shell.done(); }
-  const rec = K.relayTeams(R.teamsFile)[0] || null;
-  if (!reply || reply.error || !rec) {
-    check(false, "rsr1e no relay team was made" + (reply && reply.error ? ": " + reply.error : ""));
-    return;
-  }
-  const mirror = rec.folder;
-  const ecs = fs.existsSync(mirror) ? fs.readdirSync(mirror).filter((n) => /\.ec$/i.test(n)) : [];
-  const carriedName = ecs.length === 1 ? ecs[0] : "";
-  let sealed = false;
-  try {
-    const d = JSON.parse(fs.readFileSync(path.join(mirror, carriedName), "utf8"));
-    sealed = d.kind === Engine.sealRules().SEALED_KIND && d.team === rec.team;
-  } catch { sealed = false; }
-  const noteName = "quay-note.txt";
-  fs.writeFileSync(path.join(mirror, noteName), "A note that was already in the mirror.\n");
-  const before = treeOf(mirror);
-  const draftAt = path.join(R.proj, project.draft || "draft.json");
-  const draft = JSON.parse(fs.readFileSync(draftAt, "utf8"));
-  draft.id = crypto.randomUUID();
-  const nextId = String(draft.id);
-  fs.writeFileSync(draftAt, JSON.stringify(draft, null, 1) + "\n");
-  let undoError = "";
-  try { await R.S.undoRelayTeam(R.proj, { teamId: rec.team, rt: rec.rt, mirror, folder: share }); }
-  catch (e) { undoError = String(e && e.message || e); }
-  const after = fs.existsSync(mirror) ? treeOf(mirror) : null;
-  const teamName = Engine.teamRules().V2_TEAM_FILE;
-  const spared = Object.keys(before).filter((k) => k !== carriedName && k !== "etiuda-ring.json" && k !== teamName);
-  const ok = {
-    named: carriedName === previousId + ".ec" && nextId !== previousId && sealed,
-    gone: !!after && after[carriedName] === undefined,
-    untouched: !!after && spared.indexOf(noteName) >= 0 && spared.every((k) => after[k] === before[k])
-      && Object.keys(after).every((k) => before[k] !== undefined),
-    undo: undoError === "",
-  };
-  check(Object.keys(ok).every((k) => ok[k]),
-    "rsr1e an undo after the draft id changed takes back the edition carry wrote, and a file already in the mirror is untouched: "
-    + Object.keys(ok).map((k) => k + " " + ok[k]).join(", ") + "; carried " + carriedName
-    + ", draft " + previousId + " then " + nextId + (undoError ? "; undo said " + undoError : "")
-    + (after ? "; left " + JSON.stringify(Object.keys(after)) : "; mirror gone"));
-};
-
+   team-choose's own leg); rsr1e, which read startRelayTeam's undo, is retired below. */
+/* rsr1e RETIRED 2026-11-26 with the project half of undoRelayTeam and takeBackCarried (the folder remnants' retirement): an undo after the draft id changed takes back the file
+   carryEdition wrote, named from the archived catalog id, and a file already in the mirror is left as it was. A team is made on its own now, so an undo carries nothing out of the
+   mirror but the team file (team-on-its-own ton2 and ton15 hold it); the choose's own carry is team-choose's. Its plants r1-take-name, r1-take-ec and r1-take-ring went with the code. */
 /* An edition whose signature names this lead's key, and does not verify under that key's public half, is not carried.
    One letter of the archived catalog is changed after signing, and the signature's key id and value are left as they
    were. The move is made as for an edition signed by another key: nothing is written for the edition, and the old
@@ -5964,36 +5912,10 @@ LEGS.rsce2 = async () => {
     + Object.keys(ok).map((k) => k + " " + ok[k]).join(", ") + (r.error ? "; said " + r.error.message : ""));
 };
 
-/* The path through startRelayTeam: a relay folder that already holds, under this catalog's name, another catalog sealed for the
-   very team being made (the shape a team of several catalogs takes). The press is refused in carryEdition's frame, the other
-   catalog's file stays byte for byte (taken back neither by the write nor by the undo after it), no team file is left, and the
-   project still publishes where it did. */
-LEGS.rsce3 = async () => {
-  const lab = labDir("relay-rsce3"), R = await leadAtRest(lab, "Lantern Quay");
-  const { share, pub } = await publishedBefore(R, lab);
-  const Pub = await import("../src/publish.mjs");
-  const rt = crypto.randomBytes(16).toString("hex"), teamId = "t-" + crypto.randomBytes(8).toString("hex"), key = crypto.randomBytes(32);
-  const mirror = path.join(R.ud, "relay", rt), name = path.basename(pub.ec);
-  fs.mkdirSync(mirror, { recursive: true });
-  fs.writeFileSync(path.join(mirror, name), JSON.stringify(Engine.sealRules().sealCatalog(key, teamId, 1, otherCatalog("harbour-other-list")), null, 1) + "\n");
-  const before = treeOf(mirror), projectWas = fs.readFileSync(path.join(R.proj, "project.json"), "utf8");
-  let error = null, out = null;
-  try {
-    out = await R.S.startRelayTeam(R.proj, { key: R.keyAt, passphrase: labSecret(R.keyAt), teamKeys: { [teamId]: { 1: key } }, teamId, rt, mirror, url: Relay.RELAY_URL });
-  } catch (e) { error = e; }
-  const said = error && error.said;
-  const ok = {
-    refused: !out && !!said && said.frame === Pub.CARRY_TAKEN_REFUSAL && said.vars.FILE === name,
-    otherKept: fs.existsSync(path.join(mirror, name)) && JSON.stringify(treeOf(mirror)) === JSON.stringify(before),
-    noTeamFile: !fs.existsSync(teamPath(mirror)),
-    placeKept: fs.readFileSync(path.join(R.proj, "project.json"), "utf8") === projectWas,
-  };
-  check(Object.keys(ok).every((k) => ok[k]),
-    "rsce3 startRelayTeam into a relay folder holding another catalog sealed for the same team under this catalog's name is refused in"
-    + " carryEdition's frame, the other file stays byte for byte, no team file is left and the project's place is unchanged: "
-    + Object.keys(ok).map((k) => k + " " + ok[k]).join(", ") + (error && !said ? "; threw " + error.message : "")
-    + "; left " + JSON.stringify(fs.existsSync(mirror) ? Object.keys(treeOf(mirror)) : null));
-};
+/* rsce3 RETIRED 2026-11-26 with the carry in startRelayTeam (the folder remnants' retirement): the path through startRelayTeam, a relay folder that already holds, under this catalog's
+   name, another catalog sealed for the very team being made. The press was refused in carryEdition's frame, the other catalog's file stayed byte for byte (taken back neither by the write
+   nor by the undo after it), no team file was left, and the project still published where it did. startRelayTeam carries nothing now; the same refusal at the choose is team-choose's
+   (CHOOSE_TAKEN, plant choose-taken), and carryEdition's own is rsce1's. Its plant ce-take-holds went with takeBackCarried. */
 
 /* Board 920. The shell keeps the next epoch's key before removeMember writes the team file. Until that write lands the
    key is pending: the catch-up must not seal an owed root file under it, a desk must still be taken at the current
@@ -11244,12 +11166,11 @@ const PLANTS = [
   { leg: "rsr1a", file: "src/publish.mjs", mark: "r1-seal", line: "  writeWhole(ecAt, bytes);" },
   { leg: "rsr1a", file: "src/publish.mjs", mark: "r1-ring", line: "  const ring = { file: ringPath(folder) };" },
   { leg: "rsr1c", file: "src/publish.mjs", mark: "r1-signer", line: "  ;" },
-  { leg: "rsr1e", file: "src/studio.mjs", mark: "r1-take-name", line: "      name = fixedName(home, p.project, String(p.draft.id || \"\"));" },
   { leg: "rsr1f", file: "src/publish.mjs", mark: "r1-signer", line: "  if (!read || !catalog.sig || catalog.sig.keyId !== read.keyId) return null;" },
   { leg: "rsce1", file: "src/publish.mjs", mark: "ce-taken", line: "  ;" },
   /* Grok's review 29, finding 2: the carry leaves a newer edition of the catalog in the place */
   { leg: "rsce2", file: "src/publish.mjs", mark: "r2-carry-newer", line: "  ;" },
-  { leg: "rsce3", file: "src/studio.mjs", mark: "ce-take-holds", line: "    const ours = true;" },
+  /* PLANTS RETIRED 2026-11-26 with takeBackCarried and the carry in startRelayTeam: rsr1e's r1-take-name and rsce3's ce-take-holds (the lines are gone from src/studio.mjs). */
   { leg: "rs926a", file: "shell/main.js", mark: "rs926-keep", line: "    const mirror = path.join(path.dirname(at), \"relay\", rt);" },
   { leg: "rs926a", file: "src/studio.mjs", mark: "rs926-channel", line: "  ;" },
   { leg: "rs926b", file: "shell/main.js", mark: "rs926-forget", line: "    ;" },

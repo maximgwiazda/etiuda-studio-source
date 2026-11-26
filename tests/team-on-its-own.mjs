@@ -24,6 +24,8 @@
  * Publishing in the clear to a plain folder is retired (Max, 2026-11-26 00:37: "Retire it."; 00:40: "Agreed."; findings 26, 28 and 32):
  * ton14 a catalog's own page with no team: Make a team makes one and the page stays the catalog's, listing the new team with a press to put it on
  * ton13 no sentence of the retired folder mechanics stands in ui/app.js or ui/lang.js, and a team's page carries no Publishing switch
+ * ton15 startRelayTeam and undoRelayTeam take no catalog: given a catalog's folder each refuses in its own words and writes nothing, and the same call with no
+ *       catalog goes through (the project branch of both, and takeBackCarried with it, are retired 2026-11-26; a catalog joins a team by chooseTeam alone)
  */
 import "./reg-stand-on.mjs";
 import fs from "node:fs";
@@ -368,6 +370,25 @@ await leg("ton14", async () => {
   check(ok, "ton14 a catalog's own page with no team: Make a team makes one, and the page stays the catalog's, listing the new team with a press to put it on");
 });
 
+await leg("ton15", async () => {
+  const w = await world("ton15"), k = teamKit(w);
+  const project = fs.readFileSync(path.join(w.dir, "project.json"), "utf8"), tree = snap({ dir: w.dir });
+  let startThrew = null;
+  try { await Studio.startRelayTeam(w.dir, startOpts(w, k)); } catch (e) { startThrew = e; }
+  const out = {};
+  out.startRefused = !!startThrew && /on its own/.test(String(startThrew.message)) && !fs.existsSync(k.mirror) && !fs.existsSync(Team.teamPath(k.mirror));
+  out.projectKept = snap({ dir: w.dir }) === tree && fs.readFileSync(path.join(w.dir, "project.json"), "utf8") === project;
+  /* The control: the same call with no catalog makes the team, so the refusal above is the folder's and not the options'. */
+  const made = await Studio.startRelayTeam(null, startOpts(w, k));
+  out.control = !!made && !!made.team && fs.existsSync(Team.teamPath(k.mirror));
+  let undoThrew = null;
+  try { await Studio.undoRelayTeam(w.dir, { teamId: k.teamId, rt: k.rt, mirror: k.mirror, folder: null, teamKeys: k.teamKeys }); } catch (e) { undoThrew = e; }
+  out.undoRefused = !!undoThrew && /on its own/.test(String(undoThrew.message)) && fs.existsSync(Team.teamPath(k.mirror)) && snap({ dir: w.dir }) === tree;
+  const ok = Object.values(out).every((v) => v === true);
+  if (!ok) process.stderr.write("ton15 " + said(out) + " start=" + String(startThrew && startThrew.message).slice(0, 120) + " undo=" + String(undoThrew && undoThrew.message).slice(0, 120) + NL);
+  check(ok, "ton15 startRelayTeam and undoRelayTeam given a catalog's folder each refuse and write nothing, and the same call with no catalog goes through");
+});
+
 /* AN INVITATION BELONGS TO THE TEAM, NOT TO A CATALOG (the ruling of 2026-11-26 07:21 on finding 29: inviting a teammate was keyed to a catalog,
    so an empty team showed Add a catalog first). A team with no catalog is invited to by its own place, the team's id, where a catalog's place
    was its folder: the same blob a desk reads (team, relay, lead, secret), made from the team file the mirror holds. */
@@ -533,7 +554,10 @@ await leg("tib7", async () => {
 
 /* Each plant is the line carrying its mark, replaced in a scratch copy; the copy's own run of the one leg must go red (tests/plant-copy.mjs). */
 const PLANTS = [
-  { mark: "ton-own", leg: "ton1", rel: "src/studio.mjs", line: "  const opts = o || {}, own = false, home = path.resolve(dir);" },
+  /* RE-AIMED 2026-11-26: ton-own lifted the reading of "no catalog" (own = false) in startRelayTeam, a line the retirement of its project branch took away. Was: ton1 red on
+     "  const opts = o || {}, own = false, home = path.resolve(dir);". Now: the refusal of a catalog's folder, which ton15 holds, and its twin in undoRelayTeam. */
+  { mark: "ton-own", leg: "ton15", rel: "src/studio.mjs", line: "  ;" },
+  { mark: "ton-undo-own", leg: "ton15", rel: "src/studio.mjs", line: "  ;" },
   /* ton-shell-own retired 2026-11-26 with studio:team-relay: it lifted the shell's reading of "no catalog" into "a catalog", and the shell reads no catalog now (the line is gone; the mark stays as a comment in shell/main.js). */
   { mark: "ton-empty", leg: "ton5", rel: "ui/app.js", line: "        + \"</div>\";" },
   { mark: "ton-open", leg: "ton8", rel: "ui/app.js", line: "      S.err = null; paint();" },

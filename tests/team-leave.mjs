@@ -195,7 +195,10 @@ async function relayWorld(tag, o) {
   Store.keepTeamKey(w.tf, TEST_VAULT, relayTeam, 1, relayKey);
   const mirror = Store.keepRelay(w.tf, relayTeam, rt, Relay.RELAY_URL);
   const teamKeys = Object.assign({}, w.teamKeys, { [relayTeam]: { 1: relayKey } });
-  const r = await Studio.startRelayTeam(D, { key: w.keyPath, passphrase: PASS, teamId: relayTeam, rt, url: Relay.RELAY_URL, mirror, teamKeys, userData: w.ud });
+  /* MOVED 2026-11-26 with the folder remnants' retirement. Was: startRelayTeam(D, ...) made the team and took D in one call. Now: the team is made on its own and D joins it by chooseTeam. */
+  await Studio.startRelayTeam(null, { key: w.keyPath, passphrase: PASS, teamId: relayTeam, rt, url: Relay.RELAY_URL, mirror, teamKeys, userData: w.ud });
+  const r = await Studio.chooseTeam(D, { key: w.keyPath, passphrase: PASS, teamId: relayTeam, folder: mirror, work: mirror, relay: { rt, url: Relay.RELAY_URL },
+    elsewhere: [], teamKeys, userData: w.ud });
   Store.chooseSealed(w.tf, relayTeam, true, mirror, r.written);
   const out = Object.assign(w, { D, rt, relayTeam, relayKey, mirror, teamKeys, idD: String(Pub.readProject(D).draft.id) });
   if (!(o && o.noChoose)) {
