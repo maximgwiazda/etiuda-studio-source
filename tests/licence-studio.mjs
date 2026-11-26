@@ -463,14 +463,14 @@ LEGS.ls2 = async () => {
   };
   const { svc, sh } = await world("ls2", { thread });
   try {
-    const before = await sh.ask("studio:team-relay", sh.catalog);
+    const before = await sh.ask("studio:team-new"); /* was studio:team-relay on a catalog, retired 2026-11-26 */
     const sentBefore = sh.calls.length;
     check(before && before.error && before.said && before.said.why === "stopped" && sentBefore === 0 && !made,
       "ls2a before: a team on the relay is refused as a stop, for a Studio nobody signed in to does not work, and nothing is sent"
       + " (was: refused for want of a grant): " + JSON.stringify(before && before.error));
     svc.licence();
     await signedIn(sh, svc);
-    const after = await sh.ask("studio:team-relay", sh.catalog);
+    const after = await sh.ask("studio:team-new");
     for (let i = 0; i < 1250 && !sh.calls.some((c) => /\/relay\/v1\/teams$/.test(c.url)); i++) await wait(20);
     const create = sh.calls.find((c) => /\/relay\/v1\/teams$/.test(c.url));
     const sent = create ? JSON.parse(create.body) : null;

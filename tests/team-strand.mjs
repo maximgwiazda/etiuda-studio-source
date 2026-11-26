@@ -29,7 +29,7 @@ const SCRATCH = path.join(ROOT, "scratch", "team-strand");
 const NL = "\n";
 const ONLY = process.env.TEAM_STRAND_ONLY || "";
 const RELAY_FOLDER = "C:\\Users\\lead\\AppData\\Etiuda\\relay\\0123456789abcdef0123456789abcdef";
-const FOLDER_SENTENCE = "this catalog has no folder yet: choose the folder the team reads from first";
+const FOLDER_SENTENCE = "This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first."; /* was "this catalog has no folder yet: choose the folder the team reads from first" until 2026-11-26 (no folder is chosen now) */
 const FIRST_PUBLISH = "Teammates receive this catalog once it is first published.";
 const WAITING = "This Studio waits for the team's lead to publish a first edition.";
 

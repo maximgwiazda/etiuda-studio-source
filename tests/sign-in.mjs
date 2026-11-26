@@ -5540,7 +5540,9 @@ await leg("si104", async () => {
     { name: "nba-full", reds: ["si105d"], from: "const full = namings.length && Number.isFinite(held)", to: "const full = false && Number.isFinite(held)" },
     { name: "nba-several", reds: ["si105d"], from: "const several = claimed > 1 ?", to: "const several = false ?" },
     { name: "nba-invite-address", reds: ["si106c"], from: "if (!addressShaped(typed)) { S.piSaid = { dir, hint: typed.trim() }; paint(); return; }", to: "" },
-    { name: "nba-folder-field", reds: ["si112a"], from: "const folderTeam = !!P && P.relay === false;", to: "const folderTeam = false;" },
+    /* RE-AIMED 2026-11-26: the page no longer reads `folderTeam = !!P && P.relay === false` (the shared-folder team was held, 1c9c35ac, and the line went); the same claim, a team
+       that shares a folder draws no address field and no Invite, is decided now by the Team screen's held-folder branch. */
+    { name: "nba-folder-field", reds: ["si112a"], from: "if (d.team && d.team.relay !== true && !onRelay(d.folder))", to: "if (false)" },
     { name: "nba-invite-rows", reds: ["si106b"], from: "    S.people.confirms = r && !r.error && Array.isArray(r.confirms) ? r.confirms : [];\n", to: "" },
     { name: "nba-join-word", reds: ["si106d"], from: 'esc(T("waiting for their Join"))', to: 'esc(T("waiting for their next sign-in"))' },
     { name: "nba-ask-line", reds: ["si107a"], from: 'T("The licence\'s owner names it by this account\'s email address,', to: 'T("The licence\'s owner names it by this account\'s sign-in code,' },
@@ -5707,7 +5709,8 @@ await leg("si109", async () => {
   const out = await run109(ROOT);
   const planted = process.env.ETIUDA_PLANTS === "off" ? { off: "skipped" } : {};
   if (!planted.off) for (const [name, from, to, part] of [
-    ["nba-shell-unvouched", "x.source === \"unconfirmed\" && x.kind === \"desk\" && (relayId ?", "x.kind === \"desk\" && (relayId ?", "list"],
+    /* RE-AIMED 2026-11-26: the filter reads `x.source === "unconfirmed" && x.kind === "desk" && !!relayId && x.team === relayId` now (was: `... && (relayId ? ...`, with a folder branch); the plant still drops the source test. */
+    ["nba-shell-unvouched", "x.source === \"unconfirmed\" && x.kind === \"desk\" && !!relayId", "x.kind === \"desk\" && !!relayId", "list"],
     ["nba-shell-ask-days", "const ASK_SHOWN_MS = 30 * 86400000;", "const ASK_SHOWN_MS = 7 * 86400000;", "list"],
     ["nba-shell-admit", "codeOfPerson.get(String(code == null ? \"\" : code)) || \"\"", "String(code == null ? \"\" : code)", "admit"],
     ["nba-shell-relay", "  const a = await C.invitePerson(wire.licenceRequest, open, typed, relayId, Date.now());", "  const a = await C.invitePerson(wire.licenceRequest, open, typed, undefined, Date.now());", "invited"],
@@ -5729,8 +5732,7 @@ const F1_ID = "t-1f1f1f1f1f1f1f1f", F2_ID = "t-2f2f2f2f2f2f2f2f", R_ID = "t-3a3a
 const F1_DIR = TEAM_DIR, F2_DIR = TEAM_DIR + "-two", R_DIR = TEAM_DIR + "-relay";
 const ASK_FREE = "6f".repeat(16), ASK_REL = "7a".repeat(16);
 const run112 = async (root) => {
-  /* A catalog folder named for a team's id holds no team: a team with no catalog is reached by its id as the place (tib, tests/team-on-its-own.mjs), never through a folder. */
-  const thread = (verb, home) => Promise.resolve(verb !== "teamFacts" || path.basename(String(home)) === R_ID ? {}
+  const thread = (verb, home) => Promise.resolve(verb !== "teamFacts" ? {}
     : { team: { id: path.resolve(String(home)) === path.resolve(F1_DIR) ? F1_ID : path.resolve(String(home)) === path.resolve(F2_DIR) ? F2_ID : R_ID, epoch: 1, roster: [] } });
   const ask = (id, team) => ({ ask: id, person: P_PIOTR, name: "Piotr Zielinski", address: "piotr.zielinski@example.com", vouched: false, provider: "microsoft", account: "personal",
     source: "unconfirmed", kind: "desk", team, until: ASK_MADE + ASK_DAYS_SERVICE * DAY_MS });
@@ -5751,12 +5753,6 @@ const run112 = async (root) => {
     await sh.ask("studio:person-invite", R_DIR, "new.member@example.com");
     const inv = sent.filter((x) => x.route === "invite");
     r.relayInvite = inv.length === 1 && inv[0].body.team === R_ID;
-    /* A team with no catalog is the place by its id: the invitation and the list are for that team, no catalog read. */
-    await sh.ask("studio:person-invite", R_ID, "second.member@example.com");
-    const byId = sent.filter((x) => x.route === "invite");
-    r.byTeamId = byId.length === 2 && byId[1].body.team === R_ID && byId[1].body.address === "second.member@example.com";
-    const lid = await sh.ask("studio:people-list", R_ID);
-    r.listByTeamId = lid.relay === true && lid.confirms.length === 1 && lid.confirms[0].ask === ASK_REL;
     return r;
   });
 };
@@ -5766,7 +5762,6 @@ await leg("si112", async () => {
   if (!planted.off) for (const [name, from, to, part] of [
     ["nba-folder-invite", '  if (!relayId) throw R.refuse(licenceSaid("person-invite-folder")); /* plant:invite-folder */\n', "", "folderInvite"],
     ["nba-relay-row", "return K.relayTeams(await teamsAt()).some((t) => t.team === teamId) ? teamId : null;", "return teamId;", "relayFlag"],
-    ["nba-people-place", "  const tp = await teamPlaceOf(project); /* a team with no catalog is named by its own id */\n  if (tp) return tp.team;\n", "", "byTeamId"],
   ]) {
     const t = plantedTree(name, [[path.join("shell", "main.js"), from, to]]);
     planted[name] = !t ? "anchor" : !(await run112(t))[part] ? "red" : "held";

@@ -342,7 +342,6 @@
     "nothing published yet": "jeszcze nic nie opublikowano",
     "{FILE}, rev {REV}": "{FILE}, wer. {REV}",
     /* Claudette's words, 2026-10-28 */
-    "The edition is in the team's folder.": "Wydanie jest już w folderze zespołu.",
     /* Claudette's words, 2026-10-27 */
     "Each running desk takes the file once the relay has it and offers it to the person at it; a desk that is closed finds it when it next starts.":
       "Każde włączone stanowisko weźmie plik, gdy tylko dotrze on do przekaźnika, i zaproponuje go osobie, która przy nim pracuje; wyłączone znajdzie go przy następnym uruchomieniu.",
@@ -1818,8 +1817,9 @@
       "Plik {FILE} w folderze {FOLDER} należy do innego katalogu, więc zostaje na miejscu, a plik tego katalogu zachowuje swoją nazwę.",
     "{TEXT} leaves no letter from a to z or digit for a file name":
       "Z {TEXT} nie zostaje dla nazwy pliku żadna litera od a do z ani cyfra",
-    "The team reads this catalog from {DIR}, which is inside the catalog's own folder, so renaming it would move that folder out of its reach. Change folder beside Writes to chooses one outside the catalog, and the rename can follow.":
-      "Zespół czyta ten katalog z folderu {DIR}, który leży w folderze samego katalogu, więc zmiana nazwy przeniosłaby go poza jego zasięg. Przycisk Zmień folder przy polu Miejsce zapisu pozwala wybrać folder poza katalogiem, a potem można już zmienić nazwę.",
+    /* Moved 2026-11-26 with the folder a person chose: the sentence loses its tail, which sent the reader to a folder control that is gone and promised the rename after it. A placeholder for the copywriter. */
+    "The team reads this catalog from {DIR}, which is inside the catalog's own folder, so renaming it would move that folder out of its reach.":
+      "Zespół czyta ten katalog z folderu {DIR}, który leży w folderze samego katalogu, więc zmiana nazwy przeniosłaby go poza jego zasięg.",
     "there is already a folder at {DIR}; an import never writes over a catalog that is already there":
       "pod ścieżką {DIR} jest już folder; import nigdy nie nadpisuje katalogu, który już tam jest",
     "there is already a folder at {DIR}; an upgrade never writes over a catalog that is already there":
@@ -1834,8 +1834,6 @@
     "no file at {P}": "pod ścieżką {P} nie ma pliku",
     /* A draft, the copywriter's to replace. */
     "the paste has no reply in it": "we wklejonym tekście nie ma żadnej odpowiedzi",
-    "this catalog has no folder yet: choose the folder the team reads from first":
-      "ten katalog nie ma jeszcze folderu: najpierw trzeba wybrać folder, z którego czyta zespół",
     /* Nic nie zapisano is impersonal, so neither line picks a sex for whoever is reading. */
     "{PROBLEMS}, nothing written: {LIST}": "{PROBLEMS}, nic nie zapisano: {LIST}",
     "{DIFFERENCES} on the way back, nothing written: {LIST}":
@@ -1920,8 +1918,6 @@
       "Plik {FILE} jest uszkodzony i nie da się go odczytać, więc tego katalogu nie można otworzyć. Studio zostawiło plik bez zmian; każda opublikowana wersja jest zachowana w całości w {ARCHIVE}.",
     "{FILE} is damaged and cannot be read, so this catalog cannot open. Studio has left the file as it is.":
       "Plik {FILE} jest uszkodzony i nie da się go odczytać, więc tego katalogu nie można otworzyć. Studio zostawiło plik bez zmian.",
-    "Publishing needs the folder the team reads from, and Change beside Writes to chooses it.":
-      "Do publikacji potrzebny jest folder, z którego czyta zespół; wybiera się go przyciskiem Zmień przy polu Miejsce zapisu.",
     /* The licence the cover says (board 745, and the ruling of 2026-09-24 02:01). The copywriter's words. */
     "The licence file could not be read just now, perhaps because another program has it open. Publishing goes on as normal, and Studio tries again at its next look.":
       "Nie udało się teraz odczytać pliku licencji, być może dlatego, że ma go otwartego inny program. Publikowanie działa normalnie, a Studio spróbuje ponownie przy następnym sprawdzeniu.",
@@ -2731,6 +2727,7 @@
     "The catalog is in the team now, and every teammate receives it.": "Katalog jest już w zespole i trafia do wszystkich jego członków.",
     "The catalog is in the team now, and every teammate receives it with its next published edition.": "Katalog jest już w zespole, a jego członkowie otrzymają go z następnym opublikowanym wydaniem.",
     "Add a catalog to this team": "Dodaj katalog do tego zespołu",
+    "Invite a teammate is offered here once the team holds a catalog, so an empty team starts with Add a catalog to this team.": "Przycisk Zaproś członka zespołu pojawia się tutaj, gdy zespół ma katalog, więc pusty zespół zaczyna od przycisku Dodaj katalog do tego zespołu.",
     "End this team": "Zakończ ten zespół",
     "This Studio does not lead that team, so the team was not ended.": "To Studio nie prowadzi tego zespołu, więc zespół nie został zakończony.",
     "This team still has an invitation that can let a teammate in, so it was not ended. Once the invitation is withdrawn, the team can be ended. Nothing was changed.": "Ten zespół ma wciąż zaproszenie, dzięki któremu może dołączyć nowy członek, więc nie został zakończony. Po wycofaniu zaproszenia zespół można zakończyć. Nic nie zmieniono.",
@@ -2842,7 +2839,6 @@
     "Editions travel through the Etiuda relay sealed, so that only the team can read them.": "Wydania idą przez przekaźnik Etiudy zapieczętowane, więc odczyta je tylko zespół.",
     "Every teammate reads a published edition from the relay.": "Każdy członek zespołu odczytuje opublikowane wydanie z przekaźnika.",
     "One roster for every catalog that publishes through the relay.": "Jedna lista członków zespołu dla wszystkich katalogów, które publikują przez przekaźnik.",
-    "This catalog has a team already, so no other was started.": "Ten katalog ma już zespół, więc nie założono innego.",
     /* Board 935: the lead chose the relay and holds no grant that covers it now. Said under the choice, which still offers a shared folder. The words are the copywriter's of 2026-10-25. */
     "A licence for the Etiuda relay names this Studio's signing key, and there is none yet: make one first from the Menu, under Settings, then Signing key, with Make a signing key.":
       "Licencja na przekaźnik Etiudy wskazuje klucz podpisu tego Studia, a takiego klucza jeszcze nie ma: najpierw trzeba go utworzyć z menu, w Ustawieniach, w części Klucz podpisu, przyciskiem Utwórz klucz podpisu.",
@@ -2965,11 +2961,6 @@
       "Wcześniejsze wydania tego katalogu były podpisane, a klucza podpisu nie da się tu teraz otworzyć, więc tego wydania nie można opublikować bez podpisu: stanowiska, które ufają temu kluczowi, odrzuciłyby je. Klucz można przywrócić z menu, w Ustawieniach, w części Klucz podpisu.",
     "Nothing was published: earlier editions of this catalog were signed, the signing key cannot be opened here now, and desks that trust it would refuse an unsigned edition. Restore the key from the Menu, under Settings, then Signing key.":
       "Nic nie opublikowano: wcześniejsze wydania tego katalogu były podpisane, klucza podpisu nie da się tu teraz otworzyć, a stanowiska, które mu ufają, odrzuciłyby wydanie bez podpisu. Klucz można przywrócić z menu, w Ustawieniach, w części Klucz podpisu.",
-    /* The key made at the first publish or seal, and the one nudge towards its backup copy (the sense pass of 2026-10-14,
-       finding 9): the words are the copywriter's of 2026-10-25. */
-    "Publishing makes this Studio's signing key and signs the edition with it, so every desk offers the later editions as newer versions.":
-      "Publikacja utworzy klucz podpisu tego Studia i podpisze nim wydanie, więc każde stanowisko zaproponuje kolejne wydania jako nowsze wersje.",
-    "Studio made its signing key, and signs every edition with it from now on.": "Studio utworzyło klucz podpisu i od teraz podpisuje nim każde wydanie.",
     /* The New card cover's text box once a shape is chosen (E2): it holds the card's first reply. The lead engineer's
        words, for the copywriter to confirm. */
     "First step": "Pierwszy krok",
