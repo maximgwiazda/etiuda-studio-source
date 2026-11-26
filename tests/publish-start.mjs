@@ -36,6 +36,7 @@ const ONLY = process.env.PUBLISH_START_ONLY || "";
 
 const MIRROR = "C:/etiuda/relay/" + "ab".repeat(16);
 const REAL = "C:/Share/real-team";
+const CHOSEN = "C:/Share/chosen-team";
 
 /* ETIUDA_PLANTS=off (a merge's area run, and this file's own plant children) skips the plants phase and counts each plant
    it would have run; the release profile runs with plants on, so the phase still runs there. */
@@ -86,6 +87,16 @@ function makeApi(calls, overrides, more) {
   const base = {
     publishPlan: async (d) => { calls.push(["publishPlan", d]); return o.publishPlan ? o.publishPlan(d) : PLAN; },
     desks: async (d) => { calls.push(["desks", d]); return o.desks ? o.desks(d) : noTeam(null); },
+    teamRelay: async (d) => { calls.push(["teamRelay", d]); return o.teamRelay ? o.teamRelay(d) : { ok: true, signing: { keyId: "test-key" } }; },
+    pickFolder: async (title) => { calls.push(["pickFolder", title]); return o.pickFolder ? o.pickFolder(title) : { folder: CHOSEN }; },
+    setFolder: async (d, fo) => {
+      calls.push(["setFolder", d, fo]);
+      return o.setFolder ? o.setFolder(d, fo) : { folder: fo, check: { exists: true, writable: true, local: false, cloud: "" } };
+    },
+    teamSealed: async (d, sealed, fresh) => {
+      calls.push(["teamSealed", d, sealed, fresh]);
+      return o.teamSealed ? o.teamSealed(d, sealed, fresh) : { ok: true, signing: { keyId: "test-key" } };
+    },
     reveal: async () => null,
   };
   Object.assign(base, more || {});

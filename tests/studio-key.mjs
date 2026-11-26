@@ -30,7 +30,7 @@ import { olderFolderTeam } from "./older-folder-team.mjs"; /* the folder team is
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const SCRATCH = path.join(ROOT, "scratch", "studio-key");
-const EXPECTED = 27; /* 29, less sk4b and sk4c, retired with the key the first publish made (2026-11-26) */
+const EXPECTED = 29;
 const NL = String.fromCharCode(10);
 const NB = new RegExp(String.fromCharCode(160), "g");
 const PASS = "a passphrase for this gate's backup copy";
@@ -446,29 +446,61 @@ async function main(argv) {
   const planWith = (signing) => Object.assign({}, plan0, { lint: Object.assign({}, plan0.lint, { errors: 0, warnings: 0, rows: [] }), signing });
   const signGate = (Q, signing) => { Q.S.plan = planWith(signing); Q.S.planDesks = null;
     return (/data-gate="sign">([^]*?)<\/div><\/div>/.exec(Q.coverHtml()) || [])[1] || ""; };
-  /* MOVED 2026-11-26 (the pass over the retired folder mechanics: the press no longer makes a key of its own accord, since a team is made on the relay
-     over a key and a catalog on no team publishes nowhere). Was: with no key and nothing at the folder trusting another, Signed and that publishing makes the
-     key; where the folder's team trusts another, Unsigned, that key in fours and Restore first. Now the first line is gone: a plan that still said `makes`
-     reads as the residual no-key case, Unsigned, with the line that Settings makes the key. */
-  await leg("sk4a the cover's signature: where the folder's team trusts another key, Unsigned, that key in fours after Studio's disc and a link to Settings; with no key and no team, Unsigned and the line that Settings makes one, whatever the plan says of `makes`", async () => {
+  await leg("sk4a the cover's signature: with no key and nothing at the folder trusting another, Signed and that publishing"
+    + " makes the key; where the folder's team trusts another, Unsigned, that key in fours after Studio's disc and Restore"
+    + " first, with no Make; CONTROL: the residual no-key case keeps its line", async () => {
     P.S.host = { signing: { keyId: "", problem: null } };
-    const stale = signGate(P, { keyId: "", print: "", opens: false, unreadable: false, makes: true });
+    const makes = signGate(P, { keyId: "", print: "", opens: false, unreadable: false, makes: true });
     const theirs = signGate(P, { keyId: "", print: "", opens: false, unreadable: false, restore: "9a3a782d7f8ff25b" });
     const none = signGate(P, { keyId: "", print: "", opens: false, unreadable: false });
-    return /^Unsigned/.test(text(stale)) && !/Publishing makes this Studio's signing key/.test(text(stale)) && text(stale) === text(none)
-      && /^Unsigned/.test(text(theirs)) && /The team trusts the signing key 9a3a 782d 7f8f f25b ?, and it is not on this computer./.test(text(theirs))
+    return /^Signed/.test(text(makes)) && /Publishing makes this Studio's signing key and signs the edition with it/.test(text(makes))
+      && !/key-make|key-restore/.test(makes)
+      && /^Unsigned/.test(text(theirs)) && /The team trusts the signing key 9a3a 782d 7f8f f25b ?, and it is not on this computer\./.test(text(theirs))
       && /class="kdisc" role="img" aria-label="Studio&#39;s signing key"/.test(theirs)
       /* MOVED (board 1016, item 5): old, Restore first and no Make drawn here; new, no press of the key's at all, one link to Settings' Signing key. */
       && !/data-act="key-restore"|data-act="key-make"/.test(theirs) && /data-act="key-settings">[^<]*(<[^>]*>)*Signing key settings/.test(theirs)
-      && /^Unsigned/.test(text(none)) && /There is no signing key yet: one is made from the Menu, under Settings, then Signing key./.test(text(none));
+      && /^Unsigned/.test(text(none)) && /There is no signing key yet: one is made from the Menu, under Settings, then Signing key\./.test(text(none));
   });
-  /* RETIRED 2026-11-26 with the key the first publish made (the pass over the retired folder mechanics): sk4b, the landing after the publish that made the
-     key says "Studio made its signing key, and signs every edition with it from now on. A backup copy brings it to another computer." in the bubble and offers
-     a backup copy, once, and sk4c, the bubble's backup press closes the bubble and opens the backup copy's cover. The publish makes no key now, the bubble
-     has no such line and no button, and the backup copy is offered from Settings alone (sk3a). */
+  /* The press driven whole, as tests/publish-press.mjs drives it, over a shell stood in by its replies. */
+  const landed = [];
+  const pressApi = Object.assign({}, api, {
+    publish: async (d, o) => { landed.push(o); return landed.length === 1
+      ? { error: null, rev: 2, edition: "2026-10-15", ec: "S:\\Support\\gate.ec", folder: "S:\\Support", keyNudge: true, signing: made() }
+      : { error: null, rev: 3, edition: "2026-10-15a", ec: "S:\\Support\\gate.ec", folder: "S:\\Support" }; },
+    open: async (d) => JSON.parse(JSON.stringify(await S.openProject(d))),
+    projects: async () => ({ error: null, projects: [] }),
+    tabs: async () => ({ error: null }),
+  });
+  const pg = loadPage({ api: pressApi, uiLang: "en" }), Q = pg.page;
+  const press = async () => {
+    Object.assign(Q.S, { open: JSON.parse(JSON.stringify(await S.openProject(proj))), screen: "project", section: "cards", lang: "en",
+      tabs: [{ dir: proj, name: "Key gate", rev: 1 }], cover: "publish", plan: planWith({ keyId: "", print: "", opens: false, makes: true }), planDesks: null });
+    pg.doc.absent = new Set(["#override", "#fileName"]);
+    await Q.ACTS["do-publish"]();
+    return { said: pg.node("#pressedKey").textContent, hidden: pg.node("#pressedKey").hidden, button: pg.node("#pressedBackup").hidden,
+             label: pg.node("#pressedBackup").innerHTML };
+  };
+  await leg("sk4b the nudge: the landing after the publish that made the key says so in the bubble and offers a backup copy,"
+    + " the page takes the key the shell answered, and the next landing says nothing of it", async () => {
+    Q.S.host = { signing: { keyId: "", problem: null }, tour: { offered: true } };
+    const first = await press();
+    const took = Q.S.host.signing.keyId === "studio-9a3a782d7f8ff25b";
+    const second = await press();
+    return landed.length === 2 && first.hidden === false && first.button === false
+      && /^Studio made its signing key, and signs every edition with it from now on\. A backup copy brings it to another computer\.$/.test(first.said)
+      && /Make a backup copy…/.test(first.label) && took
+      && second.hidden === true && second.button === true && second.said === "";
+  });
+  await leg("sk4c the bubble's backup press closes the bubble and opens the backup copy's cover", async () => {
+    Q.S.host = { signing: made(), tour: { offered: true } };
+    pg.node("#pressed").hidden = false;
+    Q.ACTS["pressed-backup"]();
+    return pg.node("#pressed").hidden === true && Q.S.cover === "key" && Q.S.keyWant === "backup";
+  });
   /* The Desks screen with no key: the switch where Sealed would make the key, the old row where something else is in the way. */
-  let deskAnswer = null;
-  const dk = loadPage({ api: Object.assign({}, api, { desks: async () => JSON.parse(JSON.stringify(deskAnswer)) }), uiLang: "en" }), D = dk.page;
+  let deskAnswer = null, sealAnswer = null;
+  const dk = loadPage({ api: Object.assign({}, api, { desks: async () => JSON.parse(JSON.stringify(deskAnswer)),
+    teamSealed: async () => JSON.parse(JSON.stringify(sealAnswer)), teamRelay: async () => JSON.parse(JSON.stringify(sealAnswer)) }), uiLang: "en" }), D = dk.page;
   const noKey = (o) => Object.assign({ error: null, folder: "S:\\Support", id: "c", mark: null, signing: "", file: "none", reason: "",
     inside: false, keyHeld: false, canKeep: true, restorable: null, requests: [], team: null }, o || {});
   /* MOVED 2026-11-26 (Max, findings 29, 31 and 32: a team is made on its own, and the Publishing switch is retired). Was: with no key and nothing at the

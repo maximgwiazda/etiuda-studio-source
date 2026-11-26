@@ -107,7 +107,7 @@ const startOpts = (w, k) => ({ key: w.keyPath, passphrase: PASS, teamId: k.teamI
 async function loadShell(ud, thread, more) {
   const Module = nodeRequire("node:module");
   const main = path.join(ROOT, "shell", "main.js"), ui = path.join(ROOT, "ui", "index.html");
-  const got = { handlers: {}, windows: [] };
+  const got = { handlers: {}, windows: [], clip: [] };
   class Win {
     constructor() { this.webContents = { id: 1, on() {}, once() {}, send() {}, setWindowOpenHandler() {}, getURL: () => pathToFileURL(ui).href }; got.windows.push(this); }
     on() {} once() {} isDestroyed() { return false; } isMaximized() { return false; } isMinimized() { return false; }
@@ -120,7 +120,7 @@ async function loadShell(ud, thread, more) {
     Menu: { setApplicationMenu() {}, buildFromTemplate: () => ({ popup() {} }) },
     dialog: { showMessageBox: () => Promise.resolve({ response: 0 }), showOpenDialog: () => Promise.resolve({ canceled: true, filePaths: [] }),
       showSaveDialog: () => Promise.resolve({ canceled: true, filePath: "" }) },
-    nativeTheme: { themeSource: "system", shouldUseDarkColors: false }, clipboard: { writeText() {} }, safeStorage: TEST_VAULT,
+    nativeTheme: { themeSource: "system", shouldUseDarkColors: false }, clipboard: { writeText: (t) => { got.clip.push(String(t)); } }, safeStorage: TEST_VAULT,
     screen: { getAllDisplays: () => [], getPrimaryDisplay: () => ({}), on() {}, removeListener() {} },
     session: { defaultSession: { setPermissionRequestHandler() {}, setPermissionCheckHandler() {}, setDevicePermissionHandler() {},
       setSpellCheckerLanguages() {}, setSpellCheckerDictionaryDownloadURL() {}, setSpellCheckerEnabled() {} } },
@@ -148,7 +148,7 @@ async function loadShell(ud, thread, more) {
     dropCache();
     const shell = nodeRequire(main);
     const event = { senderFrame: { parent: null, url: pathToFileURL(ui).href }, sender: got.windows[0] && got.windows[0].webContents };
-    return { shell, has: (ch) => typeof got.handlers[ch] === "function",
+    return { shell, clip: got.clip, has: (ch) => typeof got.handlers[ch] === "function",
       ask: async (ch, ...a) => { const fn = got.handlers[ch]; if (!fn) throw new Error("no handler for " + ch); return fn(event, ...a); },
       done: async () => { try { if (shell.endRelay) await Promise.race([shell.endRelay(), new Promise((r) => setTimeout(r, 3000))]); } catch { /* exit stops it */ } restore(); } };
   } catch (err) { restore(); throw err; }
@@ -227,11 +227,7 @@ await leg("ton13", async () => {
   const text = fs.readFileSync(path.join(ROOT, "ui", "app.js"), "utf8") + fs.readFileSync(path.join(ROOT, "ui", "lang.js"), "utf8");
   const RETIRED = ["Without a team, editions can also be published to a plain folder", "Choose the folder your team reads from",
     "publishes nowhere until it is given a team or a folder", "Plain: any desk that reads this folder can open it.", "Where the team meets",
-    "Give this folder its catalog files in the clear", "Seal what this folder is given", "Start a new team in this folder",
-    /* the pass over the retired folder mechanics, 2026-11-26: the key the first publish made, the control the folder sentences named, the folder team's own caption */
-    "Publishing makes this Studio's signing key and signs the edition with it", "Studio made its signing key, and signs every edition with it from now on.",
-    "Change folder beside Writes to chooses", "choose the folder the team reads from first", "Publishing needs the folder the team reads from",
-    "The edition is in the team's folder.", "This catalog has a team already, so no other was started."];
+    "Give this folder its catalog files in the clear", "Seal what this folder is given", "Start a new team in this folder"];
   const standing = RETIRED.filter((s) => text.indexOf(s) >= 0);
   /* The control: a sentence that stands is found by the same search. */
   const control = text.indexOf("This studio leads no team yet.".replace("studio", "Studio")) >= 0 && text.indexOf("Make a team") >= 0;
@@ -368,6 +364,145 @@ await leg("ton14", async () => {
   check(ok, "ton14 a catalog's own page with no team: Make a team makes one, and the page stays the catalog's, listing the new team with a press to put it on");
 });
 
+/* AN INVITATION BELONGS TO THE TEAM, NOT TO A CATALOG (the ruling of 2026-11-26 07:21 on finding 29: inviting a teammate was keyed to a catalog,
+   so an empty team showed Add a catalog first). A team with no catalog is invited to by its own place, the team's id, where a catalog's place
+   was its folder: the same blob a desk reads (team, relay, lead, secret), made from the team file the mirror holds. */
+const TIB_TEAM = "t-0123456789abcdef";
+async function bareTeam(tag) {
+  const w = await world(tag);
+  const kit = nodeRequire(path.join(ROOT, "engine", "pinned", "relay", "test", "grant-kit.cjs"));
+  fs.writeFileSync(path.join(w.ud, "relay-grant.json"), JSON.stringify(kit.grantFor(w.keyDoc.public, Date.now()), null, 1) + NL);
+  const sh = await loadShell(w.ud, studioThread, { STUDIO_RELAY_ROOT: kit.ROOT.pub });
+  const made = await sh.ask("studio:team-new");
+  const row = Store.relayTeams(w.tf)[0];
+  return { w, sh, made, row, teamId: row && row.team };
+}
+await leg("tib1", async () => {
+  const b = await bareTeam("tib1");
+  try {
+    const out = {};
+    out.team = !!b.teamId && !b.made.error;
+    const before = fs.readFileSync(path.join(b.w.dir, "project.json"), "utf8");
+    const r = out.team ? await b.sh.ask("studio:desks", b.teamId) : null;
+    out.read = !!r && !r.error && r.file === "ours" && !!r.team && r.team.id === b.teamId && Array.isArray(r.team.roster) && r.team.roster.length === 0
+      && Array.isArray(r.invites) && r.invites.length === 0;
+    out.project = fs.readFileSync(path.join(b.w.dir, "project.json"), "utf8") === before;
+    const ok = Object.values(out).every((v) => v === true);
+    if (!ok) process.stderr.write("tib1 " + said(out) + " desks=" + said(r).slice(0, 300) + NL);
+    check(ok, "tib1 studio:desks answers a team with no catalog by its id: the team file this Studio leads, its roster and its invitations, and no project is read");
+  } finally { await b.sh.done(); }
+});
+
+await leg("tib2", async () => {
+  const b = await bareTeam("tib2");
+  try {
+    const out = {};
+    const made = b.teamId ? await b.sh.ask("studio:invite-make", b.teamId, "Mira Lantern", "Ada Harbour") : null;
+    const id = made && made.invited;
+    out.made = !!made && !made.error && typeof id === "string" && Array.isArray(made.invites) && made.invites.some((i) => i.id === id && i.relay === true && i.person === "Ada Harbour");
+    out.clip = b.sh.clip.length === 1 && /^https:\/\/etiuda\.dev\/join#/.test(b.sh.clip[0]);
+    /* The blob is the shape the desk reads, with nothing added and no folder (src/invite.mjs). */
+    const payload = out.clip ? b.sh.clip[0].split("#")[1] : "";
+    let doc = null;
+    try { doc = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")); } catch { doc = null; }
+    const keys = doc ? Object.keys(doc).sort().join(",") : "";
+    out.shape = !!doc && /^(lead,relay,secret,team|lead,relay,secret,signin,team)$/.test(keys) && doc.team === b.teamId && doc.relay.rt === b.row.rt
+      && doc.lead.keyId === b.w.keyDoc.keyId && doc.lead.public === b.w.keyDoc.public && doc.lead.name === "Mira Lantern";
+    const Eng = await import("../src/engine.mjs");
+    const read = doc ? Eng.inviteRules().inviteRead("etiuda-join:" + payload, process.platform !== "win32") : null;
+    out.desk = !!read && read.team === b.teamId && !!read.relay && read.relay.rt === b.row.rt && (read.folder === undefined || read.folder === "");
+    const again = id ? await b.sh.ask("studio:invite-copy", b.teamId, id, "text") : null;
+    out.copy = !!again && !again.error && again.copied === id && again.as === "text" && b.sh.clip.length === 2 && /^etiuda-join:/.test(b.sh.clip[1]);
+    const gone = await b.sh.ask("studio:invite-cancel", b.teamId, "0".repeat(32));
+    out.cancel = !!gone && !!gone.error && /ended/.test(said(gone));
+    const listed = await b.sh.ask("studio:desks", b.teamId);
+    out.listed = !!listed && Array.isArray(listed.invites) && listed.invites.length === 1 && listed.invites[0].id === id;
+    const ok = Object.values(out).every((v) => v === true);
+    if (!ok) process.stderr.write("tib2 " + said(out) + " made=" + said(made).slice(0, 300) + NL);
+    check(ok, "tib2 an invitation is made, copied and found again by the team's id with no catalog: the blob is the desk's own shape (team, relay, lead, secret; no folder) and the desk's reader reads it back");
+  } finally { await b.sh.done(); }
+});
+
+const tibFacts = (invites) => ({ error: null, folder: "C:/ud/relay/" + "0123456789abcdef".repeat(2), file: "ours", signing: "studio-aaaa111122223333", inside: false, keyHeld: true, canKeep: true,
+  relay: true, team: { id: TIB_TEAM, epoch: 1, sealed: true, exportsSealed: true, relay: true, leadPrint: "aaaa111122223333", roster: [] }, requests: [], invites });
+const tibInvite = (id, person) => ({ id, name: "Mira Lantern", person, made: "2026-11-26T08:00:00.000Z", expires: "2026-12-03T08:00:00.000Z", relay: true, used: null, pendingMove: false });
+async function bareHome(more, lang) {
+  const facts = tibFacts([]), calls = [];
+  const api = Object.assign({
+    desks: async (d) => { calls.push(["desks", d]); return JSON.parse(JSON.stringify(facts)); },
+    inviteMake: async (d, name, person) => {
+      calls.push(["inviteMake", d, name, person]);
+      facts.invites = facts.invites.concat([tibInvite("a1".repeat(16), person || "")]);
+      return Object.assign(JSON.parse(JSON.stringify(facts)), { invited: "a1".repeat(16) });
+    },
+    peopleList: async (d) => { calls.push(["peopleList", d]); return { people: [], invites: [{ invite: "b2".repeat(16), address: "ada@example.com", at: Date.now() }], confirms: [], relay: true }; },
+    personInvite: async (d, address) => { calls.push(["personInvite", d, address]); return { invite: "b2".repeat(16) }; },
+  }, (more && more.api) || {});
+  const h = await homeTeam([], [teamNamed(TIB_TEAM)], { api, uiLang: lang || "en" });
+  return Object.assign(h, { facts, callsIn: calls });
+}
+await leg("tib3", async () => {
+  const h = await bareHome();
+  const html = h.main(), acts = actsIn(html), text = textOf(html);
+  const out = {};
+  out.place = h.callsIn.some((c) => c[0] === "desks" && c[1] === TIB_TEAM);
+  /* Old sentence beside new: the empty team said "Invite a teammate is offered here once the team holds a catalog, so an empty team starts with
+     Add a catalog to this team."; it now offers the press itself, with no catalog and no sentence of one first. */
+  out.offered = acts.indexOf("invite-new") >= 0 && !/offered here once the team holds a catalog/.test(text);
+  out.catalogStillOffered = acts.indexOf("team-add-catalog") >= 0;
+  out.noCatalogBound = acts.indexOf("publish") < 0 && acts.indexOf("arch-export") < 0 && acts.indexOf("policy-save") < 0 && acts.indexOf("team-sharing") < 0;
+  const first = html.indexOf('data-act="invite-new"'), second = html.indexOf('data-act="team-add-catalog"');
+  out.firstAsked = first >= 0 && second >= 0 && first < second;
+  await h.P.ACTS["invite-new"](); await wait();
+  out.cover = h.P.S.cover === "team" && h.P.S.teamWant === "invite";
+  await h.P.ACTS["do-invite"](); await wait(); await wait();
+  const made = h.callsIn.find((c) => c[0] === "inviteMake");
+  out.made = !!made && made[1] === TIB_TEAM && h.P.S.cover === null && /data-invite="a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"/.test(h.main());
+  const ok = Object.values(out).every((v) => v === true);
+  if (!ok) process.stderr.write("tib3 " + said(out) + " acts=" + said(acts) + " text=" + text.replace(/\s+/g, " ").slice(0, 300) + NL);
+  check(ok, "tib3 a team with no catalog offers Invite a teammate itself, before Add a catalog and with no sentence of a catalog first; the press makes the invitation for the team's id and its row is listed");
+});
+
+await leg("tib4", async () => {
+  const h = await bareHome({ api: {} });
+  Object.assign(h.P.S, { lic: { by: "signin", provider: "microsoft", signIn: ["microsoft"] } });
+  h.P.S.desks = null; h.P.S.desksLoadedFor = ""; h.P.S.people = null;
+  await h.P.desksLoad(); await wait(); await wait();
+  const html = h.main(), out = {};
+  out.row = /data-person-invite-row/.test(html) && /data-person-invited="b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"/.test(html);
+  out.listed = h.callsIn.some((c) => c[0] === "peopleList" && c[1] === TIB_TEAM);
+  h.home.node("#main input[data-person-invite]").value = "ada@example.com";
+  await h.P.ACTS["person-invite"](); await wait(); await wait();
+  const sent = h.callsIn.find((c) => c[0] === "personInvite");
+  out.sent = !!sent && sent[1] === TIB_TEAM && sent[2] === "ada@example.com";
+  const ok = Object.values(out).every((v) => v === true);
+  if (!ok) process.stderr.write("tib4 " + said(out) + NL);
+  check(ok, "tib4 signed in, a team with no catalog invites by email address: the field is drawn, the list is read for the team's id and the press sends the address for it");
+});
+
+await leg("tib5", async () => {
+  const h = await bareHome({}, "pl");
+  const html = h.main(), text = textOf(html), acts = actsIn(html);
+  const ok = acts.indexOf("invite-new") >= 0 && /Zaproś/.test(text) && !/Invite a teammate|Invitations|Each invitation/.test(text);
+  if (!ok) process.stderr.write("tib5 " + said({ acts, text: text.replace(/\s+/g, " ").slice(0, 400) }) + NL);
+  check(ok, "tib5 Polish: a team with no catalog offers Zaproś and carries none of the English");
+});
+
+/* A team with no catalog moves to a new key by its id, as a used invitation's cancel does (the thread's moveEpoch, which reads its team at the mirror). */
+await leg("tib6", async () => {
+  const b = await bareTeam("tib6");
+  try {
+    const keys = Store.teamKeysOf(b.w.tf, TEST_VAULT), out = {};
+    out.keys = !!b.teamId && !!keys[b.teamId] && !!keys[b.teamId][1];
+    const moved = out.keys ? await Studio.moveTeamKey(b.row.folder, b.w.keyPath, b.teamId, PASS,
+      { confirm: true, atFolder: b.row.folder, teamKeys: keys, userData: b.w.ud, teamsFile: b.w.tf }).catch((e) => ({ threw: String(e && e.message || e) })) : null;
+    out.moved = !!moved && moved.moved === true && moved.epoch === 2 && !!moved.team && moved.team.id === b.teamId && !moved.threw;
+    const ok = Object.values(out).every((v) => v === true);
+    if (!ok) process.stderr.write("tib6 " + said(out) + " moved=" + said(moved).slice(0, 300) + NL);
+    check(ok, "tib6 a team with no catalog moves to a new key by its id: the thread reads its team at the mirror, the key number goes from 1 to 2 and the reply is the team's own read");
+  } finally { await b.sh.done(); }
+});
+
 /* Each plant is the line carrying its mark, replaced in a scratch copy; the copy's own run of the one leg must go red (tests/plant-copy.mjs). */
 const PLANTS = [
   { mark: "ton-own", leg: "ton1", rel: "src/studio.mjs", line: "  const opts = o || {}, own = false, home = path.resolve(dir);" },
@@ -377,6 +512,17 @@ const PLANTS = [
   { mark: "ton-cover", leg: "ton9", rel: "ui/app.js", line: "        + \"</div>\";" },
   { mark: "ton-pick-stay", leg: "ton14", rel: "ui/app.js", line: "        if (false) await desksLoad(S.teamPickDir);" },
   { mark: "ton-overview", leg: "ton10", rel: "ui/app.js", line: "      + \"</div>\");" },
+  /* An invitation belongs to the team: the deciding line of each side, changed alone. */
+  { mark: "tib-place-shape", leg: "tib1", rel: "shell/main.js", line: "  if (true) return null;" },
+  { mark: "tib-desks-folder", leg: "tib1", rel: "shell/main.js", line: "  const facts = await withKept(await thread.call(\"teamFacts\", tp.folder, withHere({ key: await keyFileNow(), invites: await inviteBook()," },
+  { mark: "tib-make-at", leg: "tib2", rel: "shell/main.js", line: "  const target = Object.assign(await thread.call(\"inviteTarget\", P.thread, await keyFileNow(), withHere()), { signin: await signinHintNow() });" },
+  { mark: "tib-held-at", leg: "tib2", rel: "src/studio.mjs", line: "  if (false) {" },
+  { mark: "tib-facts-own", leg: "tib1", rel: "src/studio.mjs", line: "  const own = false;" },
+  { mark: "tib-desks-at", leg: "tib6", rel: "src/studio.mjs", line: "    passphrase: opts.passphrase });" },
+  { mark: "tib-place-dir", leg: "tib3", rel: "ui/app.js", line: "      return ps[0] ? ps[0].dir : \"\";" },
+  { mark: "tib-bare", leg: "tib3", rel: "ui/app.js", line: "  const teamBare = () => false;" },
+  { mark: "tib-bare-page", leg: "tib3", rel: "ui/app.js", line: "        ? '<div class=\"teams-screen\">' + teamSummaryHtml(curTeam) + teamReceivesHtml(curTeam) + \"</div>\"" },
+  { mark: "tib-bare-body", leg: "tib3", rel: "ui/app.js", line: "    if (false) {" },
 ];
 if (!ONLY) {
   const { copyPlants } = await import("./plant-copy.mjs");

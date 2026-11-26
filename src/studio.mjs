@@ -3789,7 +3789,8 @@ async function renameProject(dir, name, o) {
     const rel = share ? path.relative(home, share) : "..";
     if (!same && rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel))
       throw refuse("The team reads this catalog from {DIR}, which is inside the catalog's own folder,"
-        + " so renaming it would move that folder out of its reach.", { DIR: share });
+        + " so renaming it would move that folder out of its reach. Change folder beside Writes"
+        + " to chooses one outside the catalog, and the rename can follow.", { DIR: share });
     renamePatiently(home, to);
   }
   try {
@@ -4178,17 +4179,21 @@ async function teamFacts(dir, o) {
   return teamFactsRead(dir, o);
 }
 async function teamFactsRead(dir, o) {
-  const opts = o || {}, home = path.resolve(dir);
-  const found = projectAt(home);
-  if (!found) throw refuse("no catalog in {DIR}", { DIR: home });
-  const resolved = folderHere(found.project, opts);
+  const opts = o || {};
+  /* A TEAM WITH NO CATALOG IS READ AT ITS MIRROR (`opts.atFolder`, named by the shell from the team's id): no project is read, so the
+     team lists no catalog as this one's, nothing is inside, and the next edition's floor is the engine's own. */
+  const own = typeof opts.atFolder === "string" && opts.atFolder !== ""; /* plant:tib-facts-own */
+  const home = own ? "" : path.resolve(dir);
+  const found = own ? null : projectAt(home);
+  if (!own && !found) throw refuse("no catalog in {DIR}", { DIR: home });
+  const resolved = own ? opts.atFolder : folderHere(found.project, opts);
   const shown = resolved ? path.resolve(resolved) : null;
   const folder = shown || null;
-  const key = readKeyFile(opts.key), id = String(readProject(home).draft.id || "");
-  const out = { folder: shown, id, mark: found.project.sealedTeam || null, signing: key ? key.keyId : "", file: "none", reason: "",
-                team: null, inside: false, requests: [], letGo: letGoOffered(found.project, opts) };
+  const key = readKeyFile(opts.key), id = own ? "" : String(readProject(home).draft.id || "");
+  const out = { folder: shown, id, mark: own ? null : found.project.sealedTeam || null, signing: key ? key.keyId : "", file: "none", reason: "",
+                team: null, inside: false, requests: [], letGo: own ? false : letGoOffered(found.project, opts) };
   if (!folder) return out;
-  out.inside = insideOf(shown, [home, path.join(home, ARCHIVE)]);
+  if (!own) out.inside = insideOf(shown, [home, path.join(home, ARCHIVE)]);
   const read = await readTeam(folder);
   if (!read.team) { out.file = fs.existsSync(read.at) ? "broken" : "none"; return out; }
   /* K8: the key the folder's team trusts, so a Studio with none offers to restore that one before making another. */
@@ -4207,7 +4212,7 @@ async function teamFactsRead(dir, o) {
   /* The edition the next publish would write asks for minEngine (src/engine-floor.mjs), and each desk's version is set beside
      it, so the press can warn before an edition no desk below it can show (the version policy, point 5). */
   let next = ENGINE_FLOOR;
-  try { next = minEngineFor(readProject(home).draft); } catch { next = ENGINE_FLOOR; }
+  if (!own) { try { next = minEngineFor(readProject(home).draft); } catch { next = ENGINE_FLOOR; } }
   const versions = deskVersions(folder, held.team, opts.key, opts.passphrase);
   return Object.assign(out, { file: "ours", letGo: false, minEngine: next, team: teamSummary(held.team, id, versions, next),
     requests: listJoins(folder, held.team, { invites: invites, now: opts.now }),
@@ -4234,7 +4239,8 @@ async function setTeamSealed(dir, sealed, o) {
   if (!found) throw refuse("no catalog in {DIR}", { DIR: home });
   const sealedAt = folderHere(found.project, opts);
   const shown = sealedAt ? path.resolve(sealedAt) : null;
-  if (!shown) throw refuse("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.");
+  if (!shown) throw refuse("Publishing needs the folder the team reads from, and Change"
+    + " beside Writes to chooses it.");
   const folder = shown;
   const key = readKeyFile(opts.key);
   if (!key) throw refuse("A team file is signed with this Studio's signing key, and Settings shows there is none yet.");
@@ -5044,7 +5050,7 @@ async function exportStatsBook(dir, file, words, o) {
   const facts = await statsFor(dir, o || {});
   if (facts.refusal) throw new Error(facts.refusal);
   if (!facts.folder || !facts.views) {
-    throw refuse("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.");
+    throw refuse("this catalog has no folder yet: choose the folder the team reads from first");
   }
   const found = readProject(path.resolve(dir));
   const draft = found.draft;
@@ -5125,7 +5131,7 @@ async function setStatsSpan(dir, span, o) {
   const opts = o || {};
   const spanAt = folderHere(found.project, opts);
   const folder = spanAt ? path.resolve(spanAt) : null;
-  if (!folder) throw refuse("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.");
+  if (!folder) throw refuse("this catalog has no folder yet: choose the folder the team reads from first");
   const read = readKeyFile(opts.key);
   if (!read) throw refuse("A team file is signed with this Studio's signing key, and Settings shows there is none yet.");
   let open;
@@ -5262,7 +5268,8 @@ async function publishProject(dir, o) {
   const relayTeam = !!(p.project.relay && /^[0-9a-f]{32}$/.test(String(p.project.relay.rt || "")));
   const resolved = folderHere(p.project, opts);
   const folder = opts.folder ? String(opts.folder) : resolved; /* plant:h2-publish */
-  if (!folder) throw refuse("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.");
+  if (!folder) throw refuse("Publishing needs the folder the team reads from, and Change"
+    + " beside Writes to chooses it.");
   const work = path.resolve(folder);
   let done;
   try {
@@ -5654,6 +5661,14 @@ function openBackup(file, passphrase) {
  * this Studio holds it, read only through heldTeam under the key file the shell names, so a team signed by any other key
  * has nothing to open, refuse or admit into. */
 async function heldAtProject(dir, keyFile, o) {
+  /* A TEAM WITH NO CATALOG HAS NO PROJECT TO NAME ITS FOLDER: the shell names the mirror itself (`o.atFolder`, from the team's id) and
+     the team is read there under this Studio's key, as it is at a project's. */
+  const at = o && typeof o.atFolder === "string" && o.atFolder ? path.resolve(o.atFolder) : "";
+  if (at) { /* plant:tib-held-at */
+    if (!readKeyFile(keyFile)) return { folder: at, shown: at, team: null, reason: "there is no signing key here" };
+    const held = await heldTeam(at, { key: keyFile });
+    return { folder: at, shown: at, team: held.team, reason: held.reason };
+  }
   const home = path.resolve(dir), found = projectAt(home);
   if (!found) throw refuse("no catalog in {DIR}", { DIR: home });
   const named = o && typeof o.folder === "string" && o.folder ? path.resolve(o.folder) : "";
@@ -5670,7 +5685,7 @@ async function heldAtProject(dir, keyFile, o) {
 async function desksFor(dir, keyFile, o) {
   const opts = o || {};
   return teamFacts(dir, { key: keyFile, invites: opts.invites, now: opts.now, teamsFile: opts.teamsFile, userData: opts.userData,
-    passphrase: opts.passphrase });
+    passphrase: opts.passphrase, atFolder: opts.atFolder }); /* plant:tib-desks-at */
 }
 /* The lead's key opened by `secret`, to sign the file of openings (src/join.mjs); refused, with nothing written, where it does not open. */
 function joinsSigner(keyFile, secret) {
