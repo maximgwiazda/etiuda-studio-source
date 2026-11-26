@@ -195,7 +195,10 @@ async function relayWorld(tag, o) {
   Store.keepTeamKey(w.tf, TEST_VAULT, relayTeam, 1, relayKey);
   const mirror = Store.keepRelay(w.tf, relayTeam, rt, Relay.RELAY_URL);
   const teamKeys = Object.assign({}, w.teamKeys, { [relayTeam]: { 1: relayKey } });
-  const r = await Studio.startRelayTeam(D, { key: w.keyPath, passphrase: PASS, teamId: relayTeam, rt, url: Relay.RELAY_URL, mirror, teamKeys, userData: w.ud });
+  /* MOVED 2026-11-26 with the folder remnants' retirement. Was: startRelayTeam(D, ...) made the team and took D in one call. Now: the team is made on its own and D joins it by chooseTeam. */
+  await Studio.startRelayTeam(null, { key: w.keyPath, passphrase: PASS, teamId: relayTeam, rt, url: Relay.RELAY_URL, mirror, teamKeys, userData: w.ud });
+  const r = await Studio.chooseTeam(D, { key: w.keyPath, passphrase: PASS, teamId: relayTeam, folder: mirror, work: mirror, relay: { rt, url: Relay.RELAY_URL },
+    elsewhere: [], teamKeys, userData: w.ud });
   Store.chooseSealed(w.tf, relayTeam, true, mirror, r.written);
   const out = Object.assign(w, { D, rt, relayTeam, relayKey, mirror, teamKeys, idD: String(Pub.readProject(D).draft.id) });
   if (!(o && o.noChoose)) {
@@ -666,9 +669,10 @@ await leg("lgt1 a project naming a relay team this Studio holds no keys for list
     const r2 = await sh.ask("studio:team-let-go", s2.dir);
     const joined = r2 && !r2.error ? await Studio.chooseTeam(s2.dir, chooseOpts(w)).catch((e) => ({ error: said(e) })) : { error: "let go refused" };
     out.chooses = !!joined && !joined.error && !!joined.team && projectOf(s2.dir).sealedTeam === w.teamId;
-    /* And the first can start a team of its own: the relay handler no longer says it has one (it goes on to what the relay needs). */
-    const made = await sh.ask("studio:team-relay", s.dir);
-    out.starts = !(made && made.error && JSON.stringify(made.error).indexOf("This catalog has a team already") >= 0);
+    /* And the first can be put on a team again: the catalog is on none after the let-go. MOVED 2026-11-26: was "the relay handler no longer says it has a team already"
+       (studio:team-relay on the catalog, retired: a team is made with no catalog, and a catalog joins one by the choose). */
+    const rejoined = await Studio.chooseTeam(s.dir, chooseOpts(w)).catch((e) => ({ error: said(e) }));
+    out.starts = !!rejoined && !rejoined.error && projectOf(s.dir).sealedTeam === w.teamId;
   } finally { await sh.done(); }
   const ok = Object.values(out).every((v) => v === true);
   if (!ok) process.stderr.write("lgt1 " + JSON.stringify(out) + NL);

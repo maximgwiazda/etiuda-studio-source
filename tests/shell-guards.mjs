@@ -136,7 +136,7 @@ const UI = path.join(ROOT, "ui", "index.html");
 const require = createRequire(import.meta.url);
 /* Off in a merge's area run, which runs no planted fault: 4h, the one plant here, is then not run. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = PLANTS_OFF ? 209 : 238; /* 212 and 241, less 2o and 2p, retired with the code door (P2), and 2c, retired with the chosen folder (2026-11-26) */
+const EXPECTED = PLANTS_OFF ? 211 - 6 : 240 - 6; /* 212 and 241, less 2o and 2p (the code door, P2), 2c (the chosen folder), 2m, 2n, 19a1, 19c, 19i and 19j (studio:team-sealed and the key the first publish made, 2026-11-26), and 12i and 12j added */
 let LR_PROBE = null; /* 21b probe of the refused licence file name, kept for 22h10 */
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
 const REG_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
@@ -1066,44 +1066,10 @@ async function main() {
       + JSON.stringify([keyIn(call("listProposals")[2]), keyIn(call("openProposal")[3]), keyIn(call("decideProposal")[6])]));
   }
 
-  /* 2m, 2n THE SWITCH'S ORDER (board 834, the sealed team): a new team's key is kept in teams.json BEFORE the thread is asked
-     to write the team file naming it, and taken out again where that write fails, so no team file ever names a key this
-     Studio does not hold. The thread is stood in by one that looks at teams.json at the moment it is asked. */
-  {
-    const K = await import(pathToFileURL(path.join(ROOT, "src", "team-store.mjs")).href);
-    const vault = { available: () => true, seal: (t) => FAKE_VAULT_STORAGE.encryptString(t), open: (b) => FAKE_VAULT_STORAGE.decryptString(b) };
-    const run = async (name, fails) => {
-      const seen = {};
-      const s = await loadShell(name, { thread: (verb, dir, a, o) => {
-        if (verb === "teamFacts") return Promise.resolve({ folder: path.join(SCRATCH, name, "share"), file: "none", team: null,
-          signing: "k-lead", inside: false, mark: null, id: "c" });
-        if (verb === "setTeamSealed") {
-          const at = K.teamsFile(path.join(SCRATCH, name));
-          seen.id = o.teamId; seen.pass = o.passphrase; seen.handed = !!o.teamKeys && !!o.teamKeys[o.teamId];
-          seen.kept = !!o.teamId && !!K.teamKeysOf(at, vault)[o.teamId] && K.teamKeysOf(at, vault)[o.teamId][1].length === 32;
-          if (fails) return Promise.reject(new Error("the share refused the write"));
-          return Promise.resolve({ folder: path.join(SCRATCH, name, "share"), created: true,
-            team: { id: o.teamId, epoch: 1, sealed: true, roster: [] }, written: { id: o.teamId, epoch: 1 } });
-        }
-        return Promise.resolve({ verb });
-      } });
-      const r = await s.ask("studio:team-sealed", "d", true, "pass-word-here");
-      s.done();
-      const at = K.teamsFile(path.join(SCRATCH, name));
-      return { r, seen, after: seen.id ? K.keptTeam(at, seen.id) : null,
-               text: fs.existsSync(at) ? fs.readFileSync(at, "utf8") : "" };
-    };
-    const good = await run("switch-good", false);
-    check(good.seen.kept === true && good.seen.pass !== "pass-word-here" && good.seen.handed === true && !!good.after && good.after.sealed === true
-          && JSON.stringify(good.after.epochs) === "[1]" && good.text.indexOf("pass-word-here") < 0 && !good.r.error,
-      "2m Sealed on a folder with no team keeps the new team's key before the thread writes the file, records the lead's"
-      + " choice after, hands the thread that key to keep the recovery copy, and takes no passphrase from the page: " + JSON.stringify([good.seen.kept, good.after && good.after.sealed,
-        good.after && good.after.epochs, good.text.indexOf("pass-word-here")]));
-    const bad = await run("switch-bad", true);
-    check(bad.seen.kept === true && bad.after === null && !!bad.r.error,
-      "2n where the thread's write fails, the key kept for it is taken out again and the refusal reaches the page: "
-      + JSON.stringify([bad.seen.kept, bad.after, bad.r.error]));
-  }
+  /* RETIRED 2026-11-26 with studio:team-sealed (the pass over the retired folder mechanics), 2m and 2n, THE SWITCH'S ORDER (board 834, the sealed team): "2m Sealed on a
+     folder with no team keeps the new team's key before the thread writes the file, records the lead's choice after, hands the thread that key to keep the recovery copy, and
+     takes no passphrase from the page" and "2n where the thread's write fails, the key kept for it is taken out again and the refusal reaches the page". The same order
+     for the team the press makes now, the relay's, is held by relay-studio rs926 (the key kept before the thread is asked, forgotten with the team file on a throw). */
 
   /* RETIRED, P2 (an admission is no longer made by a code typed in a row, so there is no studio:desk-admit): 2o, "an admission hands the thread the team key opened from this process's teams.json and not the one the page sent, keeps no passphrase from the page, and the team file it wrote becomes the kept copy, the lead's Sealed unchanged"; and 2p, "for a team this Studio keeps a key for but whose Sealed or Plain was never chosen here, the admission records no choice, so no publish reads it as Plain". The watch's admission (admitWaiting) is held where its own legs hold it. */
   /* 2x, 2y, 2z, 2za A REMOVAL (board 885, S1): without the confirm the thread is not asked; with it the thread is handed
@@ -1526,25 +1492,24 @@ async function main() {
     const seen = {};
     const s = await loadShell("key-made", { thread: (verb, ...a) => real(verb, ...a) || (verb === "teamFacts"
       ? Promise.resolve({ folder: path.join(SCRATCH, "key-made", "share"), file: "none", team: null, signing: "k", inside: false, mark: null, id: "c" })
-      : verb === "setTeamSealed" ? (seen.o = a[2], Promise.resolve({ folder: "f", created: true, team: { id: a[2].teamId, epoch: 1 },
-          written: { id: a[2].teamId, epoch: 1, roster: [] } }))
+      : verb === "setTeamExports" ? (seen.secret = a[3], Promise.resolve({ folder: "f" }))
       : Promise.resolve({ verb })) });
     const keyAt = Sg.defaultKeyFile(path.join(SCRATCH, "key-made"));
     const made = await s.ask("studio:key-make");
     const fileText = fs.existsSync(keyAt) ? fs.readFileSync(keyAt, "utf8") : "", doc = fileText ? JSON.parse(fileText) : {};
     const again = await s.ask("studio:key-make");
     const same = fs.readFileSync(keyAt, "utf8") === fileText;
-    await s.ask("studio:team-sealed", "d", true, "pass-word-here");
-    const secret = (seen.o || {}).passphrase || "";
+    await s.ask("studio:team-exports", "d", true);
+    const secret = typeof seen.secret === "string" ? seen.secret : "";
     let opened = null;
     try { opened = Sg.unlockKey(Sg.readKeyFile(keyAt), secret); } catch { opened = null; }
     const plain = !!secret && spellings(secret).some((x) => fileText.indexOf(x) >= 0);
     check(!made.error && made.keyId === doc.keyId && made.kept === "os" && /^[0-9a-f]{16}$/.test(made.print)
           && doc.wrap && doc.wrap.kdf === "os" && !plain && !!again.error && /already/.test(again.error) && same
-          && !!opened && opened.public === doc.public && secret !== "pass-word-here",
+          && !!opened && opened.public === doc.public,
       "2q Make a signing key writes the key file with its private half sealed by the vault, in none of four spellings, and"
-      + " answers the key as the rows print it; a second press refuses and leaves the file as it was; the switch then hands the"
-      + " thread the secret the vault opened, which opens that file, and not the passphrase the page typed: "
+      + " answers the key as the rows print it; a second press refuses and leaves the file as it was; a team verb then hands the"
+      + " thread the secret the vault opened, which opens that file (was: the Sealed switch, retired 2026-11-26, and not the passphrase the page typed): "
       + JSON.stringify([!made.error, made.kept, doc.wrap, plain, !!again.error, same, !!opened]));
 
     const backupAt = path.join(SCRATCH, "key-backup.json");
@@ -2371,7 +2336,7 @@ async function main() {
   }
 
   /* ---- 6h, 6i. THE ROOT A RELAY GRANT TRACES TO IS THE VENDOR'S IN AN INSTALLED STUDIO (board 935, slice G3)
-   * studio:team-relay judges the grant beside the signing key under the pinned relay's own root, and the tree's gates name an
+   * studio:team-new judges the grant beside the signing key under the pinned relay's own root, and the tree's gates name an
    * invented one with STUDIO_RELAY_ROOT. One lead, one grant signed by the pinned grant kit's test root and placed beside the key,
    * one environment, two places: the tree's shell takes the root and the press goes on to the thread (the control), an installed
    * copy ignores it and refuses in the licence sentence without asking the thread to make anything. */
@@ -2398,7 +2363,7 @@ async function main() {
     const press = async (name, main) => {
       const keyFile = plant(name);
       const s = await loadShell(name, { main, thread, env: { STUDIO_SIGNING_KEY: keyFile, STUDIO_KEY_PASSPHRASE: "x", STUDIO_RELAY_ROOT: kit.ROOT.pub } });
-      const reply = await s.ask("studio:team-relay", path.join(path.dirname(keyFile), "Etiuda Studio", "project"));
+      const reply = await s.ask("studio:team-new"); /* was studio:team-relay on a catalog, retired 2026-11-26: the same judge, with no catalog */
       s.done();
       return { s, reply, reached: s.calls.some((c) => c[0] === "startRelayTeam") };
     };
@@ -2646,11 +2611,14 @@ async function main() {
       + asked(linux) + ", " + linux.regCalls.length + " call(s)");
   }
 
-  /* ---- 10. ON LINUX A SEAL NEEDS A KEYRING ------------------------------------------------------
+  /* ---- 10. ON LINUX A TEAM NEEDS A KEYRING ------------------------------------------------------
      safeStorage on Linux says encryption is available even where no secret service answered and it
      fell back to "basic_text", whose password is Chromium's own; the shell counts that, and
-     "unknown", as no vault. Driven through the desks screen and Sealed, with the thread stood in as
-     at 2m, under four storages: a keyring, the fallback, an unknown backend, and Windows' shape. */
+     "unknown", as no vault. Driven through the desks screen and Make a team (studio:team-new), with the thread stood in,
+     under four storages: a keyring, the fallback, an unknown backend, and Windows' shape. MOVED 2026-11-26 (the pass over
+     the retired folder mechanics): was driven through Sealed (studio:team-sealed, retired), and the control read that the
+     press kept a key and asked the thread; Make a team is refused for want of a grant before it keeps one, so the control
+     now reads that the press was not refused for want of a keyring, which is the refusal it is the first to meet. */
   {
     const K = await import(pathToFileURL(path.join(ROOT, "src", "team-store.mjs")).href);
     const storage = (backend) => Object.assign({}, FAKE_VAULT_STORAGE,
@@ -2659,35 +2627,34 @@ async function main() {
       const s = await loadShell(name, { safeStorage: storage(backend), platform, thread: (verb, dir, a, o) => {
         if (verb === "teamFacts") return Promise.resolve({ folder: path.join(SCRATCH, name, "share"), file: "none", team: null,
           signing: "k-lead", inside: false, mark: null, id: "c" });
-        if (verb === "setTeamSealed") return Promise.resolve({ folder: path.join(SCRATCH, name, "share"), created: true,
-          team: { id: o.teamId, epoch: 1, sealed: true, roster: [] }, written: { id: o.teamId, epoch: 1 } });
         return Promise.resolve({ verb });
       } });
       const desks = await s.ask("studio:desks", "d");
-      const sealed = await s.ask("studio:team-sealed", "d", true, "pass-word-here");
-      const asked = s.calls.some((c) => c[0] === "setTeamSealed");
+      const made = await s.ask("studio:team-new");
+      const asked = s.calls.some((c) => c[0] === "startRelayTeam");
       s.done();
       const at = K.teamsFile(path.join(SCRATCH, name));
-      return { canKeep: desks.canKeep, noKeyring: desks.noKeyring, error: !!sealed.error, asked,
+      return { canKeep: desks.canKeep, noKeyring: desks.noKeyring, error: String(made.error || ""), noKeyringSaid: /no keyring is open to seal it/.test(String(made.error || "")),
+               windowsSaid: /cannot keep a team key for this Windows account/.test(String(made.error || "")), asked,
                kept: fs.existsSync(at) ? Object.keys(JSON.parse(fs.readFileSync(at, "utf8")).teams || {}).length : 0 };
     };
     const ring = await run("vault-keyring", "gnome_libsecret", "linux");
-    check(ring.canKeep === true && ring.noKeyring === undefined && !ring.error && ring.asked && ring.kept === 1,
-      "10a CONTROL: with a keyring behind safeStorage the desks screen can keep a key and Sealed keeps one: " + JSON.stringify(ring));
+    check(ring.canKeep === true && ring.noKeyring === undefined && !!ring.error && !ring.noKeyringSaid && !ring.windowsSaid && !ring.asked && ring.kept === 0,
+      "10a CONTROL: with a keyring behind safeStorage the desks screen can keep a key and Make a team is not refused for want of one (it meets the grant's refusal first): " + JSON.stringify(ring));
     const basic = await run("vault-basic", "basic_text", "linux");
-    check(basic.canKeep === false && basic.noKeyring === true && basic.error && !basic.asked && basic.kept === 0,
-      "10b with safeStorage fallen back to basic_text the desks screen says no keyring, and Sealed is refused before the"
+    check(basic.canKeep === false && basic.noKeyring === true && basic.noKeyringSaid && !basic.asked && basic.kept === 0,
+      "10b with safeStorage fallen back to basic_text the desks screen says no keyring, and Make a team is refused before the"
       + " thread is asked, keeping nothing: " + JSON.stringify(basic));
     const unknown = await run("vault-unknown", "unknown", "linux");
-    check(unknown.canKeep === false && unknown.noKeyring === true && unknown.error && unknown.kept === 0,
+    check(unknown.canKeep === false && unknown.noKeyring === true && unknown.noKeyringSaid && unknown.kept === 0,
       "10c an unknown backend is no keyring either: " + JSON.stringify(unknown));
     const win = await run("vault-windows", undefined, "win32");
-    check(win.canKeep === true && win.noKeyring === undefined && !win.error && win.kept === 1,
+    check(win.canKeep === true && win.noKeyring === undefined && !!win.error && !win.noKeyringSaid && !win.windowsSaid && win.kept === 0,
       "10d CONTROL: a safeStorage with no backend to ask, which is Windows', is answered by isEncryptionAvailable alone, as"
       + " before: " + JSON.stringify(win));
     const winUnknown = await run("vault-windows-unknown", "unknown", "win32");
-    check(winUnknown.canKeep === true && winUnknown.noKeyring === undefined && !winUnknown.error && winUnknown.kept === 1,
-      "10e CONTROL: on Windows the backend is never asked, so even a safeStorage answering \"unknown\" keeps a key: "
+    check(winUnknown.canKeep === true && winUnknown.noKeyring === undefined && !!winUnknown.error && !winUnknown.noKeyringSaid && !winUnknown.windowsSaid && winUnknown.kept === 0,
+      "10e CONTROL: on Windows the backend is never asked, so even a safeStorage answering \"unknown\" is not refused for want of a keyring: "
       + JSON.stringify(winUnknown));
     /* A keyring asked for by name (section 14) that does not answer: the backend reads gnome_libsecret, and encryption is
        unavailable. That is no vault, the screen says no keyring and how to have one, and Make a signing key refuses so. */
@@ -2842,6 +2809,19 @@ async function main() {
     const dropped = PRELOAD_TEXT.replace(PROXY_ASKS_LINE, "");
     check(PROXY_ASKS_LINE.test(PRELOAD_TEXT) && dropped !== PRELOAD_TEXT && !proxyWired(bridgeOf(dropped)),
       "12h CONTROL: a preload with proxyAsks dropped fails 12g");
+    /* 12i EVERY TEAM VERB THE SHELL ANSWERS HAS A MEMBER ON THE BRIDGE (the pass over the retired folder mechanics, 2026-11-26): 12a holds that the page
+       calls every member, and this holds the other way for the verbs that make and change a team, so a team verb that only a leg reaches cannot stay
+       behind as a second way to make a team. studio:team-sealed and studio:team-relay stood so, with their bridge members gone since the
+       chosen folder was retired. */
+    const MAIN_TEXT = fs.readFileSync(MAIN, "utf8");
+    const teamVerbs = (text) => Array.from(text.matchAll(/\banswer\("(studio:team-[a-z-]+)"/g), (m) => m[1]);
+    const bridgedVerbs = new Set(Array.from(PRELOAD_TEXT.matchAll(/invoke\("(studio:team-[a-z-]+)"/g), (m) => m[1]));
+    const orphans = (text) => teamVerbs(text).filter((v) => !bridgedVerbs.has(v));
+    check(teamVerbs(MAIN_TEXT).length >= 8 && orphans(MAIN_TEXT).length === 0,
+      "12i every one of the shell's " + teamVerbs(MAIN_TEXT).length + " team verbs has a member on the bridge" + (orphans(MAIN_TEXT).length ? "; no member: " + JSON.stringify(orphans(MAIN_TEXT)) : ""));
+    const orphaned = orphans(MAIN_TEXT + '\nanswer("studio:team-orphan", async () => null);\n');
+    check(JSON.stringify(orphaned) === JSON.stringify(orphans(MAIN_TEXT).concat(["studio:team-orphan"])),
+      "12j CONTROL: a team verb added to the shell with no bridge member is named by 12i: " + JSON.stringify(orphaned));
   }
 
   /* ---- 13. THE WINDOW TELLS THE PAGE IT IS MAXIMISED, as the desk's does (Maxim, 2026-10-08 12:56: "With Studio tour and
@@ -3465,76 +3445,40 @@ async function main() {
       + JSON.stringify([held0, in0, said3 && said3.keyOpens, row4.invite || null, shutSame, admits1, in1, spent4]));
   }
 
-  /* ---- 19. THE FIRST PUBLISH OR SEAL MAKES THE KEY (the sense pass of 2026-10-14, finding 9) -------------------------
-     Maxim, 2026-10-13 15:51: "Etiuda is meant to empower and enhance, not limit and cage." A Studio with no signing key
-     makes one, asking nothing, at its first publish or its first seal, where nothing at the folder trusts another key, and
-     that edition goes out signed, so the desks offer the lead's next editions as updates; the publish after the key is
-     made asks the page for the backup nudge, once. Where the folder's team trusts a key this computer has not got, nothing
-     is made and the cover points to Restore (K8). Where no vault can keep a key, nothing is made and the edition goes out
-     unsigned, as before. The thread is Studio's own verbs over real projects, as at 2u. */
+  /* ---- 19. NO PUBLISH AND NO SEAL MAKES THE KEY (the sense pass of 2026-10-14, finding 9, retired 2026-11-26) -------------------
+     Was: "Maxim, 2026-10-13 15:51: 'Etiuda is meant to empower and enhance, not limit and cage.' A Studio with no signing key makes one, asking nothing, at its first
+     publish or its first seal, where nothing at the folder trusts another key, and that edition goes out signed, so the desks offer the lead's next editions as updates;
+     the publish after the key is made asks the page for the backup nudge, once." Now (the pass over the retired folder mechanics): a team is made on the relay, over a key
+     the relay's licence names, so the key, made in Settings, is there before any team, and a catalog on no team publishes nowhere; the first publish and the first seal
+     made the key only where no team file stood at the folder, which only a plain folder was. Nothing is made by a publish, the plan promises none, the reply carries no
+     key and no nudge. Where the folder's team trusts a key this computer has not got, nothing is made and the cover points to Restore (K8), as before. Where no vault can keep
+     a key, the edition goes out unsigned, as before. The thread is Studio's own verbs over real projects, as at 2u. */
   {
     const Ri = await import(pathToFileURL(path.join(ROOT, "src", "ring.mjs")).href);
     const ecOf = (r) => { try { return r && !r.error && r.ec ? JSON.parse(fs.readFileSync(r.ec, "utf8")) : null; } catch (e) { return null; } };
     const keyAt = (name) => St2.defaultKeyFile(path.join(SCRATCH, name));
     const readKey = (at) => { try { return fs.existsSync(at) ? Sg2.readKeyFile(at) : null; } catch (e) { return null; } };
 
-    /* 19a the first publish with no key makes one and signs that edition, and the nudge is asked for once */
+    /* 19a a publish with no key makes none: MOVED 2026-11-26. Was: "19a with no key and no team at the folder, the cover's plan says the publish makes one; the publish keeps
+       a key under the vault, signs that edition with it and lists it in the ring beside it, and asks the page for the backup nudge; the next publish signs with the same key,
+       makes no other and asks no nudge". Now: the plan promises none, the publish keeps no key and the edition goes out unsigned, with no key in the reply and no nudge, twice. */
     const dirA = await signProject("first-key-project");
     const sA = await loadShell("first-key", { thread: realThread, env: projectsBeside(dirA) });
     const atA = keyAt("first-key"), noneBefore = !fs.existsSync(atA);
     const planA = await sA.ask("studio:publish-plan", dirA);
     const r1 = await sA.ask("studio:publish", dirA, { notes: "the first edition" });
-    const kA = readKey(atA), textA = fs.existsSync(atA) ? fs.readFileSync(atA, "utf8") : "";
-    const ec1 = ecOf(r1);
-    let ring1 = null;
-    try { ring1 = JSON.parse(fs.readFileSync(Ri.ringPath(path.dirname(r1.ec)), "utf8")); } catch (e) { ring1 = null; }
-    const verified1 = !!ec1 && !!kA && await Sg2.verifySignature(ec1, kA.public);
     const r2 = await sA.ask("studio:publish", dirA, { notes: "the second edition" });
-    const ec2 = ecOf(r2);
-    const plan2 = await sA.ask("studio:publish-plan", dirA);
     sA.done();
-    const sg1 = (planA && planA.signing) || {};
-    const listed = !!ring1 && Array.isArray(ring1.keys) && !!ec1
-      && ring1.keys.some((e) => e && e.catalog === ec1.id && kA && e.public === kA.public);
-    check(noneBefore && sg1.makes === true && !sg1.keyId && !sg1.restore && !!kA && kA.kept === "os"
-          && !!ec1 && !!ec1.sig && ec1.sig.keyId === kA.keyId && verified1 && listed
-          && r1.keyNudge === true && !!r1.signing && r1.signing.keyId === kA.keyId
-          && !!ec2 && !!ec2.sig && ec2.sig.keyId === kA.keyId && !(r2 && r2.keyNudge)
-          && fs.readFileSync(atA, "utf8") === textA && !!plan2 && plan2.signing.opens === true && plan2.signing.makes !== true,
-      "19a with no key and no team at the folder, the cover's plan says the publish makes one; the publish keeps a key under"
-      + " the vault, signs that edition with it and lists it in the ring beside it, and asks the page for the backup nudge; the"
-      + " next publish signs with the same key, makes no other and asks no nudge: "
-      + JSON.stringify([noneBefore, sg1.makes, !!kA, kA && kA.kept, !!(ec1 && ec1.sig), verified1, listed, r1 && r1.keyNudge,
-        !!(ec2 && ec2.sig && kA && ec2.sig.keyId === kA.keyId), !!(r2 && r2.keyNudge)]));
+    const ec1 = ecOf(r1), ec2 = ecOf(r2), sg1 = (planA && planA.signing) || {};
+    check(noneBefore && !fs.existsSync(atA) && sg1.makes === undefined && !sg1.keyId && !sg1.restore
+          && !!ec1 && !ec1.sig && !!ec2 && !ec2.sig && !r1.error && !r2.error && !r1.keyNudge && !r2.keyNudge && !r1.signing && !r2.signing,
+      "19a with no key and no team at the folder, the cover's plan promises no key; the publish keeps none, and both editions go out unsigned with no key in the reply"
+      + " and no nudge: " + JSON.stringify([noneBefore, fs.existsSync(atA), sg1.makes, !!(ec1 && ec1.sig), !!(ec2 && ec2.sig), r1 && r1.keyNudge, !!(r1 && r1.signing)]));
 
-    /* 19a1 THE MADE KEY'S SECRET IS NOWHERE BUT ITS KEY FILE (Clement omega's condition 3, from his probe O6). tests/leak-hunt.mjs
-       cannot hunt it, since the key is born inside its child after the needles are fixed; here it is read back from the key
-       file through the vault stand-in and hunted in nine forms of the DER and its scalar: in every file of the share, the
-       project and the user-data folder but the key file, in the file names, and on the shell's said and logged lines, what it
-       sent, its children, and every reply. CONTROL: the matcher finds a planted form inside other text. */
-    let derA = null;
-    try { derA = Buffer.from(FAKE_VAULT_STORAGE.decryptString(Buffer.from(String(JSON.parse(textA).private), "base64")), "hex"); }
-    catch (e) { derA = null; }
-    const scalarA = derA ? derA.subarray(-32) : Buffer.alloc(0);
-    const formsA = derA ? [derA.toString("hex"), derA.toString("hex").toUpperCase(), derA.toString("base64"), derA.toString("base64url"),
-      derA.toString("latin1"), scalarA.toString("hex"), scalarA.toString("base64"), scalarA.toString("base64url"), scalarA.toString("latin1")] : [];
-    const hitsA = (t) => formsA.filter((f) => f.length > 20 && String(t).indexOf(f) >= 0).length;
-    const walkA = (d, skip) => { const out = []; if (!fs.existsSync(d)) return out;
-      for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (p === skip) continue;
-        if (e.isDirectory()) out.push(...walkA(p, skip)); else out.push(p); } return out; };
-    const filesA = [...walkA(path.join(SCRATCH, "first-key-project")), ...walkA(path.join(SCRATCH, "first-key"), atA)];
-    const fileHitsA = filesA.filter((f) => hitsA(fs.readFileSync(f).toString("latin1")) > 0 || hitsA(path.basename(f)) > 0)
-      .map((f) => path.relative(SCRATCH, f));
-    const surfA = hitsA(JSON.stringify(surfaces(sA)) + JSON.stringify([planA, r1, r2, plan2]));
-    let opensA = false;
-    try { opensA = !!derA && !!kA && crypto.createPublicKey(crypto.createPrivateKey({ key: derA, format: "der", type: "pkcs8" }))
-      .export({ type: "spki", format: "der" }).subarray(-32).toString("hex") === kA.public; } catch (e) { opensA = false; }
-    const controlA = opensA && hitsA("x" + derA.toString("base64") + "y") > 0 && hitsA(JSON.stringify({ a: scalarA.toString("base64url") })) > 0;
-    check(controlA && filesA.length > 0 && fileHitsA.length === 0 && surfA === 0,
-      "19a1 the made key's secret, in nine forms of its DER and scalar, is in no file of the share, the project or the user-data"
-      + " folder but the key file (" + filesA.length + " file(s)), in no file name and on no surface of the shell or reply; CONTROL:"
-      + " a planted form is found, and the key file's own sealed bytes open to it: "
-      + JSON.stringify({ control: controlA, files: filesA.length, fileHits: fileHitsA, surfaceHits: surfA }));
+    /* 19a1 RETIRED 2026-11-26 with the key the first publish made: THE MADE KEY'S SECRET IS NOWHERE BUT ITS KEY FILE (Clement omega's condition 3, from his probe O6), the
+       key read back from its file through the vault stand-in and hunted in nine forms of the DER and its scalar across every file of the share, the project and the
+       user-data folder but the key file, the file names, the shell's said and logged lines, what it sent and every reply. The key a publish made is gone; the file Make a
+       signing key writes holds its private half sealed by the vault in none of four spellings (2q), and a signed publish's surfaces are hunted in tests/leak-hunt.mjs. */
 
     /* 19b a folder whose team trusts another key: nothing is made, and the plan names the key to restore */
     const dirB = await signProject("first-key-theirs-project"), shareB = path.join(SCRATCH, "first-key-theirs-project", "share");
@@ -3560,18 +3504,8 @@ async function main() {
       + " goes out unsigned with no nudge: " + JSON.stringify([fs.existsSync(atB), sgB.makes, sgB.restore === printB, !!ecB, !!(ecB && ecB.sig),
         !!(rB && rB.keyNudge)]));
 
-    /* 19c Sealed pressed at a plain folder with no key is refused (the folder team's removal: the verb writes no team at a folder, tests/team-seal.mjs
-       fh4); the old claim, that it made the key and the team under it and the next publish asked the nudge once, is retired with the team. What the
-       press made of the key before the verb refused is read as it is, and the folder holds no team file. */
-    const dirC = await signProject("first-seal-project");
-    const sC = await loadShell("first-seal", { signedIn: true, thread: realThread, env: projectsBeside(dirC) });
-    const atC = keyAt("first-seal");
-    const rC = await sC.ask("studio:team-sealed", dirC, true, false);
-    const factsC = await St2.teamFacts(dirC, { key: atC });
-    sC.done();
-    check(!!rC && /makes a team on the Etiuda relay, not in a shared folder/.test(String(rC.error || "")) && !!factsC && factsC.file === "none" && !factsC.team,
-      "19c Sealed at a plain folder with no key is refused in one sentence and no team is made (was: it made the key and the team under it, and the publish after"
-      + " asked the nudge once): " + JSON.stringify([rC && rC.error, factsC && factsC.file]));
+    /* 19c RETIRED 2026-11-26 with studio:team-sealed: "Sealed at a plain folder with no key is refused in one sentence and no team is made (was: it made the key and the
+       team under it, and the publish after asked the nudge once)". The verb is gone from the shell (12i), and the thread's refusal of a new team at a folder is team-seal fh4. */
 
     /* 19d CONTROL: a computer that cannot keep a key publishes unsigned as before, with nothing made and nothing refused */
     const dirD = await signProject("first-key-novault-project");
@@ -3587,21 +3521,9 @@ async function main() {
       "19d CONTROL: where no vault can keep a key, the plan promises none, nothing is made and the edition goes out unsigned: "
       + JSON.stringify([fs.existsSync(atD), planD && planD.signing && planD.signing.makes, !!ecD, !!(ecD && ecD.sig), rD && rD.error]));
 
-    /* 19e THE OVERWRITE RACE (Clement omega's condition 1, his probes O8 and O9): a Make press and the first publish together,
-       with no key. Whichever writes first keeps the key, and the other makes none: Make answers the key in the file or refuses
-       as a key already there, and the edition is signed by the key in the file, never by one written over. Three runs, since
-       the order is the event loop's. CONTROL, the reason the guard is the make's alone: a backup copy restored over a
-       passphrase-wrapped key file in the key's place still replaces it ("Restore it once and this computer keeps it"). */
-    const races = [];
-    for (let i = 0; i < 3; i++) {
-      const name = "first-key-race-" + i, at = keyAt(name), dir = await signProject(name + "-project");
-      const s = await loadShell(name, { thread: realThread, env: projectsBeside(dir) });
-      const [m, a] = await Promise.all([s.ask("studio:key-make"), s.ask("studio:publish", dir, { notes: "race" })]);
-      s.done();
-      const kf = readKey(at), ec = ecOf(a);
-      races.push({ file: kf && kf.keyId, make: m && (m.keyId || null), refused: !!(m && m.error && /already/.test(String(m.error))),
-                   sig: ec && ec.sig ? ec.sig.keyId : null, pubErr: a && a.error ? String(a.error).slice(0, 80) : null });
-    }
+    /* 19e A BACKUP COPY RESTORED OVER A PASSPHRASE-WRAPPED KEY IN THE KEY'S PLACE still replaces it ("Restore it once and this computer keeps it"). MOVED 2026-11-26: this was
+       the CONTROL of the overwrite race (Clement omega's condition 1, his probes O8 and O9: a Make press and the first publish together with no key, whichever writes first keeps the
+       key and the edition is signed by the key in the file); the publish makes no key now, so the race is gone and its control stands alone. */
     const passAt = keyAt("first-key-restore"), copyAt = path.join(SCRATCH, "first-key-restore-copy.json"), held = await Sg2.makePair();
     fs.mkdirSync(path.dirname(passAt), { recursive: true });
     fs.writeFileSync(passAt, JSON.stringify(Sg2.passphraseFile(held, "a passphrase for this gate"), null, 1));
@@ -3611,15 +3533,12 @@ async function main() {
     const backR = await sR.ask("studio:key-restore", pickR.file, "a passphrase for this gate");
     sR.done();
     const nowR = readKey(passAt);
-    check(races.every((r) => !!r.file && r.sig === r.file && !r.pubErr && (r.make === r.file || r.refused))
-          && !!backR && !backR.error && !!nowR && nowR.kept === "os" && nowR.public === held.public,
-      "19e a Make press and the first publish together leave one key, which Make answers or refuses as already there and which"
-      + " signed the edition; CONTROL: a backup copy restored over a passphrase-wrapped key in the key's place still replaces it: "
-      + JSON.stringify({ races: races.map((r) => [r.file === r.sig, r.make === r.file ? "answered" : r.refused ? "refused" : "OTHER", r.pubErr]),
-        restored: !!backR && (backR.error || (nowR && nowR.kept)) }));
+    check(!!backR && !backR.error && !!nowR && nowR.kept === "os" && nowR.public === held.public,
+      "19e a backup copy restored over a passphrase-wrapped key in the key's place still replaces it: " + JSON.stringify({ restored: !!backR && (backR.error || (nowR && nowR.kept)) }));
 
-    /* 19f to 19j THE MAKE'S OTHER GUARDS (Clement omega's condition 2, his probes O1 to O5b): with no key, nothing is made where
-       something at the folder points to another key, or where the press cannot seal. Each holds no key file at the end. */
+    /* 19f to 19h WHERE SOMETHING AT THE FOLDER POINTS TO ANOTHER KEY (Clement omega's condition 2, his probes O1 to O5b; MOVED 2026-11-26): with no key, nothing is made, and the
+       plan promises none. They were the guards of the make the first publish and the first seal did, and now hold that none is made at a folder in each of these states. Each
+       holds no key file at the end. 19i and 19j, Plain and Sealed pressed through studio:team-sealed, are retired with the verb. */
     const sealOther = async (share, tag) => {
       const pair = await Sg2.makePair(), otherKey = path.join(SCRATCH, tag + "-other.json");
       fs.writeFileSync(otherKey, JSON.stringify(Sg2.osFile(pair, FAKE_VAULT_STORAGE.encryptString(pair.der)), null, 1));
@@ -3632,30 +3551,29 @@ async function main() {
     };
     const editProject = (dir, fn) => { const at = path.join(dir, "project.json"), p = JSON.parse(fs.readFileSync(at, "utf8")); fn(p);
       fs.writeFileSync(at, JSON.stringify(p, null, 1)); };
-    const pressAll = async (name, dir, seal) => {
+    const pressAll = async (name, dir) => {
       const s = await loadShell(name, { thread: realThread, env: projectsBeside(dir) });
       const plan = await s.ask("studio:publish-plan", dir), pub = await s.ask("studio:publish", dir, { notes: name });
-      const sealed = seal ? await s.ask("studio:team-sealed", dir, true, false) : null;
       s.done();
       return { made: fs.existsSync(keyAt(name)), makes: !!(plan && plan.signing && plan.signing.makes),
-               pubErr: pub && pub.error ? String(pub.error).slice(0, 70) : null, sealErr: sealed && sealed.error ? String(sealed.error).slice(0, 70) : null };
+               pubErr: pub && pub.error ? String(pub.error).slice(0, 70) : null };
     };
 
     /* 19f G1: a team file at the folder that does not read whole */
     const dirF = await signProject("first-key-g1-project"), teamF = await sealOther(path.join(SCRATCH, "first-key-g1-project", "share"), "first-key-g1");
     if (teamF) { const b = fs.readFileSync(teamF); fs.writeFileSync(teamF, b.subarray(0, Math.floor(b.length / 2))); }
-    const g1 = await pressAll("first-key-g1", dirF, true);
+    const g1 = await pressAll("first-key-g1", dirF);
     check(!!teamF && !g1.made && !g1.makes,
-      "19f a team file at the folder that does not read whole: the plan promises no key, and neither the publish nor Sealed makes"
-      + " one: " + JSON.stringify(g1));
+      "19f a team file at the folder that does not read whole: the plan promises no key, and the publish makes"
+      + " none: " + JSON.stringify(g1));
 
     /* 19g G2: the project remembers a seal, the folder has no team file, and this Studio kept no team for it */
     const dirG = await signProject("first-key-g2-project");
     editProject(dirG, (p) => { p.sealedTeam = "t-0123456789abcdef"; });
-    const g2 = await pressAll("first-key-g2", dirG, true);
+    const g2 = await pressAll("first-key-g2", dirG);
     check(!g2.made && !g2.makes,
-      "19g a project that remembers a seal, with no team file at the folder: the plan promises no key, and neither the publish nor"
-      + " Sealed makes one: " + JSON.stringify(g2));
+      "19g a project that remembers a seal, with no team file at the folder: the plan promises no key, and the publish makes"
+      + " none: " + JSON.stringify(g2));
 
     /* 19h G3: this Studio kept a team for the folder; the team file has left the share, the key file is moved aside and the
        project's mark is gone */
@@ -3671,38 +3589,20 @@ async function main() {
     fs.renameSync(atH, atH + ".aside");
     if (teamH) fs.renameSync(path.join(shareH, teamH), path.join(SCRATCH, "first-key-g3-team-aside.json"));
     editProject(dirH, (p) => { delete p.sealedTeam; });
-    const g3 = await pressAll("first-key-g3", dirH, false);
+    const g3 = await pressAll("first-key-g3", dirH);
     check(!!sealedH && !sealedH.error && !!teamH && !g3.made && !g3.makes,
       "19h a team this Studio kept for the folder, its file gone from the share and the key moved aside: the plan promises no key"
       + " and the publish makes none: " + JSON.stringify(Object.assign({ sealed: !!(sealedH && sealedH.team) }, g3)));
 
-    /* 19i S3: choosing Plain with no key makes nothing */
-    const dirI = await signProject("first-key-plain-project");
-    const sI = await loadShell("first-key-plain", { thread: realThread, env: projectsBeside(dirI) });
-    const plainI = await sI.ask("studio:team-sealed", dirI, false, false);
-    sI.done();
-    check(!fs.existsSync(keyAt("first-key-plain")),
-      "19i Plain pressed with no key makes none: " + JSON.stringify({ error: plainI && plainI.error ? String(plainI.error).slice(0, 70) : null }));
+    /* 19i and 19j RETIRED 2026-11-26 with studio:team-sealed: "Plain pressed with no key makes none" and "Sealed on a project kept inside its own publish folder refuses and makes no
+       key". */
 
-    /* 19j S2: Sealed on a project kept inside the folder it publishes to refuses, and makes no key */
-    const shareJ = path.join(SCRATCH, "first-key-inside", "share");
-    fs.mkdirSync(shareJ, { recursive: true });
-    const inJ = await St2.newProject(path.join(shareJ, "projects"), "Inside", [{ code: "en", name: "English" }]);
-    await St2.setPublishFolder(inJ.dir, shareJ);
-    const sJ = await loadShell("first-key-inside-ud", { thread: realThread, env: projectsBeside(inJ.dir) });
-    const sealJ = await sJ.ask("studio:team-sealed", inJ.dir, true, false);
-    sJ.done();
-    check(!!sealJ && !!sealJ.error && !fs.existsSync(keyAt("first-key-inside-ud")),
-      "19j Sealed on a project kept inside its own publish folder refuses and makes no key: "
-      + JSON.stringify({ error: sealJ && sealJ.error ? String(sealJ.error).slice(0, 70) : null, made: fs.existsSync(keyAt("first-key-inside-ud")) }));
-
-    /* 19k A RESTORE AND THE FIRST PUBLISH TOGETHER (the test architect's note 357 on 2ee8bfe): a restore looked at the key's
-       place before opening the copy, which on a desk is the thread's work and takes real time, and wrote after it, so a key the
-       first publish made meanwhile was written over and the edition it signed kept by nobody. The thread is Studio's own,
-       with the copy's opening held a moment as the worker holds it. Held for the restore: the publish makes its key and signs
-       while the restore waits, and the restore then refuses in its sentence, the made key kept. Held for the publish instead:
-       the restore lands first and keeps its key, and the publish makes none and signs with it. Either way the key in the file
-       signed the edition. */
+    /* 19k A RESTORE AND A PUBLISH TOGETHER (the test architect's note 357 on 2ee8bfe; MOVED 2026-11-26). Was: a restore looked at the key's place before opening the copy,
+       which on a desk is the thread's work and takes real time, and wrote after it, so a key the first publish made meanwhile was written over and the edition it signed kept
+       by nobody; held for the restore, the publish made its key and signed while the restore waited and the restore then refused in its sentence, the made key kept; held for
+       the publish instead, the restore landed first and the publish made none and signed with the restore's. Now no publish makes a key, so a restore never meets one it would
+       write over: with the copy's opening held a moment as the worker holds it, the restore lands whichever way the two meet and keeps the copy's key, and the edition goes out
+       unsigned where it was written before the key was there, or signed with the copy's key where it was written after. */
     const COPY_WORDS = "a passphrase for the restore race";
     const raceRestore = async (name, holdOpen) => {
       const at = keyAt(name), dir = await signProject(name + "-project"), copy = path.join(SCRATCH, name + "-copy.json"), held = await Sg2.makePair();
@@ -3719,14 +3619,12 @@ async function main() {
                made: !!(pub && pub.signing) };
     };
     const kHeld = await raceRestore("restore-race-held", true), kLate = await raceRestore("restore-race-late", false);
-    check(!!kHeld.file && kHeld.sig === kHeld.file && kHeld.made && kHeld.filePublic !== kHeld.copy && !kHeld.pubErr
-          && kHeld.restoreErr === "This Studio keeps another signing key, so the copy was not restored."
-          && !!kLate.file && kLate.sig === kLate.file && kLate.filePublic === kLate.copy && !kLate.restoreErr && !kLate.made && !kLate.pubErr,
-      "19k a restore and the first publish pressed together never write one key over another: where the publish lands during the"
-      + " restore's wait, its made key stays, signed the edition, and the restore refuses in its sentence; where the restore lands"
-      + " first, its key stays, the publish makes none and signs with it: "
-      + JSON.stringify({ held: [kHeld.sig === kHeld.file, kHeld.filePublic === kHeld.copy ? "copy's key" : "made key", kHeld.restoreErr ? "refused" : "restored", kHeld.pubErr],
-        late: [kLate.sig === kLate.file, kLate.filePublic === kLate.copy ? "copy's key" : "made key", kLate.restoreErr ? "refused" : "restored", kLate.pubErr] }));
+    const landsRight = (k) => !!k.file && k.filePublic === k.copy && !k.restoreErr && !k.pubErr && !k.made && (k.sig === null || k.sig === k.file);
+    check(landsRight(kHeld) && landsRight(kLate),
+      "19k a restore and a publish pressed together never write one key over another: the restore lands whichever way the two meet and keeps the copy's key, no publish makes one, and"
+      + " the edition is unsigned or signed with the copy's key: "
+      + JSON.stringify({ held: [kHeld.sig, kHeld.filePublic === kHeld.copy ? "copy's key" : "other key", kHeld.restoreErr, kHeld.pubErr],
+        late: [kLate.sig, kLate.filePublic === kLate.copy ? "copy's key" : "other key", kLate.restoreErr, kLate.pubErr] }));
   }
 
   /* 19l A SIGNING KEY FILE THAT DOES NOT READ (board 931, condition 9, finding 8): Make a signing key over it no longer says the

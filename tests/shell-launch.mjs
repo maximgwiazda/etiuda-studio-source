@@ -288,7 +288,6 @@ async function main(argv) {
     atBoot = windowsOf(watched.child.pid);
     const asked = watched.page.evaluate(`(async () => JSON.stringify({
       root: await window.STUDIO.pickRoot("phase 7"),
-      folder: await window.STUDIO.pickFolder("phase 7"),
       file: await window.STUDIO.importPick("phase 7")
     }))()`);
     const clock = new Promise(r => setTimeout(() => r(null), 15000));
@@ -299,10 +298,9 @@ async function main(argv) {
     picks = got === null ? null : JSON.parse(got);
   } finally { await watched.shut(); }
 
-  check(picks !== null && picks.folder && picks.folder.folder === null
-        && picks.file && picks.file.file === null
+  check(picks !== null && picks.file && picks.file.file === null
         && picks.root && typeof picks.root.root === "string",
-    "7a the three pickers with no window of their own to answer with come back as a cancellation"
+    "7a the two pickers with no window of their own to answer with come back as a cancellation"
     + " rather than opening one: " + (picks === null
       ? "NOTHING CAME BACK within 15 s" + (pickWhy ? " - " + pickWhy : "")
         + ", which is what a native dialog does to the main process"
@@ -314,7 +312,7 @@ async function main(argv) {
     "7b and nothing this launch put up lands on a display: "
     + (bothRead
       ? "at boot " + atBoot.windows + " visible window(s) of this pid, " + atBoot.onDisplay
-        + " on a display; after the three picks " + afterPicks.windows + " and "
+        + " on a display; after the two picks " + afterPicks.windows + " and "
         + afterPicks.onDisplay + ". Monitors " + JSON.stringify(afterPicks.monitors)
         + ", windows " + JSON.stringify(afterPicks.all)
       : "NOT MEASURED, which is a failure and not a clean screen - "

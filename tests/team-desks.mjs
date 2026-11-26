@@ -59,7 +59,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const SCRATCH = path.join(ROOT, "scratch", "team-desks");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 77; /* 86 less td4i, td4j and td4jp, retired with the code door (P2); td4h is rebased; less td4e, td4f, td4n, td4u and td4v, retired with the Publishing switch, and one plant (fd9-lead and fd9-solid gave way to ton-teamless), 2026-11-26 */
+const EXPECTED = 77; /* unchanged by the retirement of the two plants u2-hold-sealed and u2-hold-first (2026-11-26): the u2p plants count as one skip; */ /* 86 less td4i, td4j and td4jp, retired with the code door (P2); td4h is rebased; less td4e, td4f, td4n, td4u and td4v, retired with the Publishing switch, and one plant (fd9-lead and fd9-solid gave way to ton-teamless), 2026-11-26 */
 /* ETIUDA_PLANTS=off (a merge's area run) skips u2p and p5p and counts them toward EXPECTED; the release profile runs with
    plants on, so they still run there. */
 const SELF = fileURLToPath(import.meta.url);
@@ -822,9 +822,7 @@ const HELD_A = [
 ];
 const HELD_B = [
   ["studio:key-make", () => []],
-  ["studio:team-sealed", (w) => [w.dir, true, false]],
   ["studio:team-new", () => []],
-  ["studio:team-relay", (w) => [w.dir]],
   ["studio:licence-signin", () => ["microsoft"]],
 ];
 async function heldWorld(w, list, out) {
@@ -869,7 +867,8 @@ async function u2gCheck() {
     const plan = await sh.ask("studio:publish-plan", b.dir);
     const res = await sh.ask("studio:key-make");
     const kept = Sign.readKeyFile(path.join(b.ud, Sign.KEY_FILE));
-    return !!(plan && plan.signing && plan.signing.makes === true && res && !res.error && kept && kept.public);
+    /* MOVED 2026-11-26: was also "a publish's plan says the key will be made" (plan.signing.makes === true); the publish makes no key now, so the plan says none. */
+    return !!(plan && plan.signing && plan.signing.makes === undefined && res && !res.error && kept && kept.public);
   } finally {
     await sh.done();
   }
@@ -886,13 +885,11 @@ const u2eRedIn = (c) => {
 };
 const SHELL_U2_PLANTS = [
   ["u2p", "shell/main.js", "u2-hold-shell", (c) => u2eRedIn(c)],
-  ["u2p", "shell/main.js", "u2-hold-sealed", (c) => u2eRedIn(c)],
-  ["u2p", "shell/main.js", "u2-hold-first", (c) => u2eRedIn(c)],
+  /* u2-hold-sealed and u2-hold-first retired 2026-11-26, with studio:team-sealed and the key the first publish made: each held the making of an identity while a newer Studio's
+     data stand, and the two makings are gone, so there is nothing to hold (their marks stay in shell/main.js as comments until the plant guard can retire one). */
 ];
 const SHELL_U2_REMOVE = {
   "u2-hold-shell": () => "",
-  "u2-hold-sealed": () => "",
-  "u2-hold-first": () => "",
 };
 
 async function main(argv) {
@@ -911,7 +908,7 @@ async function main(argv) {
     } else if (ONLY === "u2f") {
       await leg("u2f the same with a teams.json a newer Studio wrote", async () => heldAll("teams"));
     } else if (ONLY === "u2g") {
-      await leg("u2g THE CONTROL: with no newer file, a publish's plan says the key will be made and Make a signing key makes it",
+      await leg("u2g THE CONTROL: with no newer file, Make a signing key makes it (was: and a publish's plan says the key will be made; the publish makes none now)",
         u2gCheck);
     } else if (SHELL_U2_REMOVE[ONLY]) {
       const guard = SHELL_U2_PLANTS.find((g) => g[2] === ONLY);
@@ -1198,11 +1195,9 @@ async function main(argv) {
   const ASKS = { id: "k-9b12e0040c71b2e4", name: "Ola", key: "9b12e004" + "0".repeat(56), asked: "2026-10-04T09:20:00.000Z", state: "asks" };
   const READY = Object.assign({}, ASKS, { id: "k-3f9a0c71b2e4d856", state: "ready" }),
     SPENT = Object.assign({}, ASKS, { id: "k-81d0e6a4c95b7f13", state: "spent" });
-  let admitAnswer = facts(), sealAnswer = { error: null, team: null }, removeAnswer = facts();
+  let admitAnswer = facts(), removeAnswer = facts();
   const api = {
     desks: async (d) => { asked.push(["desks", d]); return JSON.parse(JSON.stringify(answer)); },
-    teamSealed: async (...a) => { asked.push(["teamSealed", ...a]); return JSON.parse(JSON.stringify(sealAnswer)); },
-    teamRelay: async (...a) => { asked.push(["teamRelay", ...a]); return JSON.parse(JSON.stringify(sealAnswer)); },
     memberRemove: async (...a) => { asked.push(["memberRemove", ...a]); return JSON.parse(JSON.stringify(removeAnswer)); },
     teamExports: async (...a) => { asked.push(["teamExports", ...a]); return JSON.parse(JSON.stringify(expAnswer)); },
     teamSharing: async (...a) => { asked.push(["teamSharing", ...a]); return JSON.parse(JSON.stringify(shareAnswer)); },
@@ -1924,7 +1919,7 @@ async function main(argv) {
     + " sentence naming 2.3.0, the key folder and the teams file stay byte for byte, and a publish's plan makes no key (red where"
     + " any act runs)", async () => heldAll("store"));
   await leg("u2f the same with a teams.json a newer Studio wrote", async () => heldAll("teams"));
-  await leg("u2g THE CONTROL: with no newer file, a publish's plan says the key will be made and Make a signing key makes it",
+  await leg("u2g THE CONTROL: with no newer file, Make a signing key makes it (was: and a publish's plan says the key will be made; the publish makes none now)",
     u2gCheck);
 
   /* u2h: while they stand, the page offers no act that makes or replaces an identity (the test architect's E1, 2026-11-01):
