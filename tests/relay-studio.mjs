@@ -4863,7 +4863,7 @@ LEGS.rs926d = async () => {
   const dir = made.dir, base = await S0.openProject(dir);
   const calls = [];
   const api = { teamRelay: async (d) => { calls.push(["relay", d]); return { error: null, relay: true, created: true, team: { id: "t-0123456789abcdef" } }; },
-    teamSealed: async (d, sealed, fresh) => { calls.push(["folder", d, sealed, fresh]); return { error: null, folder: share, created: true, team: { id: "t-0123456789abcdef" } }; },
+    teamNew: async () => { calls.push(["new"]); return { error: null, relay: true, created: true, team: { id: "t-0123456789abcdef" } }; },
     desks: async () => ({ folder: mirror, file: "ours", signing: "studio-0123456789abcdef", requests: [], canKeep: true,
       team: { id: "t-0123456789abcdef", epoch: 1, relay: true, roster: [], sealed: true, exportsSealed: true, leadPrint: "87ad0879ac3e9ff6" } }),
     pickFolder: async () => ({ folder: null }) };
@@ -4875,39 +4875,33 @@ LEGS.rs926d = async () => {
   for (const lang of ["en", "pl"]) {
     const home = loadPage({ api, uiLang: lang }), P = home.page, T = P.T;
     const labels = [T("the Etiuda relay")];
-    state(P);
-    const first = String(P.teamCoverHtml());
-    const folderChosen = (P.ACTS["team-where"]({ getAttribute: () => "folder" }), String(P.teamCoverHtml()));
-    state(P, { teamWant: "fresh", desks: { folder: share, file: "theirs", lead: "87ad0879ac3e9ff6", signing: "studio-0123456789abcdef", requests: [], canKeep: true, team: null } });
-    const fresh = String(P.teamCoverHtml());
-    state(P, { desks: { folder: share, file: "ours", signing: "studio-0123456789abcdef", requests: [], canKeep: true,
-      team: { id: "t-0123456789abcdef", epoch: 1, roster: [], sealed: false } } });
-    const existing = String(P.teamCoverHtml());
+    /* MOVED 2026-11-26 (findings 29 and 31): was the cover that asked where a team is first made, the relay by default and a shared folder as it was,
+       and its press through teamRelay on the project. Now the cover names the relay and no catalog, and its press is teamNew with nothing. */
     state(P, { desks: { folder: null, file: "none", signing: "studio-0123456789abcdef", requests: [], canKeep: true, team: null }, cover: null });
     P.paintMain();
-    const noFolder = home.node("#main").innerHTML;
+    const teamless = home.node("#main").innerHTML;
+    P.ACTS["team-new"]();
+    const first = String(P.teamCoverHtml());
+    state(P, { teamWant: "new", desks: { folder: share, file: "ours", signing: "studio-0123456789abcdef", requests: [], canKeep: true,
+      team: { id: "t-0123456789abcdef", epoch: 1, roster: [], sealed: false } } });
+    const existing = String(P.teamCoverHtml());
     seen[lang] = {
-      labels, first: labels.every((x) => first.indexOf(x) >= 0) && first.indexOf(T("a shared folder")) < 0 && first.indexOf(T("Where the team meets")) >= 0
-        && /data-v="relay"[^>]*>/.test(first) && first.indexOf('aria-checked="true" data-act="team-where" data-v="relay"') >= 0,
-      folder: folderChosen.indexOf('aria-checked="true" data-act="team-where" data-v="relay"') >= 0 && folderChosen.indexOf('data-v="folder"') < 0 && folderChosen.indexOf(T("Seal what this folder is given")) < 0,
-      fresh: fresh.indexOf(labels[0]) >= 0 && fresh.indexOf(T("Start a new team on the Etiuda relay")) >= 0,
-      existing: existing.indexOf("team-where") < 0 && existing.indexOf(labels[0]) < 0,
-      noFolder: /data-act="team-seal"/.test(noFolder) && /data-act="settings-folder"/.test(noFolder),
+      labels, first: labels.every((x) => first.indexOf(x) >= 0) && first.indexOf(T("a shared folder")) < 0 && /data-act="do-team-new"/.test(first)
+        && first.indexOf("team-where") < 0 && first.indexOf(T("Where the team meets")) < 0,
+      teamless: /data-act="team-new"/.test(teamless) && !/data-act="team-seal"/.test(teamless) && !/data-act="settings-folder"/.test(teamless),
+      existing: existing.indexOf("team-where") < 0,
     };
   }
-  /* The press: the relay, and a forced "folder" answer (no click can give it since 2026-11-20) goes the relay's way too. */
-  const run = async (where) => {
+  /* The press: teamNew, with no project. */
+  const run = async () => {
     const home = loadPage({ api, uiLang: "en" }), P = home.page;
-    state(P, { teamWhere: where });
-    P.S.open = project(null);
+    state(P, { teamWant: "new" });
     calls.length = 0;
-    try { await P.ACTS["do-team-seal"](); } catch { /* a repaint the stand-in cannot finish; the calls are what is read */ }
-    return { calls: calls.slice(), folder: P.S.open.project.folder };
+    try { await P.ACTS["do-team-new"](); } catch { /* a repaint the stand-in cannot finish; the calls are what is read */ }
+    return { calls: calls.slice() };
   };
-  const byDefault = await run("relay"), byFolder = await run("folder");
-  const routes = { relay: byDefault.calls.length === 1 && byDefault.calls[0][0] === "relay" && byDefault.calls[0][1] === dir,
-    folder: byFolder.calls.length === 1 && byFolder.calls[0][0] === "relay" && byFolder.calls[0][1] === dir,
-    placeKnown: byDefault.folder === mirror };
+  const byDefault = await run();
+  const routes = { relay: byDefault.calls.length === 1 && byDefault.calls[0][0] === "new" && byDefault.calls[0].length === 1 };
   /* What a relay team's screens show. */
   const shown = {};
   for (const lang of ["en", "pl"]) {
@@ -4938,7 +4932,7 @@ LEGS.rs926d = async () => {
   Object.keys(routes).forEach((k) => { if (routes[k] !== true) bad.push("press " + k); });
   Object.keys(tell).forEach((k) => { if (tell[k] !== true) bad.push("tell " + k); });
   check(bad.length === 0 && seen.en.labels[0] !== seen.pl.labels[0],
-    "rs926d the page asks where a team is first made, the relay by default and a shared folder as it was, asks nothing of an existing team, and"
+    "rs926d the page makes a team on the relay with no catalog asked for, and"
     + " shows the relay in place of the mirror's path, the address and the relay team id, in English and in Polish: "
     + (bad.length ? "failing " + JSON.stringify(bad) : "every part holds") + "; labels " + JSON.stringify(seen.en.labels) + " / " + JSON.stringify(seen.pl.labels));
 };
@@ -11376,7 +11370,6 @@ const PLANTS = [
   { leg: "rs962z", file: "src/relay.mjs", mark: "rs-stale-again", line: "      } catch (e) { throw e; }" },
   { leg: "rs935n", file: "src/relay.mjs", mark: "n1-case", line: "    const said = GRANT_SAID.none;" },
   { leg: "rs926d", file: "ui/app.js", mark: "rs926-shape", line: "  const RELAY_MIRROR = /^$/;" },
-  { leg: "rs926d", file: "ui/app.js", mark: "rs926-route", line: "      if (false) return teamOnRelay(dir);" },
   { leg: "rs1", file: "src/team-store.mjs", mark: "rs-mirror", line: "" },
   { leg: "rs2", file: "src/relay.mjs", mark: "rs-space", line: "      const r = { ok: true };" },
   { leg: "rs3", file: "src/relay.mjs", mark: "rs-floors", line: "  return C.createChannel({ rt: o.rt, url: o.url, mirror: o.mirror, stateFile: null, write: writeWhole," },

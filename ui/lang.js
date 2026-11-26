@@ -78,8 +78,6 @@
     /* F5 and F9, the copywriter's (2026-11-01, ffffa87c and 56e3a11d) */
     "This catalog has no cards yet, so the import comes into it rather than making a new catalog, and its rows go straight in rather than waiting in Proposals.":
       "Ten katalog nie ma jeszcze kart, więc import trafi do niego, zamiast tworzyć nowy katalog, a wiersze od razu do niego wejdą, zamiast czekać w Propozycjach.",
-    "Without a team, editions can also be published to a plain folder, in the clear: any desk that can read the folder opens them.":
-      "Bez zespołu wydania można też publikować w zwykłym folderze, jawnie: otworzy je każde stanowisko, które ma dostęp do tego folderu.",
 
     /* The relative clock, `ago()`. */
     "a moment ago": "przed chwilą",
@@ -179,11 +177,9 @@
     "never published": "jeszcze nie opublikowano",
     "no folder chosen yet": "nie wybrano jeszcze folderu",
     /* Statistics, in place of the line above, and only there. Claudette, 2026-11-10. */
-    "Statistics counts what teammates' desks report through the team's folder. Once the folder is chosen, the counting period appears here, and the figures with the first answers.":
-      "Statystyki zliczają to, co stanowiska członków zespołu przekazują przez folder zespołu. Po wybraniu folderu pojawi się tu okres liczenia, a liczby wraz z pierwszymi odpowiedziami.",
+    "Statistics counts what teammates' desks report through the team. Once the catalog is on a team, the counting period appears here, and the figures with the first answers.":
+      "Statystyki zliczają to, co stanowiska członków zespołu przekazują przez zespół. Gdy katalog trafi do zespołu, pojawi się tu okres liczenia, a liczby wraz z pierwszymi odpowiedziami.",
     /* The empty Team screen's second line (board 976, item 8). */
-    "Teammates, and what each one holds, appear here once the catalog has a folder they read from.":
-      "Członkowie zespołu i to, co ma każdy z nich, pojawią się tutaj, gdy katalog będzie miał folder, z którego czytają.",
     "Open": "Otwórz",
 
     "rev {N}": "wersja {N}",
@@ -328,8 +324,6 @@
       "Zapieczętowane dla zespołu: otworzy je tylko przyjęty członek zespołu.", /* plant:txrw-rw1-4 */
     "for the archive": "do archiwum",
     "Where it goes": "Dokąd trafia",
-    "Change folder": "Zmień folder",
-    "Plain: any desk that reads this folder can open it.": "Jawne: otworzy je każde stanowisko, które czyta ten folder.",
     "{N} teammate admitted reads this folder.": "Przyjęci członkowie zespołu czytający ten folder:\u00a0{N}.",
     "{N} teammates admitted read this folder.": "Przyjęci członkowie zespołu czytający ten folder:\u00a0{N}.",
     "{N} more is named and not admitted yet.": "{N} kolejne jest nazwane, ale jeszcze nieprzyjęte.",
@@ -1693,8 +1687,6 @@
     "The draft, its archive, and the inbox an agent drops a file into.":
       "Szkic, jego archiwum i skrzynka, do której agent wrzuca plik.",
     "Open the folder": "Otwórz ten folder",
-    "The shared folder every teammate reads a published edition from.": "Folder, z którego każdy członek zespołu czyta opublikowane wydanie.",
-    "Where the team reads from": "Skąd czyta zespół",
     "Change file name": "Zmień nazwę pliku",
     "Use this name": "Użyj tej nazwy",
     "What every desk lists it as. A new name keeps what each desk has made its own.":
@@ -2297,8 +2289,6 @@
     "Remove {NAME} from the team": "Usunięcie z zespołu: {NAME}",
     "Removal works only from now on: {NAME} keeps the editions already received and gets no new ones.": "Usunięcie działa tylko na przyszłość: {NAME} zachowuje otrzymane już wydania, ale nie dostanie żadnego nowego.",
     /* On a plain team, drafted by the lead engineer's seat for the copywriter (sense pass finding 4). */
-    "This team publishes in the clear, so new editions stay readable to anyone who can read this folder, {NAME} included. Removed, and with publishing sealed, {NAME} gets no new ones.": "Ten zespół publikuje jawnie, więc nowe wydania odczyta każdy, kto ma dostęp do tego folderu, także {NAME}. Po usunięciu i przejściu na publikowanie zapieczętowane {NAME} nie odczyta już nowych wydań.",
-    "Publish sealed…": "Publikuj zapieczętowane…",
     /* What Remove will do (decision 27), in the copywriter's words (words-27-remove-confirmation-2026-11-12.md). */
     "That desk is not signed in, so only it leaves the team.": "To stanowisko nie jest zalogowane, więc zespół opuści tylko ono.",
     "This teammate holds a lead seat on the licence, so they stay on the team. Only the licence's owner can remove a lead from a team.":
@@ -2691,8 +2681,6 @@
     "The team's members keep what they already have. This Studio can no longer publish to that team. The catalog's draft stays as it is.": "Osoby z zespołu zachowują to, co już mają. To Studio nie będzie już mogło publikować dla tego zespołu. Wersja robocza katalogu zostaje bez zmian.",
     "Let go": "Odłącz",
     "This Studio now holds that team's keys, or the project names no team any more, so nothing was let go.": "To Studio ma już klucze tego zespołu albo projekt nie wskazuje już żadnego zespołu, więc niczego nie odłączono.",
-    "The team file has gone from this folder. Sealed writes it back.": "Plik zespołu zniknął z tego folderu. Wybór Zapieczętowane zapisze go ponownie.",
-    "The team file has gone from this folder, and a sealed publish waits until it is back.": "Plik zespołu zniknął z tego folderu, a zapieczętowana publikacja czeka na jego powrót.",
     "This Studio does not hold the team's current key, so a sealed publish waits for it.": "To Studio nie ma bieżącego klucza zespołu, więc zapieczętowana publikacja na niego czeka.",
     /* Board 949 W5 and W6, the copywriter's words of 2026-10-30 04:05. */
     "To open {NAME}, Studio needs its folder, which is no longer at {FOLDER} or is on a drive not connected now. Once the drive is connected, the catalog opens here again; a folder moved elsewhere opens with Open a folder as a catalog of its own, and this one can then be closed with Close catalog.": "Aby otworzyć katalog {NAME}, Studio potrzebuje jego folderu, a nie ma go już w miejscu {FOLDER} albo leży on na dysku, który nie jest teraz podłączony. Gdy dysk zostanie podłączony, katalog znów się tu otworzy; folder przeniesiony gdzie indziej otworzy się przez Otwórz folder jako osobny katalog, a ten można wtedy zamknąć przyciskiem Zamknij katalog.",
@@ -2718,8 +2706,6 @@
     "not held by this Studio": "tego klucza nie ma w tym Studiu",
     "none yet": "jeszcze brak",
     "Roster": "Lista członków zespołu",
-    "Seal what this folder is given": "Pieczętowanie tego, co trafia do folderu",
-    "Give this folder its catalog files in the clear": "Jawne pliki katalogów w tym folderze",
     "Seal": "Zapieczętuj",
     "Unseal": "Odpieczętuj",
     "A team file is signed with this Studio's signing key, and Settings shows there is none yet.": "Plik zespołu podpisuje się kluczem podpisu tego Studia, a Ustawienia pokazują, że jeszcze go nie ma.",
@@ -2736,10 +2722,7 @@
     "This Studio does not lead that team as a sealed one, so the catalog did not join it. Nothing was changed.": "To Studio nie prowadzi tego zespołu jako zapieczętowanego, więc nie dołączono do niego katalogu. Nic nie zmieniono.",
     /* A catalog chooses its team, on the page (board 962 stage 5, T5): the cover's third choice, the Teams screen's Add a catalog to
        this team, the Writes to row of a team of several catalogs and the Desks screen's team catalog. */
-    "a team this Studio leads": "zespół prowadzony z tego Studia",
-    "Add this catalog to a team this Studio leads": "Dołączenie katalogu do zespołu prowadzonego z tego Studia",
     "The team": "Zespół",
-    "The catalog joins the team chosen here, and every teammate on it receives the catalog.": "Katalog dołącza do wybranego tu zespołu i trafia do wszystkich jego członków.",
     "These teammates run an Etiuda older than {VERSION}, which may mix up this team's catalogs until it is updated: {NAMES}.": "Ci członkowie zespołu mają Etiudę starszą niż {VERSION}, która do czasu aktualizacji może mylić katalogi tego zespołu: {NAMES}.",
     "1 teammate has not reported its version yet, so it may run an older Etiuda too.": "Od jednego członka zespołu nie ma jeszcze wersji, więc także tam może działać starsza Etiuda.",
     "Teammates that have not reported their version yet: {N}. Some of them may run an older Etiuda too.": "Członkowie zespołu bez podanej jeszcze wersji: {N}. Także u części z nich może działać starsza Etiuda.",
@@ -2769,7 +2752,8 @@
     "{TITLE}, not among this Studio's catalogs": "{TITLE}, poza katalogami tego Studia",
     "catalog {ID}, not among this Studio's catalogs": "katalog {ID}, poza katalogami tego Studia",
     "This team holds no catalog.": "Ten zespół nie ma żadnego katalogu.",
-    "The catalog is off the team, and it publishes nowhere until it is given a team or a folder.": "Katalog jest już odłączony od zespołu i nie będzie nigdzie publikowany, dopóki nie otrzyma zespołu albo folderu.",
+    "The catalog is off the team, and it publishes nowhere until it is given a team.": "Katalog jest już odłączony od zespołu i nie będzie nigdzie publikowany, dopóki nie otrzyma zespołu.",
+    "This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.": "Ten katalog nie należy do żadnego zespołu, więc nigdzie jeszcze nie jest publikowany. Dodaj go do zespołu albo najpierw utwórz zespół.",
     "Move {CATALOG} to another team": "Przeniesienie katalogu {CATALOG} do innego zespołu",
     "Teammates on {FROM} working in this catalog now, each keeping the edition it has: {N}.": "Członkowie zespołu {FROM}, którzy teraz pracują w tym katalogu i zachowają swoje wydanie: {N}.",
     "Teammates on {FROM} with changes to it waiting in review, which are withdrawn once it leaves: {N}.": "Członkowie zespołu {FROM} ze zmianami czekającymi na przegląd, które zostaną wycofane, gdy katalog odejdzie: {N}.",
@@ -2781,7 +2765,6 @@
     "Finish the move": "Dokończ przenoszenie",
     "Put it back on {TEAM}": "Przywróć do zespołu {TEAM}",
     "Part way off {TEAM}": "W trakcie odłączania od zespołu {TEAM}",
-    "Which catalog does the team start with?": "Od którego katalogu zespół zaczyna?",
     "Teammates receive this catalog once it is first published.": "Członkowie zespołu otrzymają ten katalog po jego pierwszej publikacji.",
     "This Studio waits for the team's lead to publish a first edition.": "To Studio czeka na pierwsze wydanie od lidera zespołu.",
     "Finish taking off": "Dokończ odłączanie",
@@ -2839,9 +2822,8 @@
     "Its passphrase": "Hasło kopii",
     "Asked this once. Afterwards this computer keeps the key under your sign-in.": "Hasło potrzebne jest tylko ten jeden raz. Potem klucz przechowuje ten komputer, pod ochroną logowania do konta.",
     "Restore the key": "Przywróć klucz",
-    "The team in this folder trusts the signing key {KEY}, and it is not on this computer.": "Zespół z tego folderu ufa kluczowi podpisu {KEY}, a tego klucza nie ma na tym komputerze.",
+    "The team trusts the signing key {KEY}, and it is not on this computer.": "Zespół ufa kluczowi podpisu {KEY}, a tego klucza nie ma na tym komputerze.",
     "No backup copy? A new key works too, and every teammate is let in again.": "Brak kopii zapasowej? Nowy klucz też zadziała, a każdy członek zespołu zostanie wpuszczony na nowo.",
-    "Start a new team here…": "Załóż tu nowy zespół…",
     "If this computer is lost": "Gdyby ten komputer przepadł",
     /* Claudette's words, 2026-10-20 (board 932: a relay team whose grant holds). */
     "The key's backup copy brings back the signing key and the team's place on the relay, but not the team's files kept there.":
@@ -2849,7 +2831,6 @@
     /* Claudette's words, 2026-10-26 23:46 (hold 2, a relay team opened on a computer that holds no licence). */
     "This Studio holds no licence yet, so it cannot work with the team. Once it is signed in with an account that holds the licence, from the Menu, under Settings, then Account, this computer works with the team as the first one does.":
       "To Studio nie ma jeszcze licencji, więc nie może pracować z zespołem. Gdy zostanie tu zalogowane kontem z licencją (z menu, w Ustawieniach, w części Konto), ten komputer będzie pracować z zespołem tak samo jak pierwszy.",
-    "Start a new team in this folder": "Nowy zespół w tym folderze",
     "Start the new team": "Załóż nowy zespół",
     /* Draft for the copywriter. */
     "Make a team": "Utwórz zespół",
@@ -2858,11 +2839,8 @@
        the copywriter to replace. The first two are the lead's two choices, as the test architect's condition names them. */
     "the Etiuda relay": "przekaźnik Etiudy",
     "a shared folder": "wspólny folder",
-    "Where the team meets": "Gdzie spotyka się zespół",
     "Start a team on the Etiuda relay": "Zespół na przekaźniku Etiudy",
-    "Start a new team on the Etiuda relay": "Nowy zespół na przekaźniku Etiudy",
     "Editions travel through the Etiuda relay sealed, so that only the team can read them.": "Wydania idą przez przekaźnik Etiudy zapieczętowane, więc odczyta je tylko zespół.",
-    "Every teammate is invited to the new team again.": "Każdy członek zespołu zostanie zaproszony do nowego zespołu od nowa.",
     "Every teammate reads a published edition from the relay.": "Każdy członek zespołu odczytuje opublikowane wydanie z przekaźnika.",
     "One roster for every catalog that publishes through the relay.": "Jedna lista członków zespołu dla wszystkich katalogów, które publikują przez przekaźnik.",
     "This catalog has a team already, so no other was started.": "Ten katalog ma już zespół, więc nie założono innego.",
@@ -2997,18 +2975,7 @@
        words, for the copywriter to confirm. */
     "First step": "Pierwszy krok",
     "First alternative": "Pierwszy wariant",
-    "Choose the folder your team reads from": "Wybierz folder, z którego czyta zespół",
-    "This folder is inside the catalog's own folder, where no teammate reads.": "Ten folder leży w folderze katalogu, a stamtąd zespół nie czyta.",
-    "This folder is a SharePoint library that OneDrive keeps in sync.": "Ten folder to biblioteka SharePoint synchronizowana przez OneDrive.",
-    "OneDrive keeps this folder in sync.": "Ten folder jest synchronizowany przez OneDrive.",
-    "Dropbox keeps this folder in sync.": "Ten folder jest synchronizowany przez Dropbox.",
-    "Google Drive keeps this folder in sync.": "Ten folder jest synchronizowany przez Dysk Google.",
-    "Studio could not remove its test file {FILE} from this folder; it is empty and can be deleted.": "Studio nie mogło usunąć z tego folderu swojego pliku próbnego {FILE}; jest pusty i można go usunąć.",
-    "Teammates on other computers read this folder only if it is shared with them.": "Członkowie zespołu na innych komputerach odczytają ten folder tylko wtedy, gdy zostanie im udostępniony.",
-    "This folder is inside the catalog's own folder, where no teammate reads. Choose the shared folder the team reads from.": "Ten folder leży w folderze katalogu, a stamtąd zespół nie czyta. Trzeba wybrać wspólny folder, z którego czyta zespół.",
-    "A Plain edition is not encrypted, so the cloud service holds a copy it can read. Only the team can read a Sealed one.": "Wydanie jawne nie jest zaszyfrowane, więc usługa w chmurze przechowuje jego czytelną kopię. Wydanie zapieczętowane może przeczytać tylko zespół.",
     "{DIR} is a file, not a folder.": "{DIR} to plik, a nie folder.",
-    "Studio cannot reach this folder now.": "Studio nie ma teraz dostępu do tego folderu.",
     "Studio cannot write to {DIR}, so it cannot publish an edition there.": "Studio nie może zapisywać w folderze {DIR}, więc nie opublikuje tam wydania.",
     "Find the card the path starts from": "Wyszukiwanie karty, od której zacznie się ścieżka",
     "{N} more card": "{N} kolejna karta",
@@ -3186,8 +3153,6 @@
     "Scroll tabs left": "Przewiń katalogi w lewo",
     "Scroll tabs right": "Przewiń katalogi w prawo",
     /* {FOLDER} is the bare last folder name, never declined; {DRIVE} is the letter with its colon. */
-    "in {FOLDER}": "w folderze {FOLDER}",
-    "on drive {DRIVE}": "na dysku {DRIVE}",
     "Cards shown": "Pokazywane karty",
     /* ---- PROJECTS AS PLACES (board 862). Claudette's, from state/drafts/studio-vision-words-2026-10-07.md,
      * rows P1 to P14; the rows it marks reused are the keys already above. */
@@ -4006,7 +3971,6 @@
     "no team yet": "jeszcze bez zespołu",
     "No teammate is connected yet.": "Nie ma jeszcze żadnych członków zespołu.",
     "A team carries catalogs to every teammate.": "Przez zespół katalogi trafiają do wszystkich jego członków.",
-    "A team carries catalogs, so a catalog comes first.": "Zespół służy do przekazywania katalogów, więc najpierw potrzebny jest katalog.",
     "has an older one": "ma starsze wydanie",
     "and 1 more teammate": "i jeszcze 1 członek zespołu",
     "and {N} more teammates": "i kolejni członkowie: {N}",

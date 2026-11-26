@@ -1,12 +1,11 @@
 /* LINUX STUDIO, BOARD 973: the tray's pictures, Start with Windows, the pinned shell the package
- * names, and the Team pane after a folder is chosen.
+ * names.
  *
  *     node tests/linux-973.mjs
  *
  * No window and no package build. process.platform is stubbed around the tray and the login act.
- * Two plants, each removed in a scratch copy (tests/plant-copy.mjs): the Linux tray's choice of
- * PNG (tray-platform) reddens lnx973-tray-linux, and the Team pane's repaint (folder-shown)
- * reddens lnx973-folder-now. ETIUDA_PLANTS=off skips both and counts them.
+ * One plant, removed in a scratch copy (tests/plant-copy.mjs): the Linux tray's choice of
+ * PNG (tray-platform) reddens lnx973-tray-linux. ETIUDA_PLANTS=off skips it and counts it.
  *
  * Node only. Exit 0 when every check holds, 1 when any fails.
  */
@@ -24,7 +23,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const SELF = fileURLToPath(import.meta.url);
 const require = createRequire(import.meta.url);
-const EXPECTED = 12;
+const EXPECTED = 10; /* 12 less lnx973-folder-now and its plant, retired with the chosen folder */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const BADGES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "9+"];
@@ -238,57 +237,14 @@ check(pinnedShellHolds(realFiles, ROOT) === true && pinnedShellHolds(dropped, RO
   "lnx973-shell-drop 4a fails if a pinned file is dropped from the packaging config: tray still named="
   + (droppedNamed.indexOf("engine/pinned/shell/tray.cjs") >= 0) + " holds=" + pinnedShellHolds(dropped, ROOT));
 
-function openProject(folder) {
-  return {
-    dir: "C:/Projects/one",
-    name: "One",
-    editions: [],
-    fileName: "one.ec",
-    counts: { cards: 0, intents: 0, cats: 0, rv: 0 },
-    lint: { errors: 0, warnings: 0, notes: 0, suggestions: 0 },
-    draft: { langs: [{ code: "en", name: "English" }], cards: [], rules: [] },
-    project: { folder, rev: 1, title: "One", langs: ["en"], id: "p-0123456789abcdef", fileName: "one.ec" },
-  };
-}
-async function afterChoice() {
-  const desksAnswer = {
-    folder: OLD_FOLDER,
-    file: "ours",
-    signing: "k",
-    team: { sealed: true, roster: [], epoch: 1, relay: true }, /* on the relay (was: relay: false, a team at a shared folder, which the Team screen holds with one line now) */
-    requests: [],
-  };
-  const api = new Proxy({
-    pickFolder: async () => ({ folder: NEW_FOLDER }),
-    setFolder: async () => ({ folder: NEW_FOLDER, check: { exists: true, writable: true, local: true } }),
-    desks: async () => desksAnswer,
-  }, { get: (t, k) => (k in t ? t[k] : async () => null) });
-  const { page, node } = loadPage({ api, uiLang: "en" });
-  page.S.open = openProject(null);
-  page.S.screen = "projects";
-  page.S.home = "team";
-  page.S.teamDir = page.S.open.dir;
-  page.S.host = { platform: "win32", tour: { offered: true } };
-  page.S.desks = { folder: null, file: "none", signing: "", team: null, requests: [] };
-  await page.ACTS["settings-folder"]();
-  return node("#main").innerHTML;
-}
-let madeHtml = "", folderErr = "";
-try {
-  madeHtml = await afterChoice();
-} catch (e) { folderErr = String((e && e.stack) || e).split("\n").slice(0, 2).join(" | "); }
-const shows = (html) => html.indexOf(NEW_FOLDER) >= 0 && html.indexOf("no folder chosen yet") < 0 && html.indexOf(OLD_FOLDER) < 0;
-check(!folderErr && shows(madeHtml),
-  "lnx973-folder-now the Team pane shows the chosen folder straight after the choice: "
-  + (folderErr || "make=" + shows(madeHtml)));
+/* lnx973-folder-now retired 2026-11-26 with the folder a person chose for a team to read from (Max, 00:37: "Retire it."): it held that the Team pane
+   showed the chosen folder straight after the choice, and its plant folder-shown stood on the repaint. */
 
 copyPlants({
   root: ROOT, self: SELF, label: "linux-973", onlyVar: "LINUX973_ONLY", check, skip,
   plants: [
     { mark: "tray-platform", leg: "lnx973-tray-linux", rel: "shell/main.js",
       line: '    if (false) return trayPng(badge); /* plant:tray-platform */' },
-    { mark: "folder-shown", leg: "lnx973-folder-now", rel: "ui/app.js",
-      line: "    if (false) { await desksLoad(); } /* plant:folder-shown */" },
   ],
 });
 

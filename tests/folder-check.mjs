@@ -38,7 +38,7 @@ import * as S from "../src/studio.mjs";
 import { loadPage } from "./page-stand-in.mjs";
 import { denyBinds, WRITE, REMOVE } from "./deny-binds.mjs";
 
-const EXPECTED = 14;
+const EXPECTED = 8; /* 14 less fc5, fc6, fc7, fc9, fc10 and fc14, retired with the chosen folder */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -131,113 +131,11 @@ async function main() {
         && fs.statSync(share).mtimeMs === shareWas,
     "fc4 the publish plan carries the folder's check and writes nothing into the folder, nor touches it: " + JSON.stringify(plan.where));
 
-  const { page: P, node } = loadPage({ uiLang: "en" });
-  const open = await S.openProject(dir);
-  open.project = Object.assign({}, open.project, { folder: null });
-  Object.assign(P.S, { open, screen: "project", section: "cards", lang: "en" });
-  P.paintChrome();
-  P.paintDiscs();
-  const chrome = node("#chrome").innerHTML;
-  /* Publish is an action button since 26 November: its disc says Publish and the rev it makes. */
-  const discPub = node("#discPublish").attrs["aria-label"] || "";
-  P.S.screen = "projects"; P.S.home = "team"; P.S.teamDir = dir; P.S.desks = { folder: null, signing: "", file: "none", inside: false, team: null, requests: [] };
-  P.paintMain();
-  const desksHtml = node("#main").innerHTML;
-  let statsWords = "";
-  const statsHtml = ["words", "figures", "every"].map((v) => {
-    P.__get("statsViewOf").set(dir, v);
-    P.S.screen = "project";
-    P.S.section = "stats"; P.S.stats = { folder: null };
-    P.__get("paintStats")();
-    const html = node("#main").innerHTML;
-    if (v === "words") statsWords = html;
-    return /data-act="settings-folder"/.test(html);
-  });
-  const api = new Proxy({ pickFolder: async () => ({ folder: share }), setFolder: async (d, fo) => S.setPublishFolder(d, fo) },
-    { get: (t, k) => (k in t ? t[k] : async () => null) });
-  const { page: PA } = loadPage({ api, uiLang: "en" });
-  Object.assign(PA.S, { open: await S.openProject(dir), screen: "project", section: "cards", lang: "en", stats: { folder: "x" }, desks: { folder: "x" } });
-  try { await PA.ACTS["settings-folder"](); } catch { /* a repaint the stand-in cannot finish; the state is what is read */ }
-  const reread = [PA.S.stats, PA.S.desks];
-  check(/^Publish/.test(discPub) && !/data-act="publish"/.test(chrome) && !/data-act="settings-folder"/.test(chrome)
-        && /no folder chosen yet/.test(desksHtml)
-        && /<button class="btn sm" data-act="settings-folder">[^]*?Choose the folder your team reads from/.test(desksHtml)
-        && /Teammates, and what each one holds, appear here once the catalog has a folder they read from/.test(desksHtml)
-        && statsHtml.join(",") === "true,true,true" && reread[0] === null && reread[1] === null,
-    "fc5 with no folder the main action button is Publish, the Desks screen's dead end and each of"
-    + " Statistics' views still offer the folder press, and a folder chosen sends both screens to be read again: " + JSON.stringify([statsHtml, reread]));
+  /* fc5, fc6, fc7, fc9, fc10 and fc14 retired 2026-11-26 with the folder a person chose for a team to read from (Max, 00:37: "Retire it."; findings 26, 28
+     and 32): the page's press that chose it, its word beside Statistics and Desks, the cover's line about a synced folder and the Plain warning, Desks' refusal
+     of Sealed for a folder inside the project, the leftover probe the page said, and the Plain edition published into a folder OneDrive keeps. fc1 to fc4,
+     fc11 to fc13 stay: the check itself, the place's own words and the project's cloud warning belong to the folder the check still reads. */
 
-  const STATS_EMPTY = "Statistics counts what teammates' desks report through the team's folder. Once the folder is chosen, the counting period appears here, and the figures with the first answers.";
-  const STATS_EMPTY_PL = "Statystyki zliczają to, co stanowiska członków zespołu przekazują przez folder zespołu. Po wybraniu folderu pojawi się tu okres liczenia, a liczby wraz z pierwszymi odpowiedziami.";
-  const plStats = loadPage({ uiLang: "pl" });
-  const openPl = await S.openProject(dir);
-  openPl.project = Object.assign({}, openPl.project, { folder: null });
-  Object.assign(plStats.page.S, { open: openPl, screen: "project", section: "stats", lang: "pl", stats: { folder: null } });
-  plStats.page.__get("paintStats")();
-  const statsPl = plStats.node("#main").innerHTML;
-  plStats.page.S.screen = "projects"; plStats.page.S.home = "team"; plStats.page.S.teamDir = dir;
-  plStats.page.S.desks = { folder: null, signing: "", file: "none", inside: false, team: null, requests: [] };
-  plStats.page.paintMain();
-  const desksPl = plStats.node("#main").innerHTML;
-  /* chooseFolderHtml runs the sentence through esc, which writes an apostrophe as &#39;. */
-  const shown = (html) => String(html).replace(/&#39;/g, "'");
-  const wordsShown = shown(statsWords), statsShown = shown(statsPl);
-  check(wordsShown.indexOf(STATS_EMPTY) >= 0 && wordsShown.indexOf("no folder chosen yet") < 0
-        && /Choose the folder your team reads from/.test(statsWords)
-        && /no folder chosen yet/.test(desksHtml)
-        && statsShown.indexOf(STATS_EMPTY_PL) >= 0 && statsShown.indexOf("nie wybrano jeszcze folderu") < 0
-        && desksPl.indexOf("nie wybrano jeszcze folderu") >= 0,
-    "fc14 Statistics with no folder says the figures come from teammates, in both languages, and Desks still says no folder chosen yet: "
-    + JSON.stringify([wordsShown.indexOf(STATS_EMPTY), statsShown.indexOf(STATS_EMPTY_PL), desksPl.indexOf("nie wybrano jeszcze folderu")]));
-
-  const coverWith = (where, sealed) => {
-    P.S.plan = Object.assign({}, plan, { where, signing: { keyId: "", print: "", opens: false } });
-    P.S.planDesks = sealed ? { team: { sealed: true, epoch: 1, leadPrint: "87ad0879ac3e9ff6", roster: [] } } : { team: null };
-    return String(P.coverHtml()).replace(/\u00a0/g, " ");
-  };
-  const synced = Object.assign({}, plan.where, { cloud: "onedrive", local: false });
-  const drop = Object.assign({}, plan.where, { cloud: "dropbox", local: false });
-  const drive = Object.assign({}, plan.where, { cloud: "gdrive", local: false });
-  const plainSynced = coverWith(synced, false), sealedSynced = coverWith(synced, true), plainLocal = coverWith(plan.where, false);
-  const plainDrop = coverWith(drop, false), plainDrive = coverWith(drive, false);
-  const dropSaid = /Dropbox keeps this folder in sync\./.test(plainDrop), driveSaid = /Google Drive keeps this folder in sync\./.test(plainDrive);
-  check(/OneDrive keeps this folder in sync\./.test(plainSynced) && /A Plain edition is not encrypted/.test(plainSynced)
-        && !/A Plain edition is not encrypted/.test(sealedSynced) && !/A Plain edition is not encrypted/.test(plainLocal)
-        && /only if it is shared with them/.test(plainLocal) && dropSaid && driveSaid,
-    "fc6 the cover says a synced folder is synced, and Plain there warns while Sealed does not; a local folder says it must be shared;"
-    + " Dropbox and Google Drive say so too: " + dropSaid + "," + driveSaid);
-
-  P.S.screen = "projects"; P.S.home = "team"; P.S.teamDir = dir;
-  P.S.desks = { folder: dir, signing: "studio-0123456789abcdef", file: "none", inside: true, team: null, requests: [], canKeep: true };
-  P.S.open.project.folder = dir;
-  P.paintMain();
-  const inside = node("#main").innerHTML;
-  check(/inside the catalog&#39;s own folder, where no teammate reads/.test(inside) && !/data-act="team-seal"/.test(inside),
-    "fc7 Desks offers no Sealed for a folder inside the project, and says why in its place");
-
-  /* fc9: a probe the folder will not let Studio take back (deny delete on what is made in it) */
-  const keep = path.join(LAB, "keeps");
-  fs.mkdirSync(keep);
-  let kept = null, said9 = "", left = [];
-  const keepBinds = denyBinds(LAB, me, ["(OI)(IO)(D)", "(DC)"], REMOVE);
-  if (!keepBinds.binds) {
-    skip("fc9 a probe the folder will not let Studio take back is named in the check and said: " + keepBinds.why);
-  } else if (process.platform === "win32") {
-    try {
-      execFileSync("icacls", [keep, "/deny", me + ":(OI)(IO)(D)", "/deny", me + ":(DC)"], { stdio: "ignore" });
-      kept = S.folderCheck(keep, null, { probe: true });
-      said9 = P.__get("folderCheckSaid")(kept);
-      left = fs.readdirSync(keep);
-    } finally {
-      execFileSync("icacls", [keep, "/remove:d", me], { stdio: "ignore" });
-      for (const n of fs.readdirSync(keep)) fs.rmSync(path.join(keep, n));
-    }
-  } else {
-    kept = { writable: true, leftover: "x" }; said9 = "could not remove its test file x"; left = ["x"];
-  }
-  if (keepBinds.binds) check(!!kept && kept.writable === true && !!kept.leftover && left.indexOf(kept.leftover) >= 0
-        && /could not remove its test file/.test(said9) && /^\.etiuda-probe-/.test(kept.leftover || ".etiuda-probe-"),
-    "fc9 a probe the folder will not let Studio take back is named in the check and said: " + JSON.stringify([kept && kept.leftover, left]));
 
   /* fc11: a file of the probe's name is never overwritten and never removed. The check's own write and unlink are the
      ones watched; the file is planted on the first probe path before that write, and both are put back in a finally. */
@@ -271,28 +169,6 @@ async function main() {
     "fc11 a file already at the probe's name keeps its body and is never removed, and the folder is still writable: "
     + JSON.stringify([body11, keptPath, ownCheck && ownCheck.writable, unlinked.map((p) => path.basename(p))]));
 
-  /* fc10: the Plain warning never refuses */
-  const gateOf = (html, g) => ((new RegExp('<span class="g (\\w+)"[^>]*data-gate="' + g + '"').exec(html)) || [])[1]
-    || ((new RegExp('data-gate="' + g + '"[^>]*>\\s*<span class="g (\\w+)"').exec(html)) || [])[1] || "";
-  const passing = (html) => ((/(\d+) of (\d+)/.exec(html.replace(/<[^>]+>/g, " "))) || []).slice(1).join("/");
-  const odHome = path.join(LAB, "od"), odFolder = path.join(odHome, "OneDrive", "team");
-  fs.mkdirSync(odFolder, { recursive: true });
-  const envWas = process.env.OneDrive;
-  process.env.OneDrive = path.join(odHome, "OneDrive");
-  let published = null, odCloud = "";
-  try {
-    odCloud = S.setPublishFolder(dir, odFolder).check.cloud;
-    const shelf = (await S.addTag(dir, "shelf", { en: "General" })).tag.id;
-    await S.addCard(dir, shelf, "Widuma tosork", "Sarnesk kelbun.");
-    published = await S.publishProject(dir, {});
-  } catch (e) { published = { error: String(e && e.message) }; }
-  finally { if (envWas === undefined) delete process.env.OneDrive; else process.env.OneDrive = envWas; }
-  check(/data-act="do-publish"/.test(plainSynced) && passing(plainSynced) === passing(plainLocal) && !!passing(plainSynced)
-        && !/class="g stop"[^>]*data-gate="seal"|data-gate="seal"[^>]*>\s*<span class="g stop"/.test(plainSynced)
-        && !!published && !published.error && !published.refused && !!published.ec && odCloud === "onedrive",
-    "fc10 the Plain warning never refuses: the seal gate passes, " + passing(plainSynced) + " gates pass as for a local folder"
-    + " (" + passing(plainLocal) + "), Publish stands, and a Plain edition publishes into a folder OneDrive keeps: "
-    + JSON.stringify(published && (published.error || published.refused || path.basename(String(published.ec || "")))));
 
   /* fc12: rule 17 leg: opening a project folder itself on a cloud path says the project should live on the local disk with only its team folder on Drive */
   const gdriveDir = path.join(LAB, "Google Drive", "Projects");

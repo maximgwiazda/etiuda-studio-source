@@ -771,7 +771,9 @@ await leg("lgt3 the Team screen offers 'Let go of the team…' only where the fa
   out.shown = en.text.indexOf(LINE) >= 0 && en.text.indexOf("Let go of the team…") >= 0 && /data-act="team-letgo-ask"/.test(en.html)
     && en.text.indexOf("The team file has gone from this folder") < 0;
   out.polish = pl.text.indexOf("Odłącz zespół…") >= 0 && pl.text.indexOf("zespołu, którego kluczy nie ma w tym Studiu") >= 0;
-  out.notShown = no.text.indexOf("Let go of the team…") < 0 && !/team-letgo-ask/.test(no.html) && no.text.indexOf("The team file has gone from this folder") >= 0;
+  /* MOVED 2026-11-26: with no team file and no keys to let go of, the page says the catalog is on no team (was: the folder's line, The team file has gone from this folder). */
+  out.notShown = no.text.indexOf("Let go of the team…") < 0 && !/team-letgo-ask/.test(no.html) && no.text.indexOf("The team file has gone from this folder") < 0
+    && no.text.indexOf("This catalog is on no team") >= 0;
   /* The question, then Cancel. */
   await en.P.ACTS["team-letgo-ask"]();
   en.P.paintCoverOnly();

@@ -455,7 +455,7 @@ async function main(argv) {
     const none = signGate(P, { keyId: "", print: "", opens: false, unreadable: false });
     return /^Signed/.test(text(makes)) && /Publishing makes this Studio's signing key and signs the edition with it/.test(text(makes))
       && !/key-make|key-restore/.test(makes)
-      && /^Unsigned/.test(text(theirs)) && /The team in this folder trusts the signing key 9a3a 782d 7f8f f25b ?, and it is not on this computer\./.test(text(theirs))
+      && /^Unsigned/.test(text(theirs)) && /The team trusts the signing key 9a3a 782d 7f8f f25b ?, and it is not on this computer\./.test(text(theirs))
       && /class="kdisc" role="img" aria-label="Studio&#39;s signing key"/.test(theirs)
       /* MOVED (board 1016, item 5): old, Restore first and no Make drawn here; new, no press of the key's at all, one link to Settings' Signing key. */
       && !/data-act="key-restore"|data-act="key-make"/.test(theirs) && /data-act="key-settings">[^<]*(<[^>]*>)*Signing key settings/.test(theirs)
@@ -503,25 +503,23 @@ async function main(argv) {
     teamSealed: async () => JSON.parse(JSON.stringify(sealAnswer)), teamRelay: async () => JSON.parse(JSON.stringify(sealAnswer)) }), uiLang: "en" }), D = dk.page;
   const noKey = (o) => Object.assign({ error: null, folder: "S:\\Support", id: "c", mark: null, signing: "", file: "none", reason: "",
     inside: false, keyHeld: false, canKeep: true, restorable: null, requests: [], team: null }, o || {});
-  await leg("sk4d the Desks screen with no key and nothing at the folder trusting another offers Sealed, whose press makes the"
-    + " key, and takes the key the shell answered; CONTROL: a team this Studio kept for the folder keeps the old row", async () => {
+  /* MOVED 2026-11-26 (Max, findings 29, 31 and 32: a team is made on its own, and the Publishing switch is retired). Was: with no key and nothing at the
+     folder trusting another the Desks screen offered Sealed, whose press made the key and took the one the shell answered, and a team kept for the
+     folder kept the old row. Now the screen of a catalog with no team file offers Make a team and makes no key itself: the shell refuses the press, in
+     the key's sentence, until Settings has made one. */
+  await leg("sk4d the Desks screen with no key and no team file offers Make a team on its own and makes no key itself; CONTROL: a team file this Studio does not lead keeps its own row", async () => {
     Object.assign(D.S, { open: JSON.parse(JSON.stringify(await S.openProject(proj))), screen: "projects", home: "team", teamDir: proj, lang: "en",
       host: { signing: { keyId: "", problem: null } } });
     deskAnswer = noKey();
     await D.desksLoad();
     const open = dk.node("#main").innerHTML;
-    deskAnswer = noKey({ restorable: "t-0123456789abcdef", mark: "t-0123456789abcdef" });
+    deskAnswer = noKey({ file: "theirs", lead: "9a3a782d7f8ff25b" });
     await D.desksLoad();
-    const kept = dk.node("#main").innerHTML;
+    const theirs = dk.node("#main").innerHTML;
     deskAnswer = noKey();
     await D.desksLoad();
-    D.S.teamWant = "sealed"; D.S.teamWhere = "relay"; D.S.cover = "team";   /* the relay, the one place since 2026-11-20 (was: a shared folder); the relay's own first key is also relay-studio rs926e */
-    sealAnswer = { error: null, folder: "S:\\Support", created: true, team: { id: "t-0123456789abcdef", epoch: 1 }, signing: made() };
-    deskAnswer = noKey({ signing: "studio-9a3a782d7f8ff25b", file: "ours" });
-    await D.ACTS["do-team-seal"]();
-    return /data-act="team-seal" data-v="sealed"/.test(open) && !/there is none yet/.test(text(open)) && !/data-act="key-make"/.test(open)
-      && !/data-act="team-seal"/.test(kept) && /there is none yet/.test(text(kept))
-      && D.S.host.signing.keyId === "studio-9a3a782d7f8ff25b";
+    return /data-act="team-new"/.test(open) && /data-no-team/.test(open) && !/data-act="key-make"/.test(open) && !/data-act="team-seal"/.test(open)
+      && !/data-no-team/.test(theirs) && /9a3a 782d 7f8f f25b/.test(text(theirs));
   });
 
   await leg("sk4e leg d: Desks screen with file theirs: when no old key held, team-handover is not offered; when old key held, it is offered; confirmation shows exact copywriter words (folder without paid time, relay with)", async () => {
@@ -529,7 +527,7 @@ async function main(argv) {
     deskAnswer = { error: null, folder: "S:\\Support", id: "c", mark: null, signing: "studio-9a3a782d7f8ff25b", file: "theirs", lead: "1122 3344 5566 7788", canHandover: false, team: null };
     await D.desksLoad();
     const withoutOld = dk.node("#main").innerHTML;
-    const noOffer = !/data-act="team-handover"/.test(withoutOld) && /data-act="team-fresh"/.test(withoutOld);
+    const noOffer = !/data-act="team-handover"/.test(withoutOld) && !/data-act="team-fresh"/.test(withoutOld);
 
     deskAnswer = { error: null, folder: "S:\\Support", id: "c", mark: null, signing: "studio-9a3a782d7f8ff25b", file: "theirs", lead: "1122 3344 5566 7788", canHandover: true, team: null };
     await D.desksLoad();

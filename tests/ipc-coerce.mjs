@@ -1002,7 +1002,6 @@ async function behaviour() {
       "studio:import-land": ["file", "studio:import-pick", ["t"]],
       "studio:sheet-plan": ["file", "studio:import-pick", ["t"]],
       "studio:sheet-land": ["file", "studio:import-pick", ["t"]],
-      "studio:set-folder": ["folder", "studio:pick-folder", ["t"]],
       "studio:key-restore": ["file", "studio:key-restore-pick", ["t"]],
       "studio:csv-export": ["folder", "studio:csv-pick", ["t"]],
       "studio:export-edition": ["file", "studio:export-pick", ["t", "n"]],
@@ -1013,7 +1012,6 @@ async function behaviour() {
     };
     const gatePath = {
       "studio:import-pick": picked.STUDIO_TEST_FILE,
-      "studio:pick-folder": picked.STUDIO_TEST_FOLDER,
       "studio:key-restore-pick": picked.STUDIO_TEST_RESTORE,
       "studio:csv-pick": picked.STUDIO_TEST_CSV,
       "studio:export-pick": picked.STUDIO_TEST_SAVE,

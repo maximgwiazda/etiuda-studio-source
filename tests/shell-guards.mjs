@@ -136,7 +136,7 @@ const UI = path.join(ROOT, "ui", "index.html");
 const require = createRequire(import.meta.url);
 /* Off in a merge's area run, which runs no planted fault: 4h, the one plant here, is then not run. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = PLANTS_OFF ? 210 : 239; /* 212 and 241, less 2o and 2p, retired with the code door (P2) */
+const EXPECTED = PLANTS_OFF ? 209 : 238; /* 212 and 241, less 2o and 2p, retired with the code door (P2), and 2c, retired with the chosen folder (2026-11-26) */
 let LR_PROBE = null; /* 21b probe of the refused licence file name, kept for 22h10 */
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
 const REG_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
@@ -643,7 +643,7 @@ async function main() {
     const P = (n) => path.join(SCRATCH, "picked", n), Q = path.join(SCRATCH, "elsewhere", "x.ec");
     const open = (p) => ({ canceled: false, filePaths: [p] });
     const s = await loadShell("paths", { picks: [
-      { canceled: false, filePath: P("a.ec") }, open(P("pack")), open(P("share")),
+      { canceled: false, filePath: P("a.ec") }, open(P("pack")),
       open(P("rows.csv")), { canceled: true, filePaths: [] }, open("relative-v1.js")] });
     const verbs = () => s.calls.map(c => c[0] + ":" + c[c[0] === "exportAuditPack" ? 3 : c[0] === "setPublishFolder" ? 2 : c[0] === "exportEdition" ? 3 : 2]);
     const run = async (steps) => { s.calls.length = 0; const out = [];
@@ -658,11 +658,8 @@ async function main() {
       ["studio:audit-pack", "d", "e1", P("pack")], ["studio:audit-pack", "d", "e1", P("pack")]]);
     check(pack === "null,ok,ok,null " + JSON.stringify(["exportAuditPack:" + P("pack")]),
       "2b an audit pack goes only into the folder its picker answered, once: " + pack);
-    const folder = await run([["studio:set-folder", "d", Q], ["studio:pick-folder", "t"],
-      ["studio:set-folder", "d", P("share")], ["studio:set-folder", "d", P("share")],
-      ["studio:set-folder", "d", null]]);
-    check(folder === "null,ok,ok,null,ok " + JSON.stringify(["setPublishFolder:" + P("share"), "setPublishFolder:null"]),
-      "2c the folder the desks read from is only one its picker answered, and clearing it needs no pick: " + folder);
+    /* 2c retired 2026-11-26 with the folder a person chose for a team to read from (Max, 00:37: "Retire it."): the folder the desks read from was only one its
+       picker answered, and clearing it needed no pick; studio:set-folder and studio:pick-folder are gone. */
     const imp = await run([["studio:import-plan", Q, {}, ""], ["studio:import-pick", "t", {}],
       ["studio:import-plan", P("rows.csv"), {}, ""], ["studio:import-plan", P("rows.csv"), {}, ""],
       ["studio:import-pick", "t", {}], ["studio:import-land", P("rows.csv"), {}, ""],
@@ -677,7 +674,7 @@ async function main() {
       "2e a format 1 catalog is upgraded only from the file its picker answered, the plan's resolved"
       + " form of it included: " + v1);
     s.done();
-    check(s.said.filter(l => /which no picker answered/.test(l)).length === 10,
+    check(s.said.filter(l => /which no picker answered/.test(l)).length === 8, /* 10 less the two refusals of studio:set-folder, retired 2026-11-26 */
       "2f each refusal is said in the shell's log: " + s.said.filter(l => /no picker/.test(l)).length + " line(s)");
   }
   {
@@ -2244,7 +2241,7 @@ async function main() {
     const sites = (mainText.match(/await pick\(/g) || []).length;
     const channels = mainText.split(/\nanswer\(/).slice(1)
       .filter(b => /await pick\(/.test(b)).map(b => (/^"([^"]+)"/.exec(b) || [])[1]);
-    const s = await loadShell("words", { env: { STUDIO_TEST_ROOT: "", STUDIO_TEST_FOLDER: "",
+    const s = await loadShell("words", { env: { STUDIO_TEST_ROOT: "",
       STUDIO_TEST_FILE: "", STUDIO_TEST_V1: "", STUDIO_TEST_SAVE: "", STUDIO_TEST_PACK: "" } });
     let bridge = null;
     const stub = { contextBridge: { exposeInMainWorld: (k, api) => { bridge = api; } },
@@ -2292,7 +2289,7 @@ async function main() {
     for (const f of ["rows.csv", "old.js", "key.json", "licence.js"]) fs.writeFileSync(V(f), "");
     const env = { STUDIO_NET_LOG: V("net.json"), STUDIO_NO_PROXY_SERVER: "off", STUDIO_PROJECTS: V("projects"),
       STUDIO_SIGNING_KEY: V("key.json"), STUDIO_LICENCE_FILE: V("licence.js"), STUDIO_TEST_ROOT: V("root"),
-      STUDIO_TEST_FOLDER: V("share"), STUDIO_TEST_FILE: V("rows.csv"), STUDIO_TEST_V1: V("old.js"),
+      STUDIO_TEST_FILE: V("rows.csv"), STUDIO_TEST_V1: V("old.js"),
       STUDIO_TEST_SAVE: V("out.ec"), STUDIO_TEST_PACK: V("pack") };
     const planted = Object.values(env).filter((v) => v !== "off");
     const DEBUG = ["remote-debugging-port", "remote-debugging-pipe"];
@@ -2309,7 +2306,7 @@ async function main() {
       e = e || env; list = list || planted;
       const s = await loadShell((main ? "installed" : "tree-env") + (tag || ""), { env: e, main, switches: DEBUG });
       const answers = [];
-      for (const [ch, ...a] of [["studio:projects"], ["studio:pick-root", "t"], ["studio:pick-folder", "t"],
+      for (const [ch, ...a] of [["studio:projects"], ["studio:pick-root", "t"],
         ["studio:import-pick", "t", {}], ["studio:v1-pick", "t"], ["studio:bring-pick", "t", "All files"], ["studio:export-pick", "t", "n"],
         ["studio:audit-pack-pick", "t"], ["studio:audit", "d", "e1"],
         ["studio:publish-plan", "d"]]) answers.push(await s.ask(ch, ...a));
@@ -2332,20 +2329,20 @@ async function main() {
        their platform as win32 through loadShell, and 8n holds Linux, so they stay as they are. */
     const wantSwitched = process.platform === "win32" ? ["no-proxy-server"]
       : require(path.join(PINNED_SHELL, "win-proxy.cjs")).windowsProxySwitches().map((s) => s.join("="));
-    check(installed.took.length === 0 && installed.s.dialogs.length === 7
+    check(installed.took.length === 0 && installed.s.dialogs.length === 6
           && JSON.stringify(installed.s.switched) === JSON.stringify(wantSwitched),
       "6b an installed copy under the same environment takes " + installed.took.length + " planted path(s)"
       + (installed.took.length ? " " + JSON.stringify(installed.took) : "") + ", opens a dialog at each of"
-      + " the seven pickers (" + installed.s.dialogs.length + "), and its switches are "
+      + " the six pickers (" + installed.s.dialogs.length + "), and its switches are "
       + JSON.stringify(installed.s.switched));
     const tree2 = await read(null, env2, planted2, "-us"), installed2 = await read(path.join(inst, "shell", "main.js"), env2, planted2, "-us");
     check(tree2.took.length === planted2.length && tree2.s.dialogs.length === 0,
       "6e CONTROL of the second pass: with the US spelling STUDIO_LICENSE_FILE planted in place of the British one, the tree's shell takes all "
       + tree2.took.length + " of " + planted2.length + " planted paths"
       + (tree2.took.length < planted2.length ? " (not " + JSON.stringify(planted2.filter((p) => tree2.took.indexOf(p) < 0)) + ")" : ""));
-    check(installed2.took.length === 0 && installed2.s.dialogs.length === 7,
+    check(installed2.took.length === 0 && installed2.s.dialogs.length === 6,
       "6f an installed copy under the second pass takes " + installed2.took.length + " planted path(s)"
-      + (installed2.took.length ? " " + JSON.stringify(installed2.took) : "") + " and opens a dialog at each of the seven pickers ("
+      + (installed2.took.length ? " " + JSON.stringify(installed2.took) : "") + " and opens a dialog at each of the six pickers ("
       + installed2.s.dialogs.length + ")");
     check(JSON.stringify(installed.s.removed) === JSON.stringify(DEBUG)
           && installed.s.said.filter((l) => /is not taken by an installed Studio/.test(l)).length === 2,

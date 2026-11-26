@@ -93,6 +93,8 @@ async function main(argv) {
     const home = loadPage({ api, uiLang: "en" });
     const P = home.page;
     const opened = await wire(S.openProject(dir));
+    /* A team is the only way to publish (2026-11-26): the press opens for a catalog the project's record puts on one. */
+    opened.project.sealedTeam = "t-0123456789abcdef";
     Object.assign(P.S, { open: opened, screen: "project", section: "cards", lang: "en", sel: null,
       tabs: [{ dir, name: "Press", rev: 1 }], host: { tour: { offered: true }, langs: S.builtLangs() } });
     await P.ACTS.publish();
@@ -109,10 +111,8 @@ async function main(argv) {
           && /id="leadNote-en"/.test(h) && /id="leadNote-pl"[^>]* hidden/.test(h) && /data-act="pr-lead" data-v="pl"/.test(h),
       "pr2b seven gates pass, the signature's among them, the notes and the lead's note in each language are there, one language's box shown at a time: "
       + gates.join(","));
-    check(/<span class="pw-chip">[\s\S]*?Plain<\/span>/.test(h) && said(h).indexOf("Plain: any desk that reads this folder can open it.") >= 0
-          && said(h).indexOf("Plain: any desk that reads this folder opens it.") < 0
-          && !/class="kdisc/.test(h),
-      "pr2c with no team at the folder the press says the edition is plain and prints no key");
+    check(/<span class="pw-chip">[\s\S]*?Sealed<\/span>/.test(h) && !/Plain/.test(said(h)) && !/class="kdisc/.test(h),
+      "pr2c with no team facts the press says Sealed and never Plain, and prints no key (was: it said the edition is plain)");
     desks.value = { team: { sealed: true, epoch: 3, leadPrint: "87ad0879ac3e9ff6", roster: [
       { name: "Ola", admitted: true }, { name: "Jan", admitted: true }, { name: "Ewa", admitted: false }] } };
     await P.ACTS.publish();
@@ -464,6 +464,7 @@ async function main(argv) {
     await S.setPublishFolder(other.dir, share);
     await S.addCard(other.dir, (await S.addTag(other.dir, "shelf", { en: "General", pl: "Ogólne" })).tag.id, "One", "Hello.");
     const oOpen = await wire(S.openProject(other.dir));
+    oOpen.project.sealedTeam = "t-0123456789abcdef";
     Object.assign(P.S, { open: oOpen, tabs: [{ dir: other.dir, name: "Other", rev: 0 }] });
     home.doc.absent = new Set(["#override"]);
     await P.ACTS.publish();

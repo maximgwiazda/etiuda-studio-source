@@ -477,8 +477,8 @@
     trayNotes: true, trayBadge: true, trayBubble: true, notifyProposals: true, notifyRequests: true,
     saving: 0, err: null, coverWarn: false, wiz: null, rv: null,
     coverKind: "shelf", tagUse: null, arch: null, pair: [], diff: null, sent: "",
-    up: null, asked: null, stats: null, statsAll: {}, desks: null, teamWant: "", teamWhere: "relay", publishPlace: false,
-    teams: [], teamTab: 0, teamDir: "", teamPickDir: "", teamAnother: "", teamArch: {}, desksLoadedFor: "",
+    up: null, asked: null, stats: null, statsAll: {}, desks: null, teamWant: "",
+    teams: [], teamTab: 0, teamDir: "", teamPickDir: "", teamArch: {}, desksLoadedFor: "",
     audit: null,
     /* The cards table narrowed to the cards awaiting a language. It is a state of the
        TABLE and not of the catalog, so it is false at every open and at every project: a
@@ -1839,7 +1839,7 @@
     const beside = noneGeom(w1, w2, wd, room - NONE_GO), under = beside.right + FAM_RIGHT > room - NONE_GO;
     return { under, geo: under ? noneGeom(w1, w2, wd, room) : beside };
   }
-  function noneHtml(hasProjects) {
+  function noneHtml() {
     const svg = [], html = [], H = 214, my = 106;
     const studio = { mk: I("places"), nm: T("This Studio"), sub: T("no team yet"), noport: 1 };
     const chans = [[my, "sync", T("The relay"), T("teammates join by invitation")]]; /* plant:nf-chans */
@@ -1857,9 +1857,8 @@
     });
     html.push(deskHtml(geo.xd, 34, null, 46, { nm: deskNm, named: 1, ghost: 1, minw: wd }));
     html.push(deskHtml(geo.xd, 130, null, 46, { nm: deskNm, named: 1, ghost: 1, minw: wd }));
-    const go = ('<div class="famgo"><b>' + esc(T("No teammate is connected yet.")) + "</b>" + (hasProjects
-      ? '<span>' + esc(T("A team carries catalogs to every teammate.")) + '</span><button class="btn solid" data-act="to-teams">' + I("add") + esc(T("Make a team")) + "</button>"
-      : '<span>' + esc(T("A team carries catalogs, so a catalog comes first.")) + "</span>") + "</div>");
+    const go = ('<div class="famgo"><b>' + esc(T("No teammate is connected yet.")) + "</b>"
+      + '<span>' + esc(T("A team carries catalogs to every teammate.")) + '</span><button class="btn solid" data-act="team-new">' + I("add") + esc(T("Make a team")) + "</button></div>"); /* plant:ton-overview */
     return famHtml(H, geo.W, html.join(""), svg.join(""), "", "fam fam0" + (under ? " under" : ""), go);
   }
   /* The unconnected map drawn again from the widths the page measured: each pair at its wider member's natural width, the
@@ -2177,7 +2176,7 @@
 
     const header = famHeadHtml(T("Connections"), connSub);
     const tabs = teamsTabsHtml(teamsList);
-    const map = curTeam ? (curTeam.held ? heldFolderHtml(curTeam) : map15Html(curTeam)) : noneHtml(hasProjects); /* plant:fh-held-map */
+    const map = curTeam ? (curTeam.held ? heldFolderHtml(curTeam) : map15Html(curTeam)) : noneHtml(); /* plant:fh-held-map */
 
     let topHtml = "";
     if (hasProjects) {
@@ -2309,7 +2308,6 @@
   }
 
   function teamTargetDir() {
-    if (S.publishPlace && S.open && S.open.dir) return S.open.dir;
     if (S.teamPickDir) return S.teamPickDir;
     const teams = S.teams || [];
     if (teams.length) {
@@ -2321,8 +2319,6 @@
       return ps[0] ? ps[0].dir : "";
     }
     if (S.teamDir) return S.teamDir;
-    const starts = listedProjects().filter((p) => p && p.dir && !p.unreadable);
-    if (starts.length === 1) return starts[0].dir;
     if (S.desks && S.open && S.open.dir && !S.desksLoadedFor) return S.open.dir;
     return "";
   }
@@ -2452,31 +2448,15 @@
     const toast = S.teamToast ? '<div class="after" data-toast style="margin-bottom:12px">' + esc(S.teamToast) + "</div>" : "";
     let body = "";
 
-    if (S.teamAnother === "pick") {
-      const free = teamless();
-      body = '<p class="lede" data-team-start>' + esc(T("Which catalog does the team start with?")) + "</p>"
-        + free.map((p) => '<div class="row2" data-team-start-row><span class="v spacer">' + esc(p.name || "") + "</span>"
-          + '<button class="btn solid" data-act="team-start-at" data-dir="' + esc(p.dir) + '">'
-          + esc(T("Make a team")) + "</button></div>").join("")
-        + '<div class="row2" style="margin-top:12px"><button class="btn sm" data-act="team-another-cancel">' + esc(T("Cancel")) + "</button></div>";
-    } else if (!teams.length && !dir) {
-      const starts = listedProjects().filter((p) => p && p.dir && !p.unreadable);
-      if (starts.length > 1) {
-        body = '<p class="lede" data-team-start>' + esc(T("Which catalog does the team start with?")) + "</p>"
-          + starts.map((p) => '<div class="row2" data-team-start-row><span class="v spacer">' + esc(p.name || "") + "</span>"
-            + '<button class="btn solid" data-act="team-start-at" data-dir="' + esc(p.dir) + '">'
-            + esc(T("Make a team")) + "</button></div>").join("");
-      } else {
-        body = '<div class="none"><div>' + esc(T("This Studio leads no team yet.")) + "</div></div>";
-      }
+    if (!teams.length && !dir) {
+      /* A TEAM IS MADE ON ITS OWN (Max, 2026-11-26, findings 29 and 31): with no team the screen offers Make a team and asks for no catalog. */
+      body = '<div class="dashed empty" data-no-team>' + emptyIcon("team") + '<span class="empty-t">' + esc(T("This Studio leads no team yet.")) + "</span>"
+        + '<button class="btn solid" data-act="team-new">' + I("add") + esc(T("Make a team")) + "</button></div>"; /* plant:ton-empty */
     } else {
       const headActs = teams.length && !S.teamPickDir
         ? '<p class="lede team-head-lede">'
           + (teams.length > 1 ? '<span>' + esc(T("Every team this Studio leads, and every teammate connected.")) + "</span>" : "")
-          + '<button class="btn sm" data-act="team-another">' + esc(T("Make another team…")) + "</button>" /* plant:team-another-btn */
-          + (S.teamAnother === "none" ? '<span class="dim">' + esc((S.projects || []).length === 0
-            ? T("There is no catalog in the Library yet.")
-            : T("Every catalog in the Library has a team already.")) + "</span>" : "")
+          + '<button class="btn sm" data-act="team-new">' + esc(T("Make another team…")) + "</button>" /* plant:team-another-btn */
           + "</p>"
         : "";
       const strip = !S.teamPickDir ? teamsTabsHtml(teams, "team-strip") : "";
@@ -2593,15 +2573,6 @@
     else if (host) launchLoad().then((m) => m.syncLaunchMark($("#main .projects>.none"), markClock()), () => {});
   }
 
-  /* THE FILE AND ITS FOLDER (W3, Maxim 2026-10-06 22:20: "let's go with W3 The file and its folder only").
-     Claudia's frames pa-p3-*: the file's name, the folder holding it named beneath, the whole path on hover.
-     A folder chosen with nothing published yet names that folder alone, where the file will be written. */
-  function folderSaid(dir) {
-    const s = String(dir || "").replace(/[\\/]+$/, "");
-    if (/^[A-Za-z]:$/.test(s)) return T("on drive {DRIVE}", { DRIVE: s });
-    const parts = s.split(/[\\/]+/).filter(Boolean);
-    return T("in {FOLDER}", { FOLDER: parts.length ? parts[parts.length - 1] : String(dir || "") });
-  }
   /* A TEAM ON THE RELAY PUBLISHES INTO ITS MIRROR (board 926), a folder Studio keeps at <user data>/relay/<relay team id>
      (src/team-store.mjs relayMirror), and the person is shown the relay where a folder would be: never the path, the address or
      the relay team id. The page tells the mirror by that shape alone, which tests/relay-studio.mjs rs926d holds equal to the
@@ -2610,17 +2581,11 @@
   const onRelay = (folder) => RELAY_MIRROR.test(String(folder || ""));
   const relayName = () => T("the Etiuda relay");
   function writtenTo(p) {
-    if (!p.folder) return '<td class="wt"><span class="miss">' + esc(T("no folder chosen yet")) + "</span></td>";
-    if (onRelay(p.folder)) return '<td class="wt"><span class="desk"><i></i><span class="wt-l">'
+    /* A catalog reaches only through a team, on the relay; with none the column says so. */
+    if (!onRelay(p.folder)) return '<td class="wt"><span class="miss">' + esc(T("no team yet")) + "</span></td>";
+    return '<td class="wt"><span class="desk"><i></i><span class="wt-l">'
       + (p.fileName ? '<span class="mono wt-f">' + esc(p.fileName) + "</span>" : "")
       + '<span class="wt-in">' + esc(relayName()) + "</span></span></span></td>";
-    const whole = p.fileName ? joined(p.folder, p.fileName) : p.folder;
-    /* THE PATH IS AN OBJECT OF ITS OWN (board 901): Copy the path and Show in Explorer, on the file once it has been
-       written there and on the folder before. */
-    const at = p.published && p.fileName ? whole : p.folder;
-    return '<td class="wt" title="' + esc(whole) + '"><span class="desk" data-ctx="path" data-path="' + esc(at) + '"><i></i><span class="wt-l">'
-      + (p.fileName ? '<span class="mono wt-f" title="' + esc(whole) + '">' + esc(p.fileName) + "</span>" : "")
-      + '<span class="wt-in" title="' + esc(whole) + '">' + esc(folderSaid(p.folder)) + "</span></span></span></td>";
   }
 
   /* A FOLDER IN RUNNING TEXT IS A CHIP (board 976, item 11): the folder glyph and the last two
@@ -9519,16 +9484,13 @@
      each in the same sentence (shell/main.js HELD_BY_NEWER); here each button is taken out where it is drawn, the first in its
      place said as that sentence, and a press that reaches one anyway is answered with it. The backup copy stays, since it only
      copies out, and so does the Sealed and Plain switch of a team this Studio already holds. */
-  const NEWER_HELD = ["key-make", "key-aside", "key-restore", "do-key-restore", "acct-carry-key", "team-make", "team-fresh", "team-handover",
+  const NEWER_HELD = ["key-make", "key-aside", "key-restore", "do-key-restore", "acct-carry-key", "team-new", "do-team-new", "team-handover",
     "do-team-handover", "lic-signin", "acct-signout"];
   const newerStands = () => !!(S.host && S.host.savedNewer);
-  /** Whether `act` is held now: always for the list, and for a seal where it would make a team. */
+  /** Whether `act` is held now: always for the list. */
   function newerHeld(act) {
     if (!newerStands()) return false;
     if (NEWER_HELD.indexOf(act) >= 0) return true;
-    const noTeam = !(S.desks && S.desks.team);
-    if (act === "team-seal") return noTeam;
-    if (act === "do-team-seal") return S.teamWant === "fresh" || (S.teamWant === "sealed" && noTeam);
     return false;
   }
   const newerNote = () => '<span class="n" data-saved-newer-held>' + esc(savedNewerLine()) + "</span>";
@@ -9838,12 +9800,7 @@
       })()
       + (onRelay(p.project.folder)
         ? kv(T("Writes to"), "<span>" + esc(relayName()) + "</span>", T("Every teammate reads a published edition from the relay."), "")
-        : kv(T("Writes to"), p.project.folder
-        ? '<span class="mono">' + esc(p.project.folder) + "</span>"
-        : '<span class="miss">' + esc(T("no folder chosen yet")) + "</span>",
-        T("The shared folder every teammate reads a published edition from.") + (S.folderCheck && S.folderCheck.folder === p.project.folder
-          && folderCheckSaid(S.folderCheck) ? " " + folderCheckSaid(S.folderCheck) : ""),
-        btn("settings-folder", T("Change folder…"), "change")))
+        : "")
       + (p.fileName ? (S.fileNameEditing
         ? kv(T("File name"),
           '<span class="fname"><input class="field mono" id="fileNameSet" value="'
@@ -11611,7 +11568,7 @@
     const arrive = statsArrive;
     statsArrive = false;
     if (view !== "every") {
-      const body = !t.folder ? statsNoFolderHtml()
+      const body = !t.folder ? statsNoTeamHtml()
         : t.refusal ? '<div class="dashed">' + esc(t.refusal) + "</div>"
         : t.views ? (view === "figures" ? figuresHtml(t) : monthHtml(t)) : "";
       $("#main").innerHTML = '<div class="pad">' + statsHead(t) + statsSpanBand(t) + statsWhere(t) + body
@@ -11629,7 +11586,7 @@
       + r.cells.map((c, i) => '<td class="mono">' + esc(c) + (i === 0 && r.removed /* plant:f2-stats-words */
         ? ' <span class="chip">' + esc(T("From a teammate since removed")) + "</span>" : "") + "</td>").join("") + "</tr>").join("");
     const body = !t.folder
-      ? statsNoFolderHtml()
+      ? statsNoTeamHtml()
       : t.refusal
         ? '<div class="dashed">' + esc(t.refusal) + "</div>"
         : '<div class="pane" style="margin-top:14px"><h3 class="t">'
@@ -11686,17 +11643,6 @@
       S.desks = desks;
       S.desksLoadedFor = dir;
     }
-  }
-
-  function selectTeamForDir(dir) {
-    if (!dir || !Array.isArray(S.teams)) return;
-    const tp = (S.projects || []).find((p) => p && p.dir && samePath(p.dir, dir))
-      || (S.open && samePath(S.open.dir, dir) ? S.open : null);
-    const idx = S.teams.findIndex((t) => teamCarries(t, {
-      dir, id: (tp && ((tp.project && tp.project.id) || tp.id)) || "",
-      folder: (tp && tp.project && tp.project.folder) || (tp && tp.folder) || ""
-    }));
-    if (idx >= 0) S.teamTab = idx;
   }
 
   /* ---- the Desks screen (board 834, the sealed team and step 12's S5; Claudia's pictures 5a and 4b) --------------------
@@ -11923,6 +11869,19 @@
     if (S.screen === "projects" && S.home === "team") paint();
   }
 
+  /* A CATALOG ON NO TEAM PUBLISHES NOWHERE, and its page says so: each team this Studio leads is offered to put it on, and Make a team
+     stands beside them, on its own. */
+  function teamlessHtml(dir) {
+    const mine = chooseTeams();
+    const rows = mine.map((x) => '<div class="row2" data-team-add-row><span class="v spacer">' + esc(teamName(x)) + "</span>"
+      + '<button class="btn sm" data-act="team-add-pick" data-dir="' + esc(dir) + '" data-team="' + esc(x.id) + '"' + (S.teamAddBusy ? " disabled" : "") + ">"
+      + esc(choosePress(x)) + "</button></div>" + chooseWarn(x).map((l) => '<span class="n">' + esc(l) + "</span>").join("")).join("");
+    return '<p class="lede" data-no-team>' + esc(T("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.")) + "</p>" /* plant:ton-teamless */
+      + (rows ? '<div class="kv" data-team-add>' + rows + "</div>" : "")
+      + (S.err ? '<span class="n" data-err>' + esc(errText()) + signInBeside() + "</span>" : "")
+      + '<div class="row2"><button class="btn ' + (rows ? "sm" : "solid") + '" data-act="team-new">' + I("add") + esc(T("Make a team")) + "</button></div>";
+  }
+
   /* `above` is What the team receives: it stands above the roster and Who can read what you publish where the team has a place, and
      after the page where it has none (it was always last, and was hard to find). */
   function desksBodyHtml(d, dir, above) {
@@ -12025,21 +11984,14 @@
             + cameBy(r.kind, r.door) + seatNote(r.id) + "</td>" + versionCell(r) + removeCell(r) + "</tr>").join("") + "</table>"
           : '<div class="dashed">' + esc(T("No teammate is on the roster yet.")) + "</div>")
       : '<div class="dashed">' + esc(T("No teammate is on the roster yet.")) + "</div>";
-    /* THE SWITCH IS OFFERED ONLY WHERE PRESSING IT CAN WORK, and where it cannot the row says why in place of it. With no key
-       the row makes one in place (K5), and where the folder's team trusts a key this computer has not got, it offers that
-       key's backup first and a new key second, with its cost (K8). Where nothing at the folder trusts another key and this
-       computer can keep one, the switch is offered with no key, and Sealed makes it (the sense pass's finding 9). */
-    const firstSeal = !d.signing && d.file === "none" && !d.mark && !d.restorable && !!d.canKeep;
-    const why = d.inside ? T("This folder is inside the catalog's own folder, where no teammate reads. Choose the shared folder the team reads from.")
-      : !d.signing && !firstSeal ? T("Sealing signs the team file with this Studio's signing key, and there is none yet.")
+    /* THE ROW SAYS SOMETHING ONLY WHERE THERE IS SOMETHING TO SAY: a team is sealed, so there is nothing to switch. With no key it says
+       so and offers the key's page; where the team file is not this Studio's own it says it is left as it is. */
+    const why = !d.signing ? T("Sealing signs the team file with this Studio's signing key, and there is none yet.")
       : d.file === "theirs" ? T("The team file in this folder is not this Studio's own, so it is left as it is.")
       : d.file === "older" ? T("The team file in this folder is older than one this Studio has already seen, so it is left as it is.")
       : d.file === "broken" ? T("The team file in this folder does not read whole, so it is left as it is.")
-      : !t && !d.canKeep && d.noKeyring ? T("This computer cannot keep a team key for this account: no keyring is open to seal it. To have one, install GNOME Keyring (the gnome-keyring package) or KDE Wallet, sign in again and reopen Studio.")
-      : !t && !d.canKeep ? T("This computer cannot keep a team key for this Windows account.") : "";
-    const now = t && t.sealed ? "sealed" : "plain";
-    const said = why ? "" : !t && d.mark && d.restorable ? T("The team file has gone from this folder. Sealed writes it back.")
-      : !t && d.mark ? T("The team file has gone from this folder, and a sealed publish waits until it is back.")
+      : "";
+    const said = why ? ""
       : t && t.sealed && !d.keyHeld ? T("This Studio does not hold the team's current key, so a sealed publish waits for it.")
       : t && t.sealed && !t.roster.some((r) => r.admitted) ? T("No teammate can open what is published here until one is admitted.")
       : "";
@@ -12051,28 +12003,24 @@
       ? '<p class="lede" data-first-publish>' + esc(T("Teammates receive this catalog once it is first published."))
         + ' <button class="btn solid" data-act="publish">' + esc(T("Publish")) + "</button></p>"
       : "";
-    /* A PROJECT WITH NO TEAM AND NO FOLDER LEADS WITH MAKE A TEAM (Argon's first-day review, F9): the team, on the relay or in a
-       shared folder, is the first thing the screen offers, as its main button, and the plain folder with no team is the
-       secondary way, below it. */
-    const bare = !d.folder && d.file === "none" && !d.team;
     /* A PROJECT THAT NAMES A TEAM THIS STUDIO HOLDS NO KEYS FOR (the facts' letGo: no row for it in teams.json) says so in place of the line
        about the team file, and offers to let go of it. A team this Studio holds never reaches here. */
     const letGoNow = !!d.letGo && !t; /* plant:letgo-shown */
-    const publishing = '<div class="kv lsw"><span class="k">' + esc(T("Publishing")) + "</span>"
-      + (letGoNow ? '<div class="row2"><span class="n spacer">' + esc(T("This project belongs to a team whose keys are not in this Studio, so nothing can be published to it from here. Letting go of the team leaves the draft as it is and lets the project make or choose a team again."))
-          + '</span><button class="btn sm" data-act="team-letgo-ask">' + esc(T("Let go of the team…")) + "</button></div>"
-        : lost ? '<span class="n">' + withKeyHtml(T("The team in this folder trusts the signing key {KEY}, and it is not on this computer."),
+    /* A team file this Studio does not lead, or a key it does not hold, is a state of a team and has its row; with no team file at all
+       the catalog is on no team, and its page says so. */
+    const noTeamFile = !t && !letGoNow && !d.lead && (!d.file || d.file === "none");
+    const row = (inner) => '<div class="kv lsw"><span class="k">' + esc(T("Publishing")) + "</span>" + inner + "</div>";
+    const publishing = letGoNow ? row('<div class="row2"><span class="n spacer">' + esc(T("This project belongs to a team whose keys are not in this Studio, so nothing can be published to it from here. Letting go of the team leaves the draft as it is and lets the project make or choose a team again."))
+          + '</span><button class="btn sm" data-act="team-letgo-ask">' + esc(T("Let go of the team…")) + "</button></div>")
+      : lost ? row('<span class="n">' + withKeyHtml(T("The team trusts the signing key {KEY}, and it is not on this computer."),
           "studio", d.lead) + '</span><div class="row2"><span class="n spacer">' + esc(T("No backup copy? A new key works too, and every teammate is let in again."))
-          + "</span>" + keySettingsBtn() + "</div>"
-        : !d.signing && !firstSeal ? '<div class="row2"><span class="n spacer">' + esc(why) + "</span>" + keySettingsBtn() + "</div>"
-        : d.file === "theirs" && d.lead ? '<div class="row2"><span class="n spacer">' + esc(why) + "</span>"
-          + (d.canHandover ? '<button class="btn sm" data-act="team-handover">' + esc(T("Hand the team to the new signing key")) + "</button> " : "")
-          + '<button class="btn sm" data-act="team-fresh">' + esc(T("Start a new team here…")) + "</button></div>"
-        : why ? '<span class="n">' + esc(why) + "</span>"
-        : '<div class="row2">' + seg("team-seal", [["sealed", T("Sealed")], ["plain", T("Plain")]], now)
-          + (!t ? ' <button class="btn ' + (bare ? "solid" : "sm") + '" data-act="team-make">' + esc(T("Make a team")) + "</button>" : "") + "</div>" /* plant:fd9-solid */
-          + (said ? '<span class="n">' + esc(said) + "</span>" : ""))
-      + "</div>";
+          + "</span>" + keySettingsBtn() + "</div>")
+      : !d.signing ? row('<div class="row2"><span class="n spacer">' + esc(why) + "</span>" + keySettingsBtn() + "</div>")
+      : d.file === "theirs" && d.lead ? row('<div class="row2"><span class="n spacer">' + esc(why) + "</span>"
+          + (d.canHandover ? '<button class="btn sm" data-act="team-handover">' + esc(T("Hand the team to the new signing key")) + "</button>" : "") + "</div>")
+      : why ? row('<span class="n">' + esc(why) + "</span>")
+      : said ? row('<span class="n">' + esc(said) + "</span>")
+      : "";
     /* A DESK'S EXPORT, as Claudia drew it (23b-B), only where Publishing is Sealed: a desk opens a plain team's catalog in
        the clear, so its export has nothing to seal. Its words are provisional, the copywriter's to replace. */
     const exporting = t && t.sealed && !why ? '<div class="kv lsw"><span class="k">' + esc(T("A desk's export")) + "</span>"
@@ -12153,7 +12101,7 @@
       + (d.keyToRestore ? '<p class="lede alert" data-key-restore>' + esc(T("This computer cannot open the team's newest file until Studio's signing key is restored here from its backup copy: in the Menu, under Settings, then Signing key, “Restore it from a backup copy…”. Until then it cannot publish or change the team's members; nothing is lost.")) + "</p>" : "") /* plant:rmo-key-restore-page */
       + (d.admitPaused && asks.length ? '<p class="lede alert" data-admit-paused>' + esc(T("Teammates are waiting to join, and this Studio cannot let them in while its licence is paused. Signing in with an account that holds a licence, from the Menu, under Settings, then Account, ends the pause, and they are let in by themselves.")) + "</p>" : "") /* copywriter, 2026-10-30 00:20; plant:f9-page-banner */ /* plant:txcu-945f9b */
       + (d.limitSkipped ? '<p class="lede alert" data-limit-skipped>' + esc(T("A teammate is waiting to join, but this Studio already has 30, open invitations included. Its request waits until a place frees.")) + "</p>" : "")
-      + (d.folder
+      + (!noTeamFile
         ? (onRelay(d.folder)
           ? '<p class="lede where"><span class="desk"><i></i><span>' + esc(relayName()) + "</span></span> "
             + esc(T("One roster for every catalog that publishes through the relay."))
@@ -12180,14 +12128,8 @@
           + (above || "") /* plant:sm25-receives */
           + '<div class="cols team-cols"><div class="pane"><h3 class="t">' + esc(T("Roster")) + '</h3><div class="sc">' + roster
           + "</div></div>" + who + "</div>"
-        /* WITH NO FOLDER THE TEAM CAN STILL BE STARTED, on the relay, which needs none (board 926): the Publishing row stands
-           alone under the way to a folder, and its Sealed press opens the cover that asks where the team meets. */
-        : bare ? '<div class="cols"><div class="pane"><h3 class="t">' + esc(T("Who can read what you publish")) + '</h3><div class="sc">' /* plant:fd9-lead */
-            + publishing + "</div></div></div>"
-            + '<p class="lede" style="margin-top:12px" data-plain-folder>' + esc(T("Without a team, editions can also be published to a plain folder, in the clear: any desk that can read the folder opens them.")) + "</p>"
-            + chooseFolderHtml("team")
-          : chooseFolderHtml("team"))
-      + (d.folder ? "" : above || "")
+        : teamlessHtml(dir))
+      + (noTeamFile ? above || "" : "")
       + (S.dkNote && S.dkNote.length ? '<p class="lede" style="margin-top:12px">' + S.dkNote.map(esc).join("<br>") + "</p>" : "");
   }
 
@@ -12219,25 +12161,6 @@
     paint();
     if (!S.people || !samePath(S.people.dir, dir)) await peopleLoad(dir);
     return true;
-  }
-
-  /* THE TEAM PANE SHOWS THE FOLDER THE ACT JUST CHOSE. Leaving the pane and coming back was the
-     only read, so a folder picked for a team made or moved here stayed the old one until then.
-     On the Team screen the answer's folder is painted at once. A desks read can still name the
-     previous place, and the answer wins. Anywhere else the two reads are dropped, as a folder
-     change from another screen already did. */
-  async function showChosenFolder(folder) {
-    const dir = teamTargetDir();
-    if (folder && S.open && S.open.project && (!dir || samePath(S.open.dir, dir))) S.open.project.folder = folder;
-    if (folder && S.projects && dir) {
-      const pr = S.projects.find((x) => x && x.dir && samePath(x.dir, dir));
-      if (pr) pr.folder = folder;
-    }
-    S.stats = null;
-    if (S.screen === "projects" && S.home === "team" && dir) { await desksLoad(dir); if (folder && S.desks) S.desks.folder = folder; } /* plant:folder-shown */
-    else S.desks = null;
-    await teamsRead();
-    paint();
   }
 
   /* WHILE A DESK HAS YET TO ANSWER ITS OPENING the screen reads the folder again every two seconds, keeping the codes typed;
@@ -12393,12 +12316,6 @@
       + '<button class="btn" data-act="do-follow-leave">' + esc(T("Leave the team")) + "</button>"
       + '<button class="btn solid" data-act="cover-close">' + esc(T("Cancel")) + "</button></div>";
   }
-  /* WHETHER THE TEAM COVER IS ABOUT A TEAM MADE FOR THE FIRST TIME (board 926): a new team over another lead's, or Sealed where the
-     folder holds no team, none is kept for it and the project remembers none. Only then is the lead asked where the team meets. */
-  function teamFirst() {
-    const d = S.desks || {};
-    return S.teamWant === "fresh" || (S.teamWant === "sealed" && !d.team && d.file === "none" && !d.mark && !d.restorable);
-  }
   /* plant:fd4-wanted stood on teamTrialWanted, which is gone with the trial offer on the team cover; the mark stays until the plant guard has a way to retire one. */
   /* THE TEAMS THIS STUDIO LEADS, read again when a first team's cover opens (board 962 stage 5, T5): the third choice lists them,
      and what the library last read may be older than this window's last seal. Where they cannot be read the cover keeps its list. */
@@ -12408,38 +12325,7 @@
     try { r = await API.teams(); } catch (e) { r = null; }
     if (!r || r.error || !Array.isArray(r.teams)) return;
     S.teams = r.teams;
-    if (S.cover === "team" && teamFirst()) paintCover();
-    else if (S.screen === "projects" && S.home === "team" && !S.cover) paint();
-  }
-  async function teamLicRead() {
-    S.teamLic = null;
-    if (!API || typeof API.licence !== "function") return;
-    const dir = teamTargetDir() || (S.open && S.open.dir);
-    let r = null;
-    try { r = await API.licence(); } catch (e) { r = null; }
-    if (!r || r.error || S.cover !== "team" || (dir && !onTeamDir(dir))) return;
-    S.teamLic = r; /* plant:fd4-read */
-    if (teamFirst()) paintCover();
-  }
-  /* THE TEAM STARTED ON THE RELAY: the shell makes it whole, and the page reads the Team screen afresh, whose folder is the
-     project's new place to write to. The reply holds no path, so the page learns it there and shows the relay in its place. */
-  async function teamOnRelay(dir) {
-    const r = await API.teamRelay(dir);
-    if (r && r.signing && S.host) S.host.signing = r.signing;   /* none from the relay since board 935: a grant names a key, so the key is made before the press */
-    if (!onTeamDir(dir)) return;   /* as deskAsk */
-    if (!r || r.error) { S.err = errOf(r); paintCover(); return; }
-    S.cover = null; S.err = null; S.teamWant = ""; S.teamPickDir = ""; S.teamAnother = ""; S.teamDir = dir;
-    await loadProjects();
-    selectTeamForDir(dir);
-    await desksLoad(dir);
-    if (S.open && samePath(S.open.dir, dir) && S.desks && S.desks.folder && S.open.project) {
-      S.open.project.folder = S.desks.folder;
-      paint();
-    }
-    if (S.publishPlace) {
-      S.publishPlace = false;
-      await ACTS.publish(); /* plant:u1-relay-publish */
-    }
+    if (S.screen === "projects" && S.home === "team" && !S.cover) paint();
   }
   /* THE NAMES OF A BATCH OF INVITATIONS (F7): one a line, each trimmed and cut at the person field's 120 characters, empty lines
      dropped. Two people may share a name, so a name given twice is invited twice. */
@@ -12522,27 +12408,19 @@
       const id = S.memberGoing;
       const row = S.desks && S.desks.team && (S.desks.team.roster || []).find((r) => r.id === id);
       const name = (row && row.name) || S.memberName || id || "";
-      /* THE SENTENCE FOLLOWS THE TEAM'S MODE: a plain team's editions are in the clear and removal reseals nothing
-         (src/studio.mjs editionsToReseal), so there the cover says who can still read them and offers the seal switch,
-         where the switch can work. */
-      const d = S.desks || {}, plain = !(d.team && d.team.sealed);
-      const canSeal = plain && !d.inside && !!d.signing && d.file === "ours";
       /* The confirmation's place holds the one line, and nothing can be pressed but Cancel (the copywriter's words of 2026-11-12). */
       if (leadStaysOf(id)) return "<h2>" + esc(T("Remove {NAME} from the team", { NAME: name })) + "</h2>"
         + '<div class="body"><p class="lede" data-lead-stays>' + esc(T("This teammate holds a lead seat on the licence, so they stay on the team. Only the licence's owner can remove a lead from a team.")) + "</p>"
         + (S.err ? '<div class="kv" data-err><span class="n">' + esc(errText()) + "</span></div>" : "") + "</div>"
         + '<div class="foot"><span class="spacer"></span><button class="btn" data-act="cover-close">' + esc(T("Cancel")) + "</button></div>";
       return "<h2>" + esc(T("Remove {NAME} from the team", { NAME: name })) + "</h2>"
-        + '<div class="body"><p class="lede">' + esc(plain
-          ? T("This team publishes in the clear, so new editions stay readable to anyone who can read this folder, {NAME} included. Removed, and with publishing sealed, {NAME} gets no new ones.", { NAME: name })
-          : T("Removal works only from now on: {NAME} keeps the editions already received and gets no new ones.", { NAME: name })) + "</p>"
+        + '<div class="body"><p class="lede">' + esc(T("Removal works only from now on: {NAME} keeps the editions already received and gets no new ones.", { NAME: name })) + "</p>"
         + removalSaid(id, name)
         + openInvitesCarried("")
         + (S.err ? '<div class="kv" data-err><span class="n">' + esc(errText()) + signInBeside() + "</span></div>" : "")
         + "</div>"
         + '<div class="foot"><span class="spacer"></span>'
         + '<button class="btn" data-act="cover-close">' + esc(T("Cancel")) + "</button>"
-        + (canSeal ? '<button class="btn" data-act="team-seal" data-v="sealed">' + I("lock") + esc(T("Publish sealed…")) + "</button>" : "")
         + '<button class="btn solid" data-act="do-member-remove">' + esc(T("Remove")) + "</button></div>";
     }
     /* HANDING A TEAM TO THE NEW SIGNING KEY (board 931 (7)): hands the team to this Studio's new key. */
@@ -12606,51 +12484,24 @@
         + '<button class="btn" data-act="do-invite-another">' + esc(T("Copy and make another")) + "</button>"
         + '<button class="btn solid" data-act="do-invite">' + esc(T("Make the invitation")) + "</button></div>";
     }
-    const on = S.teamWant === "sealed", fresh = S.teamWant === "fresh";
-    const exp = S.teamWant === "exports-sealed" || S.teamWant === "exports-plain", expOn = S.teamWant === "exports-sealed";
-    /* THE LEAD CHOOSES WHERE A TEAM IS FIRST MADE (board 926): the Etiuda relay, which is the default, or a shared folder, which
-       is the path as it was. Only a team being made for the first time is asked; an existing team's channel is not changed here. */
-    /* A TEAM THIS STUDIO LEADS IS THE THIRD PLACE (board 962 stage 5, T5), offered only to a catalog with no team and only where a
-       sealed team this key leads is kept; chosen, the cover is that team's, and the press is the shell's choose. */
-    const first = teamFirst(), joinable = first ? chooseTeams() : [], joining = first && S.teamWhere === "team" && joinable.length > 0;
-    const relay = first && !joining;
-    const where = first ? '<div class="kv"><span class="k">' + esc(T("Where the team meets")) + "</span>"
-      + '<div class="row2">' + seg("team-where", [["relay", relayName()]] /* plant:nf-seg */
-        .concat(joinable.length ? [["team", T("a team this Studio leads")]] : []), joining ? "team" : "relay") + "</div></div>" : "";
-    if (joining) {
-      const chosen = joinable.find((t) => t.id === S.teamChosen) || joinable[0];
-      const said = (t) => teamName(t) + " · " + relayName() + " · "
-        + C((t.teammates || []).length, "{N} teammate", "{N} teammates");
-      return "<h2>" + esc(T("Add this catalog to a team this Studio leads")) + "</h2>"
-        + '<div class="body">' + where
-        + '<div class="kv"><span class="k">' + esc(T("The team")) + "</span>"
-        + '<div class="row2">' + seg("team-pick", joinable.map((t) => [t.id, said(t)]), chosen.id) + "</div></div>"
-        + '<p class="lede">' + esc(T("The catalog joins the team chosen here, and every teammate on it receives the catalog.")) + "</p>"
-        + chooseWarn(chosen).map((l) => '<p class="lede" data-choose-old>' + esc(l) + "</p>").join("")
+    /* A TEAM MADE ON ITS OWN asks where it is made and nothing of a catalog: the relay, which needs none. */
+    if (S.teamWant === "new") {
+      return "<h2>" + esc(T("Start a team on the Etiuda relay")) + "</h2>"
+        + '<div class="body"><p class="lede">' + esc(T("Editions travel through the Etiuda relay sealed, so that only the team can read them.")) + "</p>"
         + (S.err ? '<div class="kv" data-err><span class="n">' + esc(errText()) + signInBeside() + "</span></div>" : "")
         + "</div>"
         + '<div class="foot"><span class="spacer"></span>'
         + '<button class="btn" data-act="cover-close">' + esc(T("Cancel")) + "</button>"
-        + '<button class="btn solid" data-act="do-team-choose"' + (S.chooseBusy ? " disabled" : "") + ">" + esc(choosePress(chosen)) + "</button></div>";
+        + '<button class="btn solid" data-act="do-team-new" data-enter' + (S.teamNewBusy ? " disabled" : "") + ">" + I("lock") + esc(T("Start the new team")) + "</button></div>"; /* plant:ton-cover */
     }
-    return "<h2>" + esc(relay ? (fresh ? T("Start a new team on the Etiuda relay") : T("Start a team on the Etiuda relay"))
-        : fresh ? T("Start a new team in this folder")
-        : exp ? (expOn ? T("Seal what a desk exports") : T("Let a desk export in the clear"))
-        : on ? T("Seal what this folder is given") : T("Give this folder its catalog files in the clear")) + "</h2>"
-      + '<div class="body">' + where
-      + (relay ? '<p class="lede">' + esc(T("Editions travel through the Etiuda relay sealed, so that only the team can read them.")
-        + (fresh ? " " + T("Every teammate is invited to the new team again.") : "")) + "</p>"
-        : fresh ? '<p class="lede">' + esc(T("Every teammate is invited to the new team again.")) + "</p>" : "")
+    const expOn = S.teamWant === "exports-sealed";
+    return "<h2>" + esc(expOn ? T("Seal what a desk exports") : T("Let a desk export in the clear")) + "</h2>"
+      + '<div class="body">'
       + (S.err ? '<div class="kv" data-err><span class="n">' + esc(errText()) + signInBeside() + "</span></div>" : "")
       + "</div>"
       + '<div class="foot"><span class="spacer"></span>'
       + '<button class="btn" data-act="cover-close">' + esc(T("Cancel")) + "</button>"
-      /* plant:fd4-press stood on trialPress on the team cover, which is gone; the mark stays until the plant guard has a way to retire one. */
-      + (exp ? '<button class="btn solid" data-act="do-team-exports">' + I("lock") + esc(expOn ? T("Seal") : T("Unseal")) + "</button>"
-        : '<button class="btn solid" data-act="do-team-seal"'
-          + (relay && !fresh ? " data-enter" : "") /* plant:f11-relay-enter */
-          + ">" + I("lock") + esc(fresh ? T("Start the new team") : on ? T("Seal") : T("Unseal")) + "</button>")
-      + "</div>";
+      + '<button class="btn solid" data-act="do-team-exports">' + I("lock") + esc(expOn ? T("Seal") : T("Unseal")) + "</button></div>";
   }
 
   function teamMoveCoverHtml() {
@@ -13932,9 +13783,9 @@
   }
   /** The desks the map draws: the roster's, each admitted or only named, or three that stand for any desk. */
   function prDesks() {
-    const sealed = prSealed(), list = prRoster();
+    const list = prRoster();
     if (!list.length) return [0, 1, 2].map(() => ({ name: T("Any desk"), a: 2, use: null }));
-    return list.map((r) => ({ name: String(r.name || ""), a: sealed ? (r.admitted ? 1 : 0) : 2, use: prUseOf(r) }));
+    return list.map((r) => ({ name: String(r.name || ""), a: r.admitted ? 1 : 0, use: prUseOf(r) }));
   }
   /** On a folder team, what this desk itself wrote back, or that it can read the folder. Never that the new edition arrived. */
   function prHeldLine(use, admitted) {
@@ -13962,7 +13813,6 @@
   }
   /** What the folder holds and who reads it, said once under the map and again in the bubble that follows. */
   function prDeskLine() {
-    if (!prSealed()) return T("Plain: any desk that reads this folder can open it.");
     const a = prAdmitted(), named = prRoster().length - a;
     return C(a, "{N} teammate admitted reads this folder.", "{N} teammates admitted read this folder.")
       + (named ? " " + C(named, "{N} more is named and not admitted yet.", "{N} more are named and not admitted yet.") : "");
@@ -13996,19 +13846,6 @@
       + '</div><div class="pwc-legend" id="pwcLegend">' + legend + "</div>";
   }
 
-  /** What a folder's check says, or "": out of reach, inside the project, synced by OneDrive or SharePoint, or on this
-   *  computer alone. */
-  function folderCheckSaid(c) {
-    if (!c) return "";
-    return (!c.exists ? T("Studio cannot reach this folder now.")
-      : c.inside ? T("This folder is inside the catalog's own folder, where no teammate reads.")
-      : c.cloud === "sharepoint" ? T("This folder is a SharePoint library that OneDrive keeps in sync.")
-      : c.cloud === "onedrive" ? T("OneDrive keeps this folder in sync.")
-      : c.cloud === "dropbox" ? T("Dropbox keeps this folder in sync.")
-      : c.cloud === "gdrive" ? T("Google Drive keeps this folder in sync.")
-      : c.local ? T("Teammates on other computers read this folder only if it is shared with them.") : "")
-      + (c.leftover ? (c.exists ? " " : "") + T("Studio could not remove its test file {FILE} from this folder; it is empty and can be deleted.", { FILE: c.leftover }) : "");
-  }
   /* THE EMPTY DISCS (board 976, item 8). Not in the icon set: the team is two people, the
      inbox is a tray. The kind is the caller's, not the heading's text, so Polish "Zespół"
      takes the people and Statistics takes the tray. */
@@ -14018,20 +13855,11 @@
       : '<path d="M3.5 13.5 6 5.5h12l2.5 8v5a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M3.5 13.5h5l1 2.5h5l1-2.5h5"/>';
     return '<svg class="empty-ic" viewBox="0 0 24 24" aria-hidden="true">' + body + "</svg>";
   }
-  /** The way on from a screen that needs the team's folder before it can show anything.
-   *  Team carries the second line. Statistics does not: it has nothing to say about a roster. */
-  function chooseFolderHtml(kind, lead) {
-    const team = kind === "team";
-    /* Statistics leads with its own sentence (Claudette, 2026-11-10); Team and the rest say no folder is chosen yet. */
-    return '<div class="dashed empty">' + emptyIcon(team ? "team" : "inbox")
-      + '<span class="empty-t">' + esc(lead || T("no folder chosen yet")) + "</span>"
-      + (team ? '<span class="empty-s">' + esc(T("Teammates, and what each one holds, appear here once the catalog has a folder they read from.")) + "</span>" : "")
-      + '<button class="btn sm" data-act="settings-folder">' + I("folder")
-      + esc(T("Choose the folder your team reads from")) + "</button></div>";
-  }
-  /* Statistics only. chooseFolderHtml also serves Desks, which keeps "no folder chosen yet". Claudette, 2026-11-10. */
-  function statsNoFolderHtml() {
-    return chooseFolderHtml("stats", T("Statistics counts what teammates' desks report through the team's folder. Once the folder is chosen, the counting period appears here, and the figures with the first answers."));
+  /* Statistics of a catalog on no team: nothing is counted until it is on one, and the press leads to its Team page. */
+  function statsNoTeamHtml() {
+    return '<div class="dashed empty">' + emptyIcon("inbox")
+      + '<span class="empty-t">' + esc(T("Statistics counts what teammates' desks report through the team. Once the catalog is on a team, the counting period appears here, and the figures with the first answers.")) + "</span>"
+      + '<button class="btn sm" data-act="to-team">' + esc(T("Team")) + "</button></div>";
   }
   function prGate(name, icon, state, title, desc, extra) {
     return '<div class="pwc-gate" data-gate="' + name + '"><span class="g ' + state + '" aria-hidden="true">' + I(icon) + '</span><span class="t">'
@@ -14089,7 +13917,7 @@
       : T("Awaiting its {LANG} text on {CARDS}.", { LANG: langCode(a.lang), CARDS: C(a.cards, "{N} card", "{N} cards") })));
     const lic = p.licence ? licenceSaid(p.licence) : null;
     const locked = !!(p.licence && p.licence.canPublish === false);
-    const sealed = prSealed(), team = prTeam();
+    const team = prTeam();
     const lintGate = prGate("lint", "lint", errs ? "stop" : "ok", esc(checked),
       esc(T("The checks ran a moment ago, on the draft.")),
       (errs
@@ -14117,13 +13945,9 @@
         + '" aria-label="' + esc(T("File name")) + '"><span class="mono">.ec</span></span>',
       esc(p.fileFixed ? T("The name every desk lists it under, fixed by the first publish.")
         : T("Every desk will list the catalog under this name.")));
-    const sealGate = prGate("seal", sealed ? "lock" : "unlock", "ok", '<span class="pw-chip">' + I(sealed ? "lock" : "unlock")
-      + esc(sealed ? T("Sealed") : T("Plain")) + "</span>"
-      + (sealed && team.leadPrint ? keyHtml("studio", team.leadPrint) : ""),
-      esc(sealed ? T("Sealed for the team: only an admitted teammate can open it.")
-        : T("Plain: any desk that reads this folder can open it.")
-          + (p.where && p.where.cloud ? " " + T("A Plain edition is not encrypted, so the cloud service holds a copy it can read."
-            + " Only the team can read a Sealed one.") : "")));
+    const sealGate = prGate("seal", "lock", "ok", '<span class="pw-chip">' + I("lock") + esc(T("Sealed")) + "</span>"
+      + (team && team.leadPrint ? keyHtml("studio", team.leadPrint) : ""),
+      esc(T("Sealed for the team: only an admitted teammate can open it.")));
     const licGate = lic ? prGate("licence", "licence", locked ? "stop" : "ok", esc(lic.v), lic.where) : "";
     /* THE SIGNATURE (publish-screen-never-signs): what the shell's plan says it will do with this computer's key. With no
        key, the press makes one where nothing at the folder trusts another (`makes`, the sense pass's finding 9), and where
@@ -14137,7 +13961,7 @@
     const signGate = prGate("sign", sg.opens || makes ? "signed" : "key", unsignedRefused ? "stop" : "ok", sg.opens
       ? esc(T("Signed")) + (sg.print ? keyHtml("studio", sg.print) : "") : esc(makes ? T("Signed") : T("Unsigned")),
       unsignedRefused ? esc(T("Earlier editions of this catalog were signed and the signing key cannot be opened here now, so this edition cannot be published unsigned: desks that trust the key would refuse it. Restore the key from the Menu, under Settings, then Signing key."))
-      : restore ? withKeyHtml(T("The team in this folder trusts the signing key {KEY}, and it is not on this computer."), "studio", sg.restore)
+      : restore ? withKeyHtml(T("The team trusts the signing key {KEY}, and it is not on this computer."), "studio", sg.restore)
       : esc(sg.opens ? T("The key's print is written beside the catalog file, so a desk can check the edition came from here.")
         : sg.keyId ? T("This computer could not open the signing key, so the edition goes out unsigned.")
         : sg.unreadable ? T("The signing key's file on this computer cannot be read, so the edition goes out unsigned.")
@@ -14169,13 +13993,9 @@
       + '<textarea class="ta" id="notes" placeholder="' + esc(T("What changed in this rev")) + '" aria-label="'
       + esc(T("Notes")) + '"></textarea><span class="n">' + esc(T("Kept in the archive beside the file, and readable there forever."))
       + "</span></div>" + lead;
-    const relayed = onRelay(p.folder);
-    const where = p.folder
-      ? '<div class="pwc-where"><span class="nm">' + esc(prFolderName(p.folder)) + "</span>"
-        + (relayed ? "" : '<span class="pw-path"><span class="mono">' + esc(p.folder) + "</span></span>") + "</div>"
-        + '<span class="n pwc-dline">' + esc(prDeskLine() + " " + T("Each one offers the file to the person at it; none loads it"
-          + " on its own.") + (!relayed && folderCheckSaid(p.where) ? " " + folderCheckSaid(p.where) : "")) + "</span>"
-      : '<div class="pwc-where"><span class="miss">' + esc(T("no folder chosen yet")) + "</span></div>";
+    const where = '<div class="pwc-where"><span class="nm">' + esc(prFolderName(p.folder)) + "</span></div>"
+      + '<span class="n pwc-dline">' + esc(prDeskLine() + " " + T("Each one offers the file to the person at it; none loads it"
+        + " on its own.")) + "</span>";
     const last = p.published ? String(p.published).slice(0, 10) : p.after;
     return '<div class="pwc" id="press">'
       + '<div class="pwc-top"><div class="pwc-title"><h2>' + esc(T("Publish {name}", { name: p.name })) + '</h2><p class="pwc-line">'
@@ -14197,9 +14017,8 @@
       + '<section class="pwc-pane write"><h3>' + I("note") + esc(T("Note for this edition")) + '</h3><div class="in">' + write
         + "</div></section>"
       + '<section class="pwc-pane dest"><h3>' + I("folder") + esc(T("Where it goes")) + '<span class="n">'
-        + esc(sealed ? C(prAdmitted(), "{N} teammate", "{N} teammates") : T("Plain")) + '</span></h3><div class="pwc-dest">'
+        + esc(C(prAdmitted(), "{N} teammate", "{N} teammates")) + '</span></h3><div class="pwc-dest">'
         + '<div class="pwc-con mini" id="pwcCon"><div class="dm"></div></div>' + where
-        + (relayed ? "" : '<button class="btn sm" data-act="change-folder">' + I("change") + esc(T("Change folder")) + "</button>")
         + "</div></section>"
       + "</div>"
       + (S.prSure ? prSureHtml() : "")
@@ -16831,8 +16650,8 @@
     if (box.hidden) { document.body.removeAttribute("data-discs"); return; }
     const list = reviewWaiting(), n = reviewCount(list);
     discBtn($("#discNew"), I("add"), T("New card"), true);
-    /* THE ROW'S TWO BUTTONS, AS DISCS (board 938, condition U1, for Publish: it is the main act from the first edit, and on a project
-       with no place it asks where the team meets). They join from the left of New card, Publish first, and keep the words they had:
+    /* THE ROW'S TWO BUTTONS, AS DISCS (board 938, condition U1, for Publish: it is the main act from the first edit, and on a catalog
+       with no team it opens that catalog's Team page). They join from the left of New card, Publish first, and keep the words they had:
        Import into this catalog names where the file goes (board 539, frame B: this door lands the pile in THIS project as a
        proposal; the projects screen keeps "Import catalog" for the file that becomes a new one), and Publish says the rev it makes. */
     discBtn($("#discImport"), I("import"), T("Import into this catalog"), true);
@@ -17779,7 +17598,6 @@
     S.screen = "projects"; S.home = "team"; S.err = null; S.unopened = null;
     S.q = ""; S.wiz = null;
     S.dkNote = null; S.people = null; S.piSaid = null; S.piTyped = "";
-    S.teamAnother = o.another ? "pick" : "";
     if (!o.keepPick) S.teamPickDir = "";
     await loadProjects();
     if (targetDir) {
@@ -17845,9 +17663,7 @@
     S.open = r; S.screen = "project"; S.section = "cards"; S.sel = null; S.q = ""; S.err = null; S.unopened = null;
     S.rv = null; S.tagUse = null; S.langPrimary = null; S.arch = null; S.pair = []; S.diff = null; S.sent = "";
     S.stats = null; S.desks = null; S.desksLoadedFor = ""; S.dkNote = null;
-    S.teamWant = ""; S.teamRead = ""; S.teamWhere = "relay";
-    /* publishPlace belongs to the project that asked. A switch while the relay call is still out must not carry it. */
-    S.publishPlace = false; /* plant:u1-open-clear */
+    S.teamWant = ""; S.teamRead = "";
     S.awaitOnly = false;                  /* a narrowed table is this session's, never a project's */
     S.cardView = "active"; S.undo = null; S.hist = null; S.cardPage = null;
     S.arrived = false; S.rvNew = null;
@@ -18209,7 +18025,7 @@
          the import step measured at 900x560, so a spotlight on the Desks row would be a bar with
          nowhere for the panel (the rail stands on the left at every width since 2026-11-14). Make a team is on the screen when there is no team, which is the
          sample the tour walks; Invite a desk is there once a team exists. */
-      sel: () => document.querySelector('#main [data-act="team-make"]')
+      sel: () => document.querySelector('#main [data-act="team-new"]')
         || document.querySelector('#main [data-act="invite-new"]')
         || document.querySelector("#main .kv .btn")
         || document.querySelector('#rail a[data-act="home"][data-v="team"]'),
@@ -18580,7 +18396,7 @@
       const raw = el.getAttribute("data-v");
       const v = raw === "library" ? "library" : raw === "team" ? "team" : "overview";
       if (v === "team") return openHomeTeam();
-      S.home = v; S.teamPickDir = ""; S.teamAnother = "";
+      S.home = v; S.teamPickDir = "";
       if (S.screen !== "projects") await ACTS["to-projects"](el);
       else paint();
     },
@@ -18594,26 +18410,29 @@
       ctxOpen(tr, { x: Math.round(r.left), y: Math.round(r.bottom + 4) }, true);
     },
     "to-teams": async () => openHomeTeam(),
-    "team-another": async () => {
-      const free = teamless();
-      if (!free.length) { S.teamAnother = "none"; paint(); return; }
-      if (free.length === 1) {
-        S.teamAnother = ""; S.teamPickDir = free[0].dir; S.teamDir = free[0].dir;
+    /* MAKE A TEAM, WITH NO CATALOG OPEN (findings 29 and 31): the cover asks nothing of a catalog, and the press makes the team on the relay;
+       a catalog is put on it afterwards. */
+    "team-new": async () => {
+      S.teamWant = "new"; S.err = null; S.cover = "team"; paint(); /* plant:ton-open */
+    },
+    "do-team-new": async () => {
+      if (S.cover !== "team" || S.teamWant !== "new" || S.teamNewBusy) return;
+      S.teamNewBusy = true; S.err = null; paintCover();
+      let r = null;
+      try { r = await API.teamNew(); } catch (e) { r = null; }
+      S.teamNewBusy = false;
+      if (r && r.signing && S.host) S.host.signing = r.signing;
+      if (!r || r.error) { S.err = errOf(r); paintCover(); return; }
+      S.cover = null; S.err = null; S.teamWant = "";
+      await loadProjects();
+      const idx = (S.teams || []).findIndex((x) => x && r.team && x.id === r.team.id);
+      if (idx >= 0) S.teamTab = idx;
+      if (S.screen === "projects" && S.home === "team") {
         S.desks = null; S.desksLoadedFor = "";
-        await desksLoad(free[0].dir);
-        return;
-      }
-      S.teamAnother = "pick"; paint();
-    },
-    "team-another-cancel": async () => {
-      S.teamAnother = ""; S.teamPickDir = "";
-      await desksLoad();
-    },
-    "team-start-at": async (el) => {
-      const dir = el && el.getAttribute && el.getAttribute("data-dir");
-      if (!dir) return;
-      S.err = null; S.teamAnother = ""; S.teamPickDir = dir; S.teamDir = dir;
-      await openHomeTeam(dir, { keepPick: true });
+        /* A catalog's own page stays the catalog's, now listing the new team to put it on. */
+        if (S.teamPickDir) await desksLoad(S.teamPickDir); /* plant:ton-pick-stay */
+        else { S.teamDir = ""; paint(); }
+      } else await openHomeTeam();
     },
     "team-tab": async (el) => {
       /* TWO SETS OF TABS SHARE THIS ACT: the Overview's Connections map (teamsTabsHtml in paintOverview) and the strip of Team on the
@@ -18626,7 +18445,7 @@
       }
       saveTeamTyped();
       S.teamTab = +(el.getAttribute("data-i") || el.getAttribute("data-tab")) || 0;
-      S.teamPickDir = ""; S.teamAnother = ""; S.teamDir = "";
+      S.teamPickDir = ""; S.teamDir = "";
       S.dkNote = null; S.people = null; S.piSaid = null; S.piTyped = "";
       const nextDir = teamTargetDir();
       S.desks = null; S.desksLoadedFor = "";
@@ -19289,20 +19108,6 @@
       S.sel = id; S.section = "cards"; S.cardPage = null; paint();
     },
     "hist-back": () => { S.section = "cards"; S.cardPage = null; S.err = null; paint(); },
-    /* THE SWITCH SAYS WHAT IT WILL DO BEFORE IT MOVES: the segment shows what the folder is given, not what was pressed. */
-    "team-seal": (el) => {
-      const v = el.getAttribute("data-v");
-      if (!S.desks || v === (S.desks.team && S.desks.team.sealed ? "sealed" : "plain")) return;
-      const dir = teamTargetDir();
-      S.teamWant = v; S.teamWhere = "relay"; S.cover = "team"; S.err = null; paint();
-      return Promise.all([teamLicRead(), teamsRead()]);
-    },
-    "team-fresh": () => {
-      if (!S.desks) return;
-      const dir = teamTargetDir();
-      S.teamWant = "fresh"; S.teamWhere = "relay"; S.cover = "team"; S.err = null; paint();
-      return Promise.all([teamLicRead(), teamsRead()]);
-    },
     "team-handover": () => { if (S.desks) { S.teamWant = "handover"; S.handoverWhy = ""; S.cover = "team"; S.err = null; paint(); } },
     "handover-why": (el) => {
       if (S.cover !== "team" || S.teamWant !== "handover" || S.handoverBusy) return;
@@ -19324,42 +19129,6 @@
       await desksLoad(dir);
     },
     "cancel": () => ACTS["cover-close"](),
-    "team-make": () => ACTS["team-seal"]({ getAttribute: (k) => k === "data-v" ? "sealed" : null }),
-    /* WHERE THE TEAM MEETS, chosen on the cover of a team first made (board 926). */
-    "team-where": (el) => {
-      if (S.cover !== "team" || !teamFirst()) return;
-      const v = el.getAttribute("data-v");
-      S.teamWhere = v === "team" && chooseTeams().length ? "team" : "relay"; S.err = null; paintCover(); /* plant:nf-handler */
-    },
-    /* A CATALOG CHOOSES ITS TEAM (board 962 stage 5, T5): the team picked on the cover, and the press, which the shell refuses in its
-       own sentence where the team cannot take the catalog; the refusal stays on the cover. */
-    "team-pick": (el) => {
-      if (S.cover !== "team" || S.teamWhere !== "team") return;
-      S.teamChosen = el.getAttribute("data-v") || ""; S.err = null; paintCover();
-    },
-    "do-team-choose": async () => {
-      if (S.cover !== "team" || !teamFirst() || S.teamWhere !== "team" || S.chooseBusy) return;
-      const list = chooseTeams(), t = list.find((x) => x.id === S.teamChosen) || list[0];
-      if (!t) return;
-      const dir = (S.publishPlace && S.open && S.open.dir) || teamTargetDir();
-      if (!dir) return;
-      S.chooseBusy = true; S.err = null; paintCover();
-      let r = null;
-      try { r = await API.teamChoose(dir, t.id); } catch (e) { r = null; }
-      S.chooseBusy = false;
-      if (!onTeamDir(dir)) return;
-      if (!r || r.error) { S.err = errOf(r); paintCover(); return; }
-      S.cover = null; S.err = null; S.teamWant = ""; S.teamChosen = ""; S.teamPickDir = ""; S.teamDir = dir;
-      await loadProjects();
-      const idx = (S.teams || []).findIndex((x) => x && x.id === t.id);
-      if (idx >= 0) S.teamTab = idx;
-      await desksLoad(dir);
-      if (!onTeamDir(dir)) return;
-      if (S.open && samePath(S.open.dir, dir) && S.desks && S.desks.folder && S.open.project) S.open.project.folder = S.desks.folder;
-      S.dkNote = [r.carried ? T("The catalog is in the team now, and every teammate receives it.")
-        : T("The catalog is in the team now, and every teammate receives it with its next published edition.")];
-      paint();
-    },
     /* ADD A CATALOG TO THIS TEAM, from the Teams screen (T5): the row's list opens and closes, and a press adds that catalog. */
     /* ADD A CATALOG TO THIS TEAM, from the Team screen (T5): the row's list opens and closes, and a press adds that catalog. */
     "team-add-catalog": (el) => {
@@ -19455,7 +19224,7 @@
       S.cover = null;
       S.teamLeave = null;
       S.err = null;
-      S.teamToast = T("The catalog is off the team, and it publishes nowhere until it is given a team or a folder.");
+      S.teamToast = T("The catalog is off the team, and it publishes nowhere until it is given a team.");
       tell(S.teamToast);
       if (API && API.teams) {
         try {
@@ -19682,7 +19451,7 @@
         return;
       }
       S.err = null;
-      S.teamToast = T("The catalog is off the team, and it publishes nowhere until it is given a team or a folder.");
+      S.teamToast = T("The catalog is off the team, and it publishes nowhere until it is given a team.");
       tell(S.teamToast);
       if (API && API.teams) {
         try {
@@ -19693,25 +19462,7 @@
       await refreshHeld(dir);
       paint();
     },
-    "do-team-seal": async () => {
-      const dir = (S.publishPlace && S.open && S.open.dir) || teamTargetDir(), fresh = S.teamWant === "fresh", first = teamFirst();
-      if (first) return teamOnRelay(dir); /* plant:rs926-route */
-      const r = await API.teamSealed(dir, fresh || S.teamWant === "sealed", fresh);
-      if (r && r.signing && S.host) S.host.signing = r.signing;   /* the key the first seal made (finding 9) */
-      if (!onTeamDir(dir)) return;   /* as deskAsk */
-      if (!r || r.error) { S.err = errOf(r); paintCover(); return; }
-      S.cover = null; S.err = null; S.teamWant = ""; S.teamPickDir = ""; S.teamAnother = ""; S.teamDir = dir;
-      await loadProjects();
-      selectTeamForDir(dir);
-      await desksLoad(dir);
-      /* Publish opened this cover to choose a place, and the place was already a real folder. publish() opens that cover again while project.folder is empty, so the page learns the desks folder first, as the relay answer learns its mirror, and the press continues. */
-      if (S.publishPlace) {
-        if (S.open && S.open.project && !S.open.project.folder && S.desks && S.desks.folder) S.open.project.folder = S.desks.folder;
-        S.publishPlace = false; /* plant:u1-place-clear */
-        await ACTS.publish(); /* plant:u1-seal-publish */
-      }
-    },
-    /* As the switch above, and the segment shows what the team file says. */
+    /* A desk's export, Plain or Sealed: the segment shows what the team file says. */    /* As the switch above, and the segment shows what the team file says. */
     "team-exports": (el) => {
       const v = el.getAttribute("data-v"), t = S.desks && S.desks.team;
       if (!t || v === (t.exportsSealed ? "sealed" : "plain")) return;
@@ -19918,25 +19669,6 @@
       S.err = null; tookLangs(r); paintMain();
     },
     "settings-reveal": () => API.reveal(S.open.dir),
-    "settings-folder": async () => {
-      const dir = (S.screen === "projects" && S.home === "team") ? teamTargetDir() : (S.open && S.open.dir);
-      if (!dir) return;
-      const r = await API.pickFolder(T("Where the team reads from"));
-      if (!r || r.error || !r.folder) {
-        if (S.publishPlace) S.publishPlace = false; /* plant:u1-pick-cancel */
-        return;
-      }
-      const set = await API.setFolder(dir, r.folder);
-      if (!set || set.error) { if (S.publishPlace) S.publishPlace = false; /* plant:u1-set-fail */ S.err = errOf(set); paintMain(); return; }
-      S.folderCheck = set.check || null; S.err = null;
-      await showChosenFolder(set.folder);
-      const said = folderCheckSaid(set.check);
-      if (said) tell(said);
-      if (S.publishPlace) {
-        S.publishPlace = false;
-        await ACTS.publish(); /* plant:u1-folder-publish */
-      }
-    },
     /* THE FILE NAME IS TEXT UNTIL "Change file name" IS PRESSED (board 960, item 4). Max's ruling of 2026-09-29 21:30 keeps the
        published name "changed only deliberately", so there is no save on blur: the edit holds what was typed (S.fileNameTyped,
        kept by the input listener and by the tab's place) until "Use this name" or Enter commits it, Cancel or Esc drops it, and
@@ -20347,18 +20079,6 @@
       window.STUDIO_T.set(S.uiLang);
       if (API) await API.uiLang(S.uiLang);
       paint();
-    },
-    "change-folder": async () => {
-      const r = await API.pickFolder(T("Writes to"));
-      if (!r || r.error || !r.folder) return;
-      const set = await API.setFolder(S.plan.dir, r.folder);
-      if (!set || set.error) { S.err = errOf(set); paintCover(); return; }
-      S.plan.where = set.check || null; S.folderCheck = set.check || null;
-      /* The open project is told too: a cover cancelled after this still changed the disk. */
-      if (S.open && S.open.dir === S.plan.dir) S.open.project.folder = set.folder;
-      S.plan.folder = set.folder; S.err = null;
-      S.planDesks = await prDesksRead(S.plan.dir);
-      paintCover();
     },
     /* A COVER, NOT window.prompt: Electron refuses prompt() outright, and a cover is the family's
        answer to a question anyway. One field, and its label is the canvas's own column heading;
@@ -20938,15 +20658,8 @@
         }
       }
       await flush(); await flushTag(); await flushFacts();
-      if (!S.open.project.folder) { /* plant:u1-publish-place */
-        if (!S.desks || (S.desksLoadedFor && !samePath(S.desksLoadedFor, S.open.dir))) await desksLoad(S.open.dir);
-        S.teamWant = "sealed";
-        S.teamWhere = "relay"; /* plant:nf-default */
-        S.publishPlace = true;
-        S.cover = "team";
-        S.err = null;
-        paint();
-        await teamLicRead();
+      if (!S.open.project.sealedTeam) { /* plant:u1-publish-place */
+        await openHomeTeam(S.open.dir, { keepPick: true });
         return;
       }
       const [r, desks] = await Promise.all([API.publishPlan(S.open.dir), prDesksRead(S.open.dir)]);
@@ -21091,7 +20804,7 @@
       S.keyBoxless = false; S.keyBoxDropped = false;
       if (S.cover === "relay-lapse") relayLapseSeen();
       const lapseNext = S.lapseDue && S.lapseDue.length ? "relay-lapse" : null;
-      S.cover = lapseNext; S.plan = null; S.planDesks = null; S.up = null; S.err = null; S.memberName = ""; S.publishPlace = false; S.prSure = false; S.teamLeave = null; paint();
+      S.cover = lapseNext; S.plan = null; S.planDesks = null; S.up = null; S.err = null; S.memberName = ""; S.prSure = false; S.teamLeave = null; paint();
     },
     /* The notice's way to renew: the Licence cover, the notice let go. */
     "lapse-licence": () => { relayLapseSeen(); return ACTS.licence(); },

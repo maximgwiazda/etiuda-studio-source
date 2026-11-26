@@ -125,26 +125,20 @@ const cell = (h) => {
   return { title: td[1] === undefined ? null : text(td[1]), file: text((/<span class="mono wt-f"[^>]*>([^<]*)<\/span>/.exec(td[2] || "") || [])[1] || ""),
     where: text((/<span class="wt-in"[^>]*>([^<]*)<\/span>/.exec(td[2] || "") || [])[1] || ""), all: text(td[2] || "") };
 };
-const pub = { folder: "S:" + B + "Shared" + B + "Answers" + B + "Invoices", fileName: "invoices-and-payments.ec" };
+/* MOVED 2026-11-26 (Max, 00:37: "Retire it."): a catalog reaches only through a team, on the relay. Was: the file's name and the folder holding it, a
+   drive's root, a share's root and a folder chosen with nothing published (W1 to W4), and Polish w folderze and na dysku (W6); W2 to W4 retire. */
+const MIRROR = "C:" + B + "ud" + B + "relay" + B + "a".repeat(32);
+const pub = { folder: MIRROR, fileName: "invoices-and-payments.ec" };
 const w1 = has(M.writtenTo) ? cell(M.writtenTo(pub)) : {};
-check(w1.file === "invoices-and-payments.ec" && w1.where === "in Invoices"
-    && w1.title === "S:" + B + "Shared" + B + "Answers" + B + "Invoices" + B + "invoices-and-payments.ec",
-  "W1 a published project's cell gives the file's name, the folder holding it beneath, and the whole path on hover: "
-  + JSON.stringify(w1));
-const w2 = has(M.writtenTo) ? cell(M.writtenTo({ folder: "S:" + B, fileName: "hotel.ec" })) : {};
-check(w2.file === "hotel.ec" && w2.where === "on drive S:" && w2.title === "S:" + B + "hotel.ec",
-  "W2 a file at a drive's root says on drive S:, not in S:" + B + ": " + JSON.stringify(w2));
-const w3 = has(M.writtenTo) ? cell(M.writtenTo({ folder: B + B + "server" + B + "share", fileName: "x.ec" })) : {};
-check(w3.where === "in share" && w3.title === B + B + "server" + B + "share" + B + "x.ec",
-  "W3 at a share's root the share is the folder named: " + JSON.stringify(w3));
-const w4 = has(M.writtenTo) ? cell(M.writtenTo({ folder: "S:" + B + "Shared" + B + "Partners" + B, fileName: "" })) : {};
-check(w4.file === "" && w4.where === "in Partners" && w4.title === "S:" + B + "Shared" + B + "Partners" + B,
-  "W4 a folder chosen and nothing published names that folder alone, its path on hover: " + JSON.stringify(w4));
+check(w1.file === "invoices-and-payments.ec" && w1.where === "the Etiuda relay" && w1.title === null,
+  "W1 a published project's cell gives the file's name and the relay it goes through, with no path on hover: " + JSON.stringify(w1));
 const w5 = has(M.writtenTo) ? cell(M.writtenTo({ folder: "" })) : {};
-check(w5.all === "no folder chosen yet" && w5.title === null, "W5 no folder chosen says so, with no hover: " + JSON.stringify(w5));
-const plw = has(pl.M.writtenTo) ? [cell(pl.M.writtenTo(pub)), cell(pl.M.writtenTo({ folder: "S:" + B, fileName: "hotel.ec" }))] : [{}, {}];
-check(plw[0].where === "w folderze Invoices" && plw[1].where === "na dysku S:",
-  "W6 in Polish: w folderze and na dysku (Claudette's), the folder's name as it stands: " + JSON.stringify(plw.map((x) => x.where)));
+const w5b = has(M.writtenTo) ? cell(M.writtenTo({ folder: "S:" + B + "Shared", fileName: "x.ec" })) : {};
+check(w5.all === "no team yet" && w5.title === null && w5b.all === "no team yet" && w5b.title === null,
+  "W5 no team, and a folder that is no relay's, say no team yet, with no hover: " + JSON.stringify([w5, w5b]));
+const plw = has(pl.M.writtenTo) ? [cell(pl.M.writtenTo(pub)), cell(pl.M.writtenTo({ folder: "" }))] : [{}, {}];
+check(plw[0].where === pl.page.T("the Etiuda relay") && plw[1].all === pl.page.T("no team yet") && plw[1].all !== "no team yet",
+  "W6 in Polish: the relay's name and no team yet as the table has them: " + JSON.stringify(plw.map((x) => x.where || x.all)));
 Object.assign(S, { screen: "projects", home: "library", pfilter: "all", q: "", err: null, rootMissing: false, root: "C:" + B + "p",
   projects: [Object.assign({ dir: dirs[0], name: names[0], counts: { cards: 3 }, rev: 2, published: "2026-10-05T14:12:00Z" }, pub),
     { dir: dirs[1], name: names[1], counts: { cards: 1 }, rev: 0, folder: "" }] });

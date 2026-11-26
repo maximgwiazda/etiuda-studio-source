@@ -4319,11 +4319,13 @@ async function setTeamSealed(dir, sealed, o) {
  *  (src/relay.mjs relayRunner). A project that published before brings its latest edition and its ring along, into the mirror and
  *  before the first sync, sealed as the team's are (src/publish.mjs carryEdition; the test architect's R1), so a desk admitted
  *  to the team finds a catalog at its first catch-up; one that never published moves as it did. A failure leaves nothing behind:
- *  the team file this call wrote goes, with what it carried, and the mirror folder where this call made it and it is empty. */
+ *  the team file this call wrote goes, with what it carried, and the mirror folder where this call made it and it is empty.
+ *  With no `dir` the team is made on its own: it lists no catalog and no project is read or written; a catalog joins it
+ *  afterwards (chooseTeam). */
 async function startRelayTeam(dir, o) {
-  const opts = o || {}, home = path.resolve(dir);
-  const found = projectAt(home);
-  if (!found) throw refuse("no catalog in {DIR}", { DIR: home });
+  const opts = o || {}, own = dir == null || dir === "", home = own ? null : path.resolve(dir); /* plant:ton-own */
+  const found = own ? null : projectAt(home);
+  if (!own && !found) throw refuse("no catalog in {DIR}", { DIR: home });
   const key = readKeyFile(opts.key);
   if (!key) throw refuse("A team file is signed with this Studio's signing key, and Settings shows there is none yet.");
   const tf = opts.teamsFile || (opts.userData ? teamsFile(opts.userData) : "");
@@ -4337,8 +4339,8 @@ async function startRelayTeam(dir, o) {
   if (!/^[0-9a-f]{32}$/.test(String(opts.rt || "")) || path.basename(mirror) !== String(opts.rt))
     throw new Error("a team on the relay is kept at the mirror named by its relay team id, and none was given; nothing was written");
   if (!opts.passphrase) throw notOpened();
-  const id = String(readProject(home).draft.id || "");
-  let team = newTeam({ id: opts.teamId, catalogs: [id], lead: { keyId: key.keyId, public: key.public }, sealed: true, exportsSealed: true });
+  const id = own ? "" : String(readProject(home).draft.id || "");
+  let team = newTeam({ id: opts.teamId, catalogs: own ? [] : [id], lead: { keyId: key.keyId, public: key.public }, sealed: true, exportsSealed: true });
   team = withChannel(team, { kind: "relay", rt: String(opts.rt), url: String(opts.url || "") }, { format: RING_FORMAT, kind: RING_KIND, keys: [] }); /* plant:rs926-channel */
   team = ownRecovery(team, opts.teamKeys, opts.key, opts.passphrase);
   const madeDir = !fs.existsSync(mirror);
@@ -4346,12 +4348,14 @@ async function startRelayTeam(dir, o) {
   let written;
   try {
     written = (await writeTeam(mirror, team, { key: opts.key, passphrase: opts.passphrase })).team;
-    /* A project that published before brings its latest edition and its ring into the mirror, sealed as the team's are, before
-       the first sync (src/publish.mjs carryEdition); one that never published has nothing to bring. */
-    await carryEdition({ project: home, folder: mirror, key: opts.key, teamKeys: opts.teamKeys }); /* plant:r1-carry */
-    writeProject(home, Object.assign({}, found.project, { draft: found.draftName, folder: mirror, sealedTeam: written.id, relay: { rt: String(opts.rt), url: String(opts.url || ""), lead: key.public } })); /* plant:rs926-place */
+    if (!own) {
+      /* A project that published before brings its latest edition and its ring into the mirror, sealed as the team's are, before
+         the first sync (src/publish.mjs carryEdition); one that never published has nothing to bring. */
+      await carryEdition({ project: home, folder: mirror, key: opts.key, teamKeys: opts.teamKeys }); /* plant:r1-carry */
+      writeProject(home, Object.assign({}, found.project, { draft: found.draftName, folder: mirror, sealedTeam: written.id, relay: { rt: String(opts.rt), url: String(opts.url || ""), lead: key.public } })); /* plant:rs926-place */
+    }
   } catch (e) {
-    takeBackCarried(home, mirror, String(opts.teamId), [id], opts.teamKeys);
+    if (!own) takeBackCarried(home, mirror, String(opts.teamId), [id], opts.teamKeys);
     try { fs.unlinkSync(teamPath(mirror)); } catch { /* never written */ }
     if (madeDir) { try { fs.rmdirSync(mirror); } catch { /* not empty, or gone */ } } /* plant:rs926-undo */
     throw e;
@@ -4608,14 +4612,14 @@ function takeBackCarried(home, mirror, teamId, catalogs, teamKeys) {
  *  mark with no team behind it. It touches only what is this team's: a project that points elsewhere, a mirror holding another
  *  team's file or a file that will not read are left as they are, and it is safe to run where nothing was written, or twice. */
 async function undoRelayTeam(dir, o) {
-  const opts = o || {}, home = path.resolve(dir);
+  const opts = o || {}, home = dir == null || dir === "" ? null : path.resolve(dir); /* a team made on its own has no project to put back */
   const tf = opts.teamsFile || (opts.userData ? teamsFile(opts.userData) : "");
   if (!/^t-[0-9a-f]{16}$/.test(String(opts.teamId || "")))
     throw new Error("a team to take back is named by its id, and none was given; nothing was changed");
   const mirror = path.resolve(String(opts.mirror || ""));
   if (!/^[0-9a-f]{32}$/.test(String(opts.rt || "")) || path.basename(mirror) !== String(opts.rt))
     throw new Error("a team on the relay is kept at the mirror named by its relay team id, and none was given; nothing was changed");
-  const found = projectAt(home);
+  const found = home ? projectAt(home) : null;
   if (found) {
     const next = Object.assign({}, found.project, { draft: found.draftName });
     let moved = false;
@@ -4627,7 +4631,7 @@ async function undoRelayTeam(dir, o) {
   if (read.team && read.team.id === opts.teamId) {
     /* What was carried into the mirror goes before the team file, so a failure part way leaves the file there and the next
        undo still knows the mirror is this team's. */
-    takeBackCarried(home, mirror, opts.teamId, read.team.catalogs || [], opts.teamKeys);
+    if (home) takeBackCarried(home, mirror, opts.teamId, read.team.catalogs || [], opts.teamKeys);
     fs.unlinkSync(teamPath(mirror)); /* plant:rs926-unlink */
   }
   try { fs.rmdirSync(mirror); } catch { /* not empty, or gone */ }

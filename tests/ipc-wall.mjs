@@ -573,7 +573,7 @@ async function askReveal(shell, dir) {
 async function iw5(mainPath, through) {
   const watch = [];
   const shell = await loadAt(through ? "iw5j" : "iw5", watch, mainPath, through);
-  const prev = process.env.STUDIO_TEST_FOLDER;
+  const prev = process.env.STUDIO_TEST_CSV; /* the folder pick the page still has (was: studio:pick-folder, retired 2026-11-26 with the chosen folder) */
   try {
     const listed = path.join(shell.projects, "Harbour lamps");
     fs.mkdirSync(listed, { recursive: true });
@@ -614,8 +614,8 @@ async function iw5(mainPath, through) {
     const upAndOut = listed + path.sep + ".." + path.sep + ".." + path.sep + "not-listed" + path.sep + "secret.ec";
     watch.push(hostile.away, path.resolve(hostile.dotdot), hostile.unc, keyFile, leakDir, likeRoot, likeShare,
       path.join(path.dirname(shell.realRoot), "not-listed"));
-    process.env.STUDIO_TEST_FOLDER = picked;
-    const choice = await shell.ask("studio:pick-folder", "t");
+    process.env.STUDIO_TEST_CSV = picked;
+    const choice = await shell.ask("studio:csv-pick", "t");
     const outside = await askShow(shell, awayFile);
     const dot = await askShow(shell, path.join(hostile.dotdot, "secret.ec"));
     const unc = await askShow(shell, hostile.unc);
@@ -651,8 +651,8 @@ async function iw5(mainPath, through) {
       gone: path.resolve(path.join(share, "gone.ec")),
     };
   } finally {
-    if (prev === undefined) delete process.env.STUDIO_TEST_FOLDER;
-    else process.env.STUDIO_TEST_FOLDER = prev;
+    if (prev === undefined) delete process.env.STUDIO_TEST_CSV;
+    else process.env.STUDIO_TEST_CSV = prev;
     shell.done();
   }
 }

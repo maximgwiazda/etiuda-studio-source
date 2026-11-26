@@ -52,7 +52,6 @@ contextBridge.exposeInMainWorld("STUDIO", {
   tour: (v) => ipcRenderer.invoke("studio:tour", v),
   /* The projects open in the band and the one on screen, sent whole at every change. */
   tabs: (v) => ipcRenderer.invoke("studio:tabs", v),
-  pickFolder: (title) => ipcRenderer.invoke("studio:pick-folder", title),
   newProject: (name, langs, opts) => ipcRenderer.invoke("studio:new", name, langs, opts),
   /* A closed tab's project, removed only where "+" made it and nobody touched it (src/studio.mjs discardUntouched). */
   discardUntouched: (dir) => ipcRenderer.invoke("studio:discard-untouched", dir),
@@ -65,7 +64,6 @@ contextBridge.exposeInMainWorld("STUDIO", {
 
   open: (dir) => ipcRenderer.invoke("studio:open", dir), /* plant:txic-preload */
   saveCard: (dir, id, patch) => ipcRenderer.invoke("studio:save-card", dir, id, patch),
-  setFolder: (dir, folder) => ipcRenderer.invoke("studio:set-folder", dir, folder),
   importPick: (title, kinds) => ipcRenderer.invoke("studio:import-pick", title, kinds),
   importPlan: (file, override, into) => ipcRenderer.invoke("studio:import-plan", file, override, into),
   importLand: (file, override, into, fingerprint) => ipcRenderer.invoke("studio:import-land", file, override, into, fingerprint),
@@ -85,10 +83,8 @@ contextBridge.exposeInMainWorld("STUDIO", {
   /* The Desks screen (board 834): what the folder's team says, Sealed or Plain, and the desks asking to join, each change
      signed by the key the operating system keeps, so nothing here carries a passphrase. */
   desks: (dir) => ipcRenderer.invoke("studio:desks", dir),
-  teamSealed: (dir, sealed, fresh) => ipcRenderer.invoke("studio:team-sealed", dir, sealed, fresh),
-  /* A team first made on the Etiuda relay (board 926): the other choice beside a shared folder. It carries the project and nothing
-     else; the reply holds no path, address or relay team id. */
-  teamRelay: (dir) => ipcRenderer.invoke("studio:team-relay", dir),
+  /* A team made on its own, on the relay (findings 29 and 31): no catalog, no argument; the reply holds no path, address or relay team id. */
+  teamNew: () => ipcRenderer.invoke("studio:team-new"),
   /* A catalog with no team joins a sealed team this Studio leads (board 962 stage 5, T3 and T5): the project and the team id, the
      cover's third choice and the Teams screen's Add a catalog to this team the callers. */
   teamChoose: (dir, teamId) => ipcRenderer.invoke("studio:team-choose", dir, teamId),

@@ -59,7 +59,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const SCRATCH = path.join(ROOT, "scratch", "team-desks");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 83; /* 86 less td4i, td4j and td4jp, retired with the code door (P2); td4h is rebased */
+const EXPECTED = 77; /* 86 less td4i, td4j and td4jp, retired with the code door (P2); td4h is rebased; less td4e, td4f, td4n, td4u and td4v, retired with the Publishing switch, and one plant (fd9-lead and fd9-solid gave way to ton-teamless), 2026-11-26 */
 /* ETIUDA_PLANTS=off (a merge's area run) skips u2p and p5p and counts them toward EXPECTED; the release profile runs with
    plants on, so they still run there. */
 const SELF = fileURLToPath(import.meta.url);
@@ -129,6 +129,7 @@ async function fd9() {
   const project = { dir: "C:/Projects/quay", name: "Quay", editions: [], counts: { cards: 0, intents: 0, cats: 0, rv: 0 },
     lint: { errors: 0, warnings: 0, notes: 0, suggestions: 0 }, draft: { langs: [{ code: "en" }], cards: [], rules: [] },
     project: { id: "p-0123456789abcdef", title: "Quay", rev: 0, folder: null, fileName: "quay.ec" } };
+  const SENTENCE = "This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.";
   const seen = {};
   for (const lang of ["en", "pl"]) {
     const home = loadPage({ api, uiLang: lang }), P = home.page, T = P.T;
@@ -137,31 +138,28 @@ async function fd9() {
     answer = bare;
     await P.desksLoad();
     const h = home.node("#main").innerHTML;
-    const make = h.indexOf('data-act="team-make"'), pick = h.indexOf('data-act="settings-folder"');
-    const plain = h.indexOf(T("Without a team, editions can also be published to a plain folder, in the clear: any desk that can read the folder opens them.").replace(/&/g, "&amp;"));
     seen[lang] = {
-      first: make >= 0 && pick > make && plain > make && pick > plain,
-      main: /<button class="btn solid" data-act="team-make">/.test(h),
-      second: !/<button class="btn solid" data-act="settings-folder">/.test(h) && /data-act="settings-folder"/.test(h),
-      words: lang === "en" || T("Without a team, editions can also be published to a plain folder, in the clear: any desk that can read the folder opens them.") !== "Without a team, editions can also be published to a plain folder, in the clear: any desk that can read the folder opens them.",
+      says: h.indexOf(T(SENTENCE)) >= 0 && /data-no-team/.test(h),
+      main: /<button class="btn solid" data-act="team-new">/.test(h),
+      noFolder: !/settings-folder|plain folder|Without a team|no folder chosen/i.test(h),
+      words: lang === "en" || T(SENTENCE) !== SENTENCE,
     };
     if (lang === "en") {
       answer = Object.assign({}, bare, { file: "theirs", lead: "87ad0879ac3e9ff6" });
       await P.desksLoad();
       const t = home.node("#main").innerHTML;
-      seen.control = { alone: /data-act="settings-folder"/.test(t) && !/data-act="team-make"/.test(t) && t.indexOf("Without a team") < 0 };
+      seen.control = { keepsItsRow: !/data-no-team/.test(t) && t.indexOf("is not this Studio") >= 0 };
     }
   }
   const bad = [];
   for (const l of Object.keys(seen)) for (const k of Object.keys(seen[l])) if (seen[l][k] !== true) bad.push(l + " " + k);
   check(bad.length === 0,
-    "fd9 a project with no team and no folder leads its Desks screen with Make a team as the main button, the plain folder below it as"
-    + " the secondary way, in English and Polish; a folder holding another lead's team keeps the folder line alone: "
+    "fd9 a catalog with no team leads its Team page with Make a team as the main button, in English and Polish, and offers no folder (was: the plain folder below it as the"
+    + " secondary way); a team file this Studio does not lead keeps its own row: "
     + (bad.length ? "failing " + JSON.stringify(bad) : "every part holds"));
 }
 const FD9_PLANTS = [
-  { mark: "fd9-lead", leg: "fd9", rel: "ui/app.js", line: "        : false ? '<div class=\"cols\"><div class=\"pane\"><h3 class=\"t\">' + esc(T(\"Who can read what you publish\")) + '</h3><div class=\"sc\">'" },
-  { mark: "fd9-solid", leg: "fd9", rel: "ui/app.js", line: "          + (!t ? ' <button class=\"btn sm\" data-act=\"team-make\">' + esc(T(\"Make a team\")) + \"</button>\" : \"\") + \"</div>\"" },
+  { mark: "ton-teamless", leg: "fd9", rel: "ui/app.js", line: "    return \"\"" },
   { mark: "td-plain-two", leg: "962s5c", rel: "src/studio.mjs", line: "  if (false) {" },
   { mark: "team-home-move", leg: "teamHome", rel: "ui/app.js", line: "        + \"\"" },
   { mark: "team-strip-one", leg: "teamHome", rel: "ui/app.js", line: "    if (!teamsList || teamsList.length < 1) return \"\";" },
@@ -253,9 +251,10 @@ async function teamHome() {
 }
 
 /* Make another team... on the home Team screen (Claude alpha's decision of 2026-11-17, from the designer's sheets):
-   - it shows with one team and with several, and not with none
-   - pressed with no catalog free of a team it says so; with one it goes straight to that catalog's Make a team; with
-     several it lists them (Make a team on each, Cancel), and choosing one leads to that catalog's Make a team. */
+   - it shows with one team and with several, and not with none (the empty state offers Make a team instead)
+   - MOVED 2026-11-26 (Max, findings 29 and 31: a team is made on its own). Was: pressed with no catalog free of a team it said so; with one
+     it went straight to that catalog's Make a team; with several it listed them. Now the press opens the team cover at once, whatever the
+     Library holds, and asks nothing of a catalog. */
 async function teamAnother() {
   const { loadPage } = await import("./page-stand-in.mjs");
   const mk = (id, name, dir) => ({ id, name, dir, rev: 1, counts: { cards: 1 } });
@@ -281,28 +280,27 @@ async function teamAnother() {
   }, uiLang: "en", source });
   const P = home.page, wait = () => new Promise((r) => setTimeout(r, 30));
   const main = () => home.node("#main").innerHTML;
-  const offered = () => /data-act="team-another"/.test(main());
+  const another = () => /data-act="team-new"/.test(main()) && /Make another team/.test(main());
   const show = async () => { Object.assign(P.S, { open: null, screen: "projects", home: "overview", projects, teams, teamTab: 0, teamPickDir: "", teamDir: "",
-    desks: null, desksLoadedFor: "", host: { tour: { offered: true } } });
+    desks: null, desksLoadedFor: "", cover: null, teamWant: "", host: { tour: { offered: true } } });
     await P.ACTS.home({ getAttribute: (k) => (k === "data-v" ? "team" : null) }); await wait(); };
-  const press = async () => { await P.ACTS["team-another"](); await wait(); };
+  const press = async () => { await P.ACTS["team-new"](); await wait(); };
+  const opened = () => P.S.cover === "team" && P.S.teamWant === "new" && P.S.teamPickDir === "" && !/data-act="team-start-at"/.test(main())
+    && !/Every catalog in the Library has a team already|There is no catalog in the Library yet|Which catalog/.test(main());
 
-  await show(); const one = offered();
-  teams = [t1, t2]; projects = [p1, p2]; await show(); const several = offered();
-  teams = []; projects = [p3]; await show(); const none = !offered();
+  await show(); const one = another();
+  teams = [t1, t2]; projects = [p1, p2]; await show(); const several = another();
+  teams = []; projects = [p3]; await show(); const none = !another() && /data-no-team/.test(main()) && /data-act="team-new"/.test(main());
   teams = [t1]; projects = [p1]; await show(); await press();
-  const allHave = /Every catalog in the Library has a team already\./.test(main()) && !/data-act="team-make"/.test(main());
-  projects = [p1, p3]; await show(); await press();
-  const straight = P.S.teamPickDir === p3.dir && /data-act="team-make"/.test(main()) && !/data-act="team-start-at"/.test(main());
+  const allHave = opened();
+  teams = [t1]; projects = []; await show(); await press();
+  const noCatalog = opened();
   projects = [p1, p3, p4]; await show(); await press();
-  const listed = /Which catalog does the team start with\?/.test(main()) && (main().match(/data-act="team-start-at"/g) || []).length === 2
-    && /data-act="team-another-cancel"/.test(main()) && !/data-act="team-make"/.test(main());
-  await P.ACTS["team-start-at"]({ getAttribute: (k) => (k === "data-dir" ? p4.dir : null) }); await wait();
-  const led = P.S.screen === "projects" && P.S.home === "team" && P.S.teamPickDir === p4.dir && /data-act="team-make"/.test(main());
+  const listed = opened();
 
-  const f = { one, several, none, allHave, straight, listed, led };
+  const f = { one, several, none, allHave, noCatalog, listed };
   check(Object.keys(f).every((k) => f[k]),
-    "teamAnother Make another team... shows on Team with one team and with several and not with none; pressed it says when every catalog has a team, goes straight to the one that has none, or lists them, and a choice leads to that catalog's Make a team: "
+    "teamAnother Make another team... shows on Team with one team and with several and not with none, where the empty state offers Make a team; pressed, with every catalog on a team, with no catalog and with several free, it opens the team cover at once and asks nothing of a catalog: "
     + JSON.stringify(f));
 }
 
@@ -311,7 +309,7 @@ async function teamLapse() {
   const { loadPage } = await import("./page-stand-in.mjs");
   const mk = (id, name, dir) => ({ id, name, dir, rev: 1, counts: { cards: 1 } });
   const p1 = mk("c-harbour", "Harbour lamps", "C:/Projects/harbour"), p2 = mk("c-returns", "Returns", "C:/Projects/returns");
-  const teamOf = (id, p) => ({ id, connection: "folder", folder: "C:/share-" + id, sealed: true, led: true, leadPrint: "aaaa111122223333",
+  const teamOf = (id, p) => ({ id, connection: "relay", folder: "C:/ud/relay/" + id.replace(/\D/g, "").padEnd(32, "a").slice(0, 32), sealed: true, led: true, leadPrint: "aaaa111122223333",
     catalogs: [p.id], project: p, projects: [p], teammates: [], count: 0 });
   const t1 = teamOf("t-1111111111111111", p1), t2 = teamOf("t-2222222222222222", p2);
   const byDir = (d) => (d === p1.dir ? [t1, p1] : [t2, p2]);
@@ -339,7 +337,7 @@ async function teamLapse() {
   P.S.section = "settings"; P.paint(); await wait();
   const settings = home.node("#main").innerHTML;
   const speaksOfOpen = !!visited && P.S.screen === "project" && P.S.desks && P.S.desks.team && P.S.desks.team.id === t1.id
-    && P.S.desksLoadedFor === p1.dir && settings.indexOf(t1.folder) >= 0;
+    && P.S.desksLoadedFor === p1.dir && settings.indexOf("Writes to") >= 0;
   const f = { visited: !!visited, speaksOfOpen };
   check(f.visited && f.speaksOfOpen,
     "teamLapse Settings' Writes-to row speaks of the open catalog's team after another team's tab was visited: "
@@ -825,6 +823,7 @@ const HELD_A = [
 const HELD_B = [
   ["studio:key-make", () => []],
   ["studio:team-sealed", (w) => [w.dir, true, false]],
+  ["studio:team-new", () => []],
   ["studio:team-relay", (w) => [w.dir]],
   ["studio:licence-signin", () => ["microsoft"]],
 ];
@@ -1227,7 +1226,7 @@ async function main(argv) {
       && asked.some(a => a[0] === "desks" && a[1] === open.dir);
   });
   await leg("td4b the screen names the folder, lists the roster by the names the lead gave with each desk's own beneath and"
-    + " its key in fours after a desk's disc, and beside it Publishing as Sealed, a plain copy of the newest edition and the"
+    + " its key in fours after a desk's disc, and no Publishing switch (a team is sealed), a plain copy of the newest edition and the"
     + " team key's epoch", async () => {
     answer = facts();
     await P.desksLoad();
@@ -1235,7 +1234,7 @@ async function main(argv) {
     return /<h1>Team<\/h1>/.test(h) && h.indexOf("C:\\share") >= 0
       && /Ewa.*?e5c8 0a17 b2e4 d856 admitted/.test(t) && /Anna \(evenings\) its own name: Anna K\. 7d03 55e1 c95b 7f13 named/.test(t)
       && (h.match(/class="kdisc desk" role="img" aria-label="A teammate&#39;s key"/g) || []).length === 2
-      && /aria-checked="true" data-act="team-seal" data-v="sealed"/.test(h)
+      && !/data-act="team-seal"/.test(h)
       && h.indexOf('data-act="arch-export" data-e="' + lastEd + '"') >= 0
       && /Team key held by this Studio; made new when a member was removed/.test(t) && !/epoch/i.test(t);
   });
@@ -1252,7 +1251,7 @@ async function main(argv) {
     return !/data-act="team-seal"/.test(a) && /is not this Studio.s own/.test(text(a)) && !/data-act="team-fresh"/.test(a)
       && !/data-act="team-seal"/.test(b) && /there is none yet/.test(text(b))
       && !/data-act="key-restore"|data-act="key-make"/.test(b) && /data-act="key-settings"/.test(b) /* MOVED (board 1016, item 5): old, Restore and Make were drawn here; new, the one link to Settings */
-      && /data-act="team-seal"/.test(mainHtml());
+      && !/data-act="team-seal"/.test(mainHtml());
   });
   await leg("td4d a sealed team with nobody admitted says that no desk can open what is published until one is", async () => {
     answer = facts({ team: Object.assign({}, facts().team, { roster: [] }) });
@@ -1263,22 +1262,8 @@ async function main(argv) {
     await P.desksLoad();
     return ok;
   });
-  await leg("td4e pressing Plain opens the switch's cover, which asks for no passphrase, and changes nothing yet; pressing"
-    + " what is already chosen opens nothing", async () => {
-    P.ACTS["team-seal"]({ getAttribute: () => "sealed" });
-    const none = P.S.cover;
-    P.ACTS["team-seal"]({ getAttribute: () => "plain" });
-    const dlg = home.node("#dlg").innerHTML;
-    return none === null && P.S.cover === "team" && !/type="password"/.test(dlg) && /data-act="do-team-seal"/.test(dlg)
-      && /Give this folder its catalog files in the clear/.test(text(dlg)) && !asked.some(a => a[0] === "teamSealed");
-  });
-  await leg("td4f the cover's button sends Plain and nothing typed, closes and reads the folder again", async () => {
-    const n = asked.filter(a => a[0] === "desks").length;
-    await P.ACTS["do-team-seal"]();
-    const sent = asked.find(a => a[0] === "teamSealed");
-    return !!sent && sent[1] === open.dir && sent[2] === false && sent[3] === false && sent.length === 4
-      && P.S.cover === null && asked.filter(a => a[0] === "desks").length === n + 1;
-  });
+  /* td4e and td4f retired 2026-11-26 with the Publishing Sealed / Plain switch (Max, 00:37: "Retire it."; finding 32: "it does not actually switch"): pressing
+     Plain opened the switch's cover, and its button sent Plain through teamSealed. A team is sealed, and the page has no switch to press. */
   await leg("td4g on a Polish desk the screen is Polish: its words come from the table and none is left in English", async () => {
     const pl = loadPage({ api, uiLang: "pl" }), Q = pl.page;
     Object.assign(Q.S, { open, screen: "projects", home: "team", teamDir: open.dir, lang: "en" });
@@ -1346,30 +1331,21 @@ async function main(argv) {
       && !/data-act="key-backup"/.test(none + made) && /data-act="key-settings"/.test(none) && /A backup copy is in E:\\, made 2026-10-08\. Signing key settings/.test(text(made))
       && !/If this computer is lost/.test(text(plain)) && !/[Rr]ecovery passphrase|team-recovery/.test(none + made + plain);
   });
-  await leg("td4m with no key here and a team in the folder trusting one, the row names that key after Studio's disc and"
-    + " offers Restore first and a new key second with its cost; with a key here and the team another key's, it offers a"
-    + " new team, whose cover, on the relay (was: a shared folder), says every teammate is invited again and sends the new team with nothing typed", async () => {
+  await leg("td4m with no key here and a team trusting one, the row names that key after Studio's disc and offers the one link to the key's settings with its cost; with a key here and the team another key's, no new team is offered (was: a Start a new team here press, and its cover)", async () => {
     answer = facts({ signing: "", lead: "9a3a782d7f8ff25b", file: "theirs", team: null });
     await P.desksLoad();
     const lost = mainHtml();
     answer = facts({ lead: "9a3a782d7f8ff25b", file: "theirs", team: null });
     await P.desksLoad();
     const theirs = mainHtml();
-    P.ACTS["team-fresh"]();
-    /* The cover asks where the new team meets (board 926); since 2026-11-20 the relay is its one place, and this leg is the relay's (was the shared folder's). */
-    const dlg = home.node("#dlg").innerHTML;
-    sealAnswer = { error: null, team: null };
-    await P.ACTS["do-team-seal"]();
-    const sent = asked.filter(a => a[0] === "teamRelay").pop();
     answer = facts();
     await P.desksLoad();
     const ti = text(lost);
-    const f = { names: /The team in this folder trusts the signing key 9a3a 782d 7f8f f25b ?, and it is not on this computer\./.test(ti),
+    const f = { names: /The team trusts the signing key 9a3a 782d 7f8f f25b ?, and it is not on this computer\./.test(ti),
       restoreFirst: !/data-act="key-restore"|data-act="key-make"/.test(lost) && /data-act="key-settings"/.test(lost), /* MOVED (board 1016, item 5): old, Restore first and Make second here; new, the one link to Settings */
       cost: /No backup copy\? A new key works too, and every teammate is let in again\. Signing key settings/.test(ti),
       disc: /aria-label="Studio&#39;s signing key"/.test(lost), noSwitch: !/data-act="team-seal"/.test(lost),
-      fresh: /data-act="team-fresh"/.test(theirs), says: /Every teammate is invited to the new team again\./.test(text(dlg)),
-      noField: !/type="password"/.test(dlg), sent: !!sent && sent[1] === open.dir, closed: P.S.cover === null };
+      noFresh: !/data-act="team-fresh"/.test(theirs) && !/data-act="team-fresh"/.test(lost) };
     const ok = Object.keys(f).every(k => f[k]);
     if (!ok) process.stderr.write("  td4m " + JSON.stringify(f) + "\n");
     return ok;
@@ -1459,20 +1435,7 @@ async function main(argv) {
 
   /* td4n: the verb's own refusal. The cover's error path is a clause of its own (the read of the team carves, G7): a path
      that closed the cover silently would leave every leg above green and the person with no word of why nothing changed. */
-  await leg("td4n a refusal from the switch's verb keeps the cover open and says why; the switch stays where it was", async () => {
-    answer = facts();
-    await P.desksLoad();
-    P.ACTS["team-seal"]({ getAttribute: () => "plain" });
-    sealAnswer = { error: "The signing key did not open on this computer, so nothing was written." };
-    await P.ACTS["do-team-seal"]();
-    const dlg = text(home.node("#dlg").innerHTML), still = P.S.cover, row = mainHtml();
-    sealAnswer = { error: null, team: null };
-    P.S.cover = null; P.S.err = null; P.S.teamWant = "";
-    await P.desksLoad();
-    return still === "team" && /The signing key did not open on this computer, so nothing was written\./.test(dlg)
-      && /aria-checked="true" data-act="team-seal" data-v="sealed"/.test(row);
-  });
-
+  /* td4n retired 2026-11-26 with the Publishing switch: a refusal from the switch's verb kept the cover open and said why. */
   /* td4q to td4s: removing a member (board 885, S1). The button is on every roster row, desk or Studio alike, and not
      on a row that is only asking to join. The first press opens the one line and sends nothing; the confirm sends the
      team and the member and no key. */
@@ -1538,90 +1501,53 @@ async function main(argv) {
      there: it says who can still read them and offers the existing seal switch, whose own cover then asks. */
   const PLAIN_EN = "This team publishes in the clear, so new editions stay readable to anyone who can read this folder, Ewa's desk"
     + " included. Removed, and with publishing sealed, Ewa's desk gets no new ones.";
-  await leg("td4t on a plain team the removal cover says new editions stay readable to anyone who can read the folder, the"
-    + " removed desk included, promises no forward cut, and offers Publish sealed, which opens the seal switch's own cover and"
-    + " sends nothing; on a sealed team the cover keeps its forward-only sentence and offers no seal", async () => {
-    P.S.cover = null; P.S.teamWant = ""; P.S.memberGoing = ""; P.S.err = null;
-    answer = withTeam({ sealed: false });
-    await P.desksLoad();
-    const n = asked.filter(a => a[0] === "memberRemove" || a[0] === "teamSealed").length;
-    P.ACTS["member-remove"]({ getAttribute: () => EWA });
-    const plain = home.node("#dlg").innerHTML;
-    P.ACTS["team-seal"]({ getAttribute: () => "sealed" });
-    const sealCover = home.node("#dlg").innerHTML, wantNow = P.S.teamWant;
-    const quiet = asked.filter(a => a[0] === "memberRemove" || a[0] === "teamSealed").length === n;
-    P.S.cover = null; P.S.teamWant = ""; P.S.memberGoing = ""; P.S.err = null;
-    answer = facts();
-    await P.desksLoad();
-    P.ACTS["member-remove"]({ getAttribute: () => EWA });
-    const sealed = home.node("#dlg").innerHTML;
-    P.S.cover = null; P.S.teamWant = ""; P.S.memberGoing = ""; P.S.err = null;
-    const f = { says: text(plain).indexOf(PLAIN_EN) >= 0, noPromise: !/Removal works only from now on/.test(text(plain)),
-      offer: /data-act="team-seal" data-v="sealed"/.test(plain) && /Publish sealed…/.test(text(plain)),
-      remove: /data-act="do-member-remove"/.test(plain), opens: wantNow === "sealed" && /Seal what this folder is given/.test(text(sealCover)),
-      quiet, sealedSays: /Removal works only from now on: Ewa's desk keeps the editions already received and gets no new ones\./.test(text(sealed)),
-      sealedNoOffer: !/data-act="team-seal"/.test(sealed) && text(sealed).indexOf(PLAIN_EN) < 0 };
-    const ok = Object.keys(f).every(k => f[k]);
-    if (!ok) process.stderr.write("  td4t " + JSON.stringify(f) + "\n");
-    return ok;
-  });
-  await leg("td4v on a plain team where the seal switch cannot work (the folder inside the project, no signing key, a team file"
-    + " not this Studio's) the removal cover still says new editions stay readable and offers no Publish sealed", async () => {
-    const seen = [withTeam({ sealed: false }, { inside: true }), withTeam({ sealed: false }, { signing: "" }),
-      withTeam({ sealed: false }, { file: "theirs" })].map((d) => {
+  /* MOVED 2026-11-26 (Max, finding 32: a team is sealed). Was td4t, td4v and td4u: on a plain team the removal cover said new editions stay
+     readable to anyone who can read the folder and offered Publish sealed where the switch could work, and not where it could not, in
+     English and Polish. Now one leg: the removal cover is the forward-only sentence and offers no seal, whatever the team file says. */
+  await leg("td4t the removal cover keeps its forward-only sentence and offers no seal, whether or not the team file says sealed", async () => {
+    const seen = [];
+    for (const d of [facts(), withTeam({ sealed: false })]) {
       P.S.cover = null; P.S.teamWant = ""; P.S.memberGoing = ""; P.S.err = null;
-      P.S.desks = d;
+      answer = d;
+      await P.desksLoad();
       P.ACTS["member-remove"]({ getAttribute: () => EWA });
-      return home.node("#dlg").innerHTML;
-    });
+      seen.push(home.node("#dlg").innerHTML);
+    }
     P.S.cover = null; P.S.teamWant = ""; P.S.memberGoing = ""; P.S.err = null;
     answer = facts();
     await P.desksLoad();
-    const f = seen.map((h) => !/data-act="team-seal"/.test(h) && text(h).indexOf(PLAIN_EN) >= 0 && /data-act="do-member-remove"/.test(h));
-    if (!f.every(Boolean)) process.stderr.write("  td4v " + JSON.stringify(f) + "\n");
+    const f = seen.map((h) => /Removal works only from now on: Ewa's desk keeps the editions already received and gets no new ones\./.test(text(h))
+      && !/data-act="team-seal"/.test(h) && text(h).indexOf(PLAIN_EN) < 0 && /data-act="do-member-remove"/.test(h));
+    if (!f.every(Boolean)) process.stderr.write("  td4t " + JSON.stringify(f) + "\n");
     return f.every(Boolean);
-  });
-  await leg("td4u on a Polish desk the plain team's removal cover is Polish, offer included, and no English is left on it", async () => {
-    const pl = loadPage({ api, uiLang: "pl" }), Q = pl.page;
-    Object.assign(Q.S, { open, screen: "projects", home: "team", teamDir: open.dir, desks: withTeam({ sealed: false }) });
-    Q.ACTS["member-remove"]({ getAttribute: () => EWA });
-    const t = text(pl.node("#dlg").innerHTML);
-    return t.indexOf("Ten zespół publikuje jawnie, więc nowe wydania odczyta każdy, kto ma dostęp do tego folderu, także Ewa's desk."
-        + " Po usunięciu i przejściu na publikowanie zapieczętowane Ewa's desk nie odczyta już nowych wydań.") >= 0
-      && /Publikuj zapieczętowane…/.test(t) && t.indexOf("publishes in the clear") < 0 && t.indexOf("Publish sealed") < 0
-      && t.indexOf("Usunięcie działa tylko na przyszłość") < 0;
   });
 
   /* td4w: a visible button "Make a team" when there is no team (make-team-entry). */
-  await leg("td4w on the Desks screen with no team, a visible button Make a team opens the team cover, and on a Polish desk"
-    + " says Utwórz zespół; with a team the button is not shown; the relay is the cover's default (was: this project's real folder, until 2026-11-20)", async () => {
+  await leg("td4w a catalog with no team: its Team page says it publishes nowhere yet and offers a visible Make a team, which opens the team cover with no catalog asked for; on a Polish desk it says Utwórz zespół; with a team the page offers none (was: the Desks screen's Make a team beside the Publishing switch)", async () => {
     P.S.cover = null; P.S.teamWant = ""; P.S.err = null;
     answer = facts({ file: "none", team: null });
     await P.desksLoad();
     const hNoTeam = mainHtml(), tNoTeam = text(hNoTeam);
-    const hasBtn = /data-act="team-make"/.test(hNoTeam) && /Make a team/.test(tNoTeam)
-      && /data-act="team-seal"/.test(hNoTeam);
+    const hasBtn = /data-act="team-new"/.test(hNoTeam) && /Make a team/.test(tNoTeam) && /data-no-team/.test(hNoTeam)
+      && !/data-act="team-seal"/.test(hNoTeam) && !/data-act="settings-folder"/.test(hNoTeam);
     answer = facts();
     await P.desksLoad();
     const hTeam = mainHtml();
-    const noBtnWithTeam = !/data-act="team-make"/.test(hTeam);
+    const noBtnWithTeam = !/data-no-team/.test(hTeam) && !/data-act="team-new"/.test(hTeam);
     const pl = loadPage({ api, uiLang: "pl" }), Q = pl.page;
     Object.assign(Q.S, { open, screen: "projects", home: "team", teamDir: open.dir, lang: "en" });
     answer = facts({ file: "none", team: null });
     await Q.desksLoad();
     const plHtml = pl.node("#main").innerHTML, plText = text(plHtml);
-    const plOk = /data-act="team-make"/.test(plHtml) && /Utwórz zespół/.test(plText)
-      && !/Make a team/.test(plText);
+    const plOk = /data-act="team-new"/.test(plHtml) && /Utwórz zespół/.test(plText) && !/Make a team/.test(plText);
     P.S.cover = null; P.S.teamWant = ""; P.S.err = null;
     answer = facts({ file: "none", team: null });
     await P.desksLoad();
-    P.ACTS["team-make"]();
-    const coverOpened = P.S.cover === "team" && P.S.teamWhere === "relay";
+    P.ACTS["team-new"]();
+    const coverOpened = P.S.cover === "team" && P.S.teamWant === "new";
     const dlg = home.node("#dlg").innerHTML;
-    const dlgOk = /data-act="do-team-seal"/.test(dlg)
-      && /Editions travel through the Etiuda relay sealed/.test(text(dlg))
-      && !/Seal what this folder is given/.test(text(dlg))
-      && /aria-checked="true" data-act="team-where" data-v="relay"/.test(dlg) && !/data-v="folder"/.test(dlg);
+    const dlgOk = /data-act="do-team-new"/.test(dlg) && /Editions travel through the Etiuda relay sealed/.test(text(dlg))
+      && !/team-where|data-v="folder"/.test(dlg) && !/catalog/i.test(text(dlg));
     P.S.cover = null; P.S.teamWant = ""; P.S.err = null;
     answer = facts();
     await P.desksLoad();
@@ -1682,83 +1608,59 @@ async function main(argv) {
   const chooseAsked = () => asked.filter((a) => a[0] === "teamChoose");
   let chooseAnswer = { error: null, folder: "C:\\quay", team: { id: T5_FOLDER.id }, carried: true, relay: false };
   api.teamChoose = async (...a) => { asked.push(["teamChoose", ...a]); return JSON.parse(JSON.stringify(chooseAnswer)); };
-  /* The first-team cover, as Make a team opens it, with `teams` as the reader gave them; `page` is the stand-in to paint on. */
+  /* MOVED 2026-11-26 (Max, findings 29 and 31: a team is made on its own and a catalog is put on one afterwards). Was: the first team's cover's
+     third place, a team this Studio leads, with a list to pick from and a press that sent the project and the team. Now the catalog's own
+     page lists those teams as rows, each with its press, beside Make a team. The teams are the reader's, handed to the page as data. */
   const t5Open = async (pg, teams, desksAnswer) => {
     const Q = pg.page;
-    Q.S.cover = null; Q.S.teamWant = ""; Q.S.err = null; Q.S.teamChosen = "";
+    Q.S.cover = null; Q.S.teamWant = ""; Q.S.err = null; Q.S.teamAddBusy = false;
     Q.S.teamPickDir = open.dir;
     answer = desksAnswer || facts({ file: "none", team: null });
-    await Q.desksLoad();
     Q.S.teams = JSON.parse(JSON.stringify(teams));
-    Q.ACTS["team-make"]();
-    return pg.node("#dlg").innerHTML;
+    await Q.desksLoad();
+    return pg.node("#main").innerHTML;
   };
-  const t5Close = async () => { P.S.cover = null; P.S.teamWant = ""; P.S.err = null; P.S.teamChosen = ""; P.S.teamPickDir = ""; P.S.teams = []; answer = facts(); await P.desksLoad(); };
-  /* What 962t5a reads, from a page: the third choice offered, and what choosing it lists. */
-  const t5Listed = async (pg) => {
-    const Q = pg.page;
-    const offered = await t5Open(pg, T5_ALL);
-    Q.ACTS["team-where"]({ getAttribute: () => "team" });
-    const dlg = pg.node("#dlg").innerHTML, t = text(dlg);
-    const picks = (dlg.match(/data-act="team-pick" data-v="(t-[0-9a-f]+)"/g) || []).map((m) => m.replace(/.*data-v="|"$/g, ""));
-    return { offered, dlg, t, picks };
-  };
-  await leg("962t5a the first team's cover offers a third place, a team this Studio leads, listing only the sealed teams this"
-    + " Studio leads, each by its catalogs' names, its connection and its count; absent for a catalog with a team and where no such"
-    + " team is kept; the press sends the project and the chosen team", async () => {
-    const L = await t5Listed(home);
-    const third = /data-act="team-where" data-v="team"/.test(L.offered) && /data-act="team-where" data-v="relay"/.test(L.offered)
-      && !/data-act="team-where" data-v="folder"/.test(L.offered);
-    const only = L.picks.length === 2 && L.picks.indexOf(T5_FOLDER.id) >= 0 && L.picks.indexOf(T5_RELAY.id) >= 0;
-    const named = /Harbour Lights/.test(L.t) && /North Quay/.test(L.t) && /4 teammates/.test(L.t) && !/a shared folder/.test(L.t)
-      && /Lantern Book/.test(L.t) && (L.t.match(/the Etiuda relay/g) || []).length >= 2 && /1 teammate\b/.test(L.t)
-      && !/Plain Ledger|Borrowed Atlas/.test(L.t);
-    P.ACTS["team-pick"]({ getAttribute: () => T5_RELAY.id });
+  const t5Close = async () => { P.S.cover = null; P.S.teamWant = ""; P.S.err = null; P.S.teamPickDir = ""; P.S.teams = []; answer = facts(); await P.desksLoad(); };
+  const t5Picks = (h) => (h.match(/data-act="team-add-pick" data-dir="[^"]*" data-team="(t-[0-9a-f]+)"/g) || []).map((m) => m.replace(/.*data-team="|"$/g, ""));
+  const t5Press = (team) => ({ getAttribute: (k) => (k === "data-dir" ? open.dir : k === "data-team" ? team : null) });
+  await leg("962t5a a catalog on no team lists on its page only the sealed teams this Studio leads, each by its catalogs' names; absent for a catalog with a team and where no such team is kept; the press sends the project and the chosen team", async () => {
+    const h = await t5Open(home, T5_ALL), t = text(h), picks = t5Picks(h);
+    const only = picks.length === 2 && picks.indexOf(T5_FOLDER.id) >= 0 && picks.indexOf(T5_RELAY.id) >= 0;
+    const named = /Harbour Lights/.test(t) && /North Quay/.test(t) && /Lantern Book/.test(t) && !/Plain Ledger|Borrowed Atlas/.test(t)
+      && /data-act="team-new"/.test(h);
     const before = chooseAsked().length;
-    await P.ACTS["do-team-choose"]();
+    await P.ACTS["team-add-pick"](t5Press(T5_RELAY.id));
     const sent = chooseAsked().slice(before);
-    const pressed = sent.length === 1 && sent[0][1] === open.dir && sent[0][2] === T5_RELAY.id && P.S.cover === null;
-    /* Absent: a catalog with a team (Sealed's own cover and Plain's), and a library whose only teams are Plain or another key's. */
+    const pressed = sent.length === 1 && sent[0][1] === open.dir && sent[0][2] === T5_RELAY.id;
+    /* Absent: a catalog with a team, and a library whose only teams are Plain or another key's. */
     answer = facts();
-    await P.desksLoad();
     P.S.teams = JSON.parse(JSON.stringify(T5_ALL));
-    Object.assign(P.S, { cover: "team", teamWant: "plain", err: null });
-    const withTeamPlain = String(P.teamCoverHtml());
-    Object.assign(P.S, { teamWant: "sealed" });
-    const withTeamSealed = String(P.teamCoverHtml());
+    await P.desksLoad();
+    const withTeam = home.node("#main").innerHTML;
     const noneKept = await t5Open(home, [T5_PLAIN, T5_THEIRS]);
-    const absent = !/data-v="team"|team-pick/.test(withTeamPlain) && !/data-v="team"|team-pick/.test(withTeamSealed)
-      && !/data-v="team"/.test(noneKept) && /data-act="team-where" data-v="relay"/.test(noneKept) && !/data-v="folder"/.test(noneKept);
+    const absent = !/data-no-team|team-add-pick/.test(withTeam) && t5Picks(noneKept).length === 0 && /data-act="team-new"/.test(noneKept);
     await t5Close();
-    const f = { third, only, named, pressed, absent };
-    if (!Object.keys(f).every((k) => f[k])) process.stderr.write("  962t5a " + JSON.stringify(Object.assign(f, { picks: L.picks, sent, text: String(L.t).slice(0, 600) })) + "\n");
+    const f = { only, named, pressed, absent };
+    if (!Object.keys(f).every((k) => f[k])) process.stderr.write("  962t5a " + JSON.stringify(Object.assign(f, { picks, sent, text: String(t).slice(0, 600) })) + "\n");
     return Object.keys(f).every((k) => f[k]);
   });
-  await leg("962t5b the chosen team's teammates below 2.0.0 are named with their version and the admitted ones that never reported"
-    + " are counted, the press reading as a confirm and never refused; a team all on 2.0.0 says neither", async () => {
-    await t5Open(home, T5_ALL);
-    P.ACTS["team-where"]({ getAttribute: () => "team" });
-    P.ACTS["team-pick"]({ getAttribute: () => T5_FOLDER.id });
-    const old = home.node("#dlg").innerHTML, to = text(old);
-    P.ACTS["team-pick"]({ getAttribute: () => T5_RELAY.id });
-    const fine = home.node("#dlg").innerHTML, tf = text(fine);
+  await leg("962t5b the chosen team's teammates below 2.0.0 are named with their version and the admitted ones that never reported are counted, the press reading as a confirm and never refused; a team all on 2.0.0 says neither", async () => {
+    const h = await t5Open(home, T5_ALL), to = text(h);
     await t5Close();
     const f = { names: /Ewa \(1\.16\.7\)/.test(to) && !/Jan \(/.test(to) && !/Piotr/.test(to),
       counts: /1 teammate has not reported its version yet/.test(to),
-      confirm: /data-act="do-team-choose"[^>]*>[^<]*Add it all the same/.test(old) && !/data-act="do-team-choose"[^>]*disabled/.test(old),
-      quiet: !/older than 2\.0\.0|not reported/.test(tf) && /data-act="do-team-choose"[^>]*>[^<]*Add to this team/.test(fine) };
+      confirm: new RegExp('data-team="' + T5_FOLDER.id + '"[^>]*>[^<]*Add it all the same').test(h) && !new RegExp('data-team="' + T5_FOLDER.id + '"[^>]*disabled').test(h),
+      quiet: new RegExp('data-team="' + T5_RELAY.id + '"[^>]*>[^<]*Add to this team').test(h) };
     if (!Object.keys(f).every((k) => f[k])) process.stderr.write("  962t5b " + JSON.stringify(f) + "\n");
     return Object.keys(f).every((k) => f[k]);
   });
-  await leg("962t5c a refused press keeps the cover open with the refusal's own sentence, and changes nothing on the page", async () => {
+  await leg("962t5c a refused press keeps the page and shows the refusal's own sentence, and changes nothing on it", async () => {
     const SAID = "This Studio does not lead that team as a sealed one, so the catalog did not join it. Nothing was changed.";
     await t5Open(home, T5_ALL);
-    P.ACTS["team-where"]({ getAttribute: () => "team" });
-    P.ACTS["team-pick"]({ getAttribute: () => T5_FOLDER.id });
     chooseAnswer = { error: SAID };
-    await P.ACTS["do-team-choose"]();
-    const dlg = home.node("#dlg").innerHTML;
-    const ok = P.S.cover === "team" && text(dlg).indexOf(SAID) >= 0 && /data-act="do-team-choose"/.test(dlg);
+    await P.ACTS["team-add-pick"](t5Press(T5_FOLDER.id));
+    const h = home.node("#main").innerHTML;
+    const ok = text(h).indexOf(SAID) >= 0 && t5Picks(h).length === 2 && /data-no-team/.test(h);
     chooseAnswer = { error: null, folder: "C:\\quay", team: { id: T5_FOLDER.id }, carried: true, relay: false };
     await t5Close();
     return ok;
@@ -1777,20 +1679,14 @@ async function main(argv) {
       Object.assign(pg.page.S, { open: JSON.parse(JSON.stringify(open)), screen: "projects", home: "team", teamDir: open.dir, lang: "en" });
       return pg;
     };
-    const oldCover = async (pg) => {
-      await t5Open(pg, T5_ALL);
-      pg.page.ACTS["team-where"]({ getAttribute: () => "team" });
-      pg.page.ACTS["team-pick"]({ getAttribute: () => T5_FOLDER.id });
-      return text(pg.node("#dlg").innerHTML);
-    };
     const a = liftedPage("t5-only-led", "  const chooseTeams = () => (S.teams || []).filter((t) => t && !t.unreadable);");
     const b = liftedPage("t5-below", "    const below = [];");
     const c = liftedPage("t5-unreported", "    const unreported = 0;");
     if (!a || !b || !c) return false;
-    const L = await t5Listed(a);
-    const listsAll = L.picks.length === 4 && L.picks.indexOf(T5_PLAIN.id) >= 0 && L.picks.indexOf(T5_THEIRS.id) >= 0;
-    const noOld = !/Ewa \(1\.16\.7\)/.test(await oldCover(b));
-    const noCount = !/has not reported its version yet/.test(await oldCover(c));
+    const picksOf = t5Picks(await t5Open(a, T5_ALL));
+    const listsAll = picksOf.length === 4 && picksOf.indexOf(T5_PLAIN.id) >= 0 && picksOf.indexOf(T5_THEIRS.id) >= 0;
+    const noOld = !/Ewa \(1\.16\.7\)/.test(text(await t5Open(b, T5_ALL)));
+    const noCount = !/has not reported its version yet/.test(text(await t5Open(c, T5_ALL)));
     answer = facts();
     const f = { listsAll, noOld, noCount };
     if (!Object.keys(f).every((k) => f[k])) process.stderr.write("  962t5d " + JSON.stringify(f) + "\n");
@@ -2035,8 +1931,10 @@ async function main(argv) {
      Settings' key row (on the Settings tab since board 965), the Desks screen in each state that offers one, the team's covers, the key's restore and the Licence
      cover, painted with and without a newer file. The control must show every act, so the nought is a reading; and a press that
      reaches one anyway asks the shell for nothing and is answered in the sentence. */
-  const HELD_ACTS = ["key-make", "key-aside", "key-restore", "do-key-restore", "team-make", "team-fresh", "team-handover",
-    "do-team-handover", "team-seal", "do-team-seal"];
+  /* team-new and do-team-new replace team-make, team-fresh, team-seal and do-team-seal, which went with the Publishing switch and the cover that
+     asked where a team meets (2026-11-26). */
+  const HELD_ACTS = ["key-make", "key-aside", "key-restore", "do-key-restore", "team-new", "do-team-new", "team-handover",
+    "do-team-handover"];
   const LINE = "This Studio's saved data were written by Etiuda Studio 2.3.0 or newer, so this version leaves them untouched."
     + " Installing Etiuda Studio 2.3.0 or newer opens them as they were.";
   const u2h = async (src) => {
@@ -2069,16 +1967,14 @@ async function main(argv) {
       for (const sign of [{ keyId: "" }, OS_KEY, Object.assign({}, OS_KEY, { kept: "passphrase" })]) { host(sign); settingsTab(); }
       host(OS_KEY);
       Q.S.desks = JSON.parse(JSON.stringify(facts({ file: "none", team: null })));
-      cover("team", { teamWant: "sealed", teamWhere: "folder" });
+      cover("team", { teamWant: "new" });
       Q.S.desks = JSON.parse(JSON.stringify(facts()));
       cover("team", { teamWant: "handover" });
       cover("key", { keyWant: "restore", keyCopy: { file: "C:\\copy.json", print: "0123456789abcdef" }, keyBoxless: false });
       /* The Licence cover's way to a seat, the door's Sign in, stands only where no newer file does. */
       cover("licence", { lic: { licence: { status: "none" }, signIn: ["microsoft"], signinMoved: true } });
       cover(null);
-      /* The Sealed and Plain switch is held only where no team stands: the first three Desks views. */
-      views.forEach((v, i) => (String(v).match(/data-act="[\w-]+"/g) || []).map((m) => m.slice(10, -1))
-        .forEach((a) => { if (a !== "team-seal" || i < 3) acts.push(a); }));
+      views.forEach((v) => (String(v).match(/data-act="[\w-]+"/g) || []).map((m) => m.slice(10, -1)).forEach((a) => acts.push(a)));
       Q.S.cover = null;
       Q.run({ getAttribute: (k) => (k === "data-act" ? "key-make" : null) });
       await new Promise((r) => setTimeout(r, 0));
@@ -2086,7 +1982,7 @@ async function main(argv) {
     };
     const off = await paintAll(null), on = await paintAll({ format: 2, version: "2.3.0", said: {} });
     const missing = HELD_ACTS.filter((a) => off.acts.indexOf(a) < 0), shown = HELD_ACTS.filter((a) => on.acts.indexOf(a) >= 0);
-    const lined = on.views.filter((v, i) => HELD_ACTS.some((a) => (a !== "team-seal" || i < 3) && (off.views[i] || "").indexOf('data-act="' + a + '"') >= 0)
+    const lined = on.views.filter((v, i) => HELD_ACTS.some((a) => (off.views[i] || "").indexOf('data-act="' + a + '"') >= 0)
       && text(v).indexOf(LINE) < 0).length;
     process.stdout.write("       held acts the control did not show: " + JSON.stringify(missing) + "; shown under a newer file: "
       + JSON.stringify(shown) + "; views without the line: " + lined + "; the press asked the shell " + on.shellAsked + " time(s)\n");

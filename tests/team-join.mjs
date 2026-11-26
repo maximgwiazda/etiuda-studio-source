@@ -48,8 +48,9 @@ const words = ["Open the request", "The code the agent reads out", "Admit all", 
   "A colleague who signs in on a desk is shown a code, and a lead adds them by it on the Team screen.", "The code does not match this teammate's."];
 const said = words.filter(w => LANG.indexOf(JSON.stringify(w) + ":") >= 0 || APP.indexOf(JSON.stringify(w)) >= 0);
 check(said.length === 0 && LANG.indexOf("A colleague who signs in on a desk waits for a lead to add them, by email address or from the Team screen's list.\":") >= 0
-  && LANG.indexOf("Every teammate is invited to the new team again.\":") >= 0,
-  "tjg4 no line of the code door is in the page or its table, and the two lines that said it untrue are rewritten in both languages (placeholder words, for the copywriter): said " + JSON.stringify(said));
+  /* MOVED 2026-11-26: the second rewritten line, Every teammate is invited to the new team again., went with the cover that said it (Start a new team over another lead's). */
+  ,
+  "tjg4 no line of the code door is in the page or its table, and the line that said it untrue is rewritten in both languages (placeholder words, for the copywriter): said " + JSON.stringify(said));
 
 const Engine = await import(pathToFileURL(path.join(ROOT, "src", "engine.mjs")).href);
 const Invite = await import(pathToFileURL(path.join(ROOT, "src", "invite.mjs")).href);

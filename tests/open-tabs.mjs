@@ -666,15 +666,16 @@ async function main(argv) {
      has no cover since the key is kept by the operating system: its press is for D, the team it was made on, and says
      nothing on E. */
   const coverCases = [];
-  for (const want of ["sealed", "plain"]) {
+  /* MOVED 2026-11-26: the cover is a desk's export's (the Publishing switch's cover, Seal and Plain, has gone with the switch). */
+  for (const want of ["sealed"]) {
     reqs[D.dir] = asks("rR", "asks"); plainOf[D.dir] = want === "sealed";
     await eight.press("to-project", D.dir); await toTeam();
     const sent = [];
-    gapi.teamSealed = async (d, on) => { sent.push("teamSealed " + path.basename(d) + " " + on); return { error: null }; };
+    gapi.teamExports = async (d, on) => { sent.push("teamExports " + path.basename(d) + " " + on); return { error: null }; };
     const slowOpen = hold(), realOpen = gapi.open;
     gapi.open = async (d) => { if (d === E.dir) await slowOpen.shut; return realOpen(d); };
     const going = G.ACTS["to-project"](el({ "data-dir": E.dir })); await sleep(30);
-    G.ACTS["team-seal"](el({ "data-v": want }));
+    G.ACTS["team-exports"](el({ "data-v": want }));
     const asked = G.S.cover;
     slowOpen.open(); await going; await sleep(60);
     gapi.open = realOpen;
@@ -687,7 +688,7 @@ async function main(argv) {
   plainOf[D.dir] = false;
   /* P2: ot8h also held "an Admit, which has no cover, is for the team it was pressed on"; no Admit is pressed now. */
   const seals = coverCases;
-  check(seals.length === 2 && seals.every((c) => c.asked === "team" && c.on === "Epsilon project" && !c.coverLeft && !c.pressed && !c.sent.length) && !G.S.dkNote,
+  check(seals.length === 1 && seals.every((c) => c.asked === "team" && c.on === "Epsilon project" && !c.coverLeft && !c.pressed && !c.sent.length) && !G.S.dkNote,
     "ot8h a team cover asked for one team is closed when another catalog lands under it, and nothing is sealed or unsealed"
     + " for the newcomer: " + JSON.stringify(coverCases));
 
@@ -708,13 +709,13 @@ async function main(argv) {
   check(eOwn(lateRefuse),
     "ot8j a refusal answered after the strip moved on puts nothing on the team on screen: " + JSON.stringify(lateRefuse));
 
-  /* k: the Sealed switch refused by the share after its cover was closed and the strip moved on */
+  /* k: a desk's export switch refused after its cover was closed and the strip moved on (was: the Sealed switch, gone 2026-11-26) */
   await teamTab(0);
   const sealGate = hold();
-  gapi.teamSealed = async () => { await sealGate.shut; return { error: "the share refused the team file", said: null, disk: true }; };
-  G.ACTS["team-seal"](el({ "data-v": "plain" }));
+  gapi.teamExports = async () => { await sealGate.shut; return { error: "the share refused the team file", said: null, disk: true }; };
+  G.ACTS["team-exports"](el({ "data-v": "sealed" }));
   const sealCover = G.S.cover;
-  const sealing = G.ACTS["do-team-seal"](); await sleep(30);
+  const sealing = G.ACTS["do-team-exports"](); await sleep(30);
   G.ACTS["cover-close"]();
   await teamTab(1);
   sealGate.open(); await sealing; await sleep(60);

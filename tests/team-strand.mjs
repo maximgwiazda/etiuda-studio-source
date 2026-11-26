@@ -4,12 +4,12 @@
  *
  * gate-kind: node
  *
- * 974c11   a lead with one catalog and no team presses Make a team on the Library and lands on Team on the home
- *          tab, with that catalog's Make a team in view
- * 974c11b  with two catalogs and no team, the same press asks which catalog, and each press opens
- *          Team on the home tab at that catalog's Make a team
+ * 974c11   a lead with one catalog and no team presses Make a team on the Library and the team cover opens at once,
+ *          asking nothing of a catalog (was: it landed on Team at that catalog's own Make a team)
+ * 974c11b  with two catalogs and no team, the same press opens the same cover, with no question about which catalog
+ *          (was: it asked which catalog, and each press opened Team at that catalog's Make a team)
  * 974c13   taking the only catalog off a sealed relay team leaves Catalog details matching the disk:
- *          no Part way off, Writes to reads no folder chosen yet, and Publish opens the place cover
+ *          no Part way off, no Writes to row (was: it read no folder chosen yet), and Publish opens the catalog's Team page (was: the place cover)
  * 974c13b  the same, while a second catalog stays on the team
  * 974c13e  a team act failing after its team file lands leaves no stale Part way off, Moving to or Writes to row
  * 974c12   startRelayTeam on a project with no editions: the Team section names the first publish
@@ -91,15 +91,17 @@ const attr = (map) => ({ getAttribute: (k) => (Object.prototype.hasOwnProperty.c
 async function main() {
   const { loadPage } = await import("./page-stand-in.mjs");
 
+  /* MOVED, 2026-11-26 (Max, findings 29 and 31: a team is made on its own, a catalog is put on afterwards). Was: a lead with one catalog and no
+     team presses Make a team on the Library and lands on Team at that catalog's own Make a team; with two catalogs the same press asks which
+     catalog starts the team. Now: the same press opens the team cover at once and asks nothing of a catalog, with one catalog or two. */
   await leg("974c11", async () => {
     const dir = "C:\\catalogs\\Lantern";
-    const proposals = [];
     const home = loadPage({
       uiLang: "en",
       api: {
         open: async (d) => opened(d, "Lantern"),
         desks: async () => bareDesks(),
-        proposals: async (d) => { proposals.push(d); return { proposals: [], inbox: "" }; },
+        proposals: async () => ({ proposals: [], inbox: "" }),
       },
     });
     const P = home.page;
@@ -110,17 +112,14 @@ async function main() {
     });
     P.paintProjects();
     const library = mainHtml();
-    check(/data-act="to-teams"/.test(library) && /Make a team/.test(library),
+    check(/data-act="team-new"/.test(library) && /Make a team/.test(library),
       "974c11 the Library's team card offers Make a team");
-    await P.ACTS["to-teams"]();
-    const landed = mainHtml();
-    const acts = actsIn(landed);
-    check(/data-act="team-make"/.test(landed),
-      "974c11 the press lands on Team on the home tab, that catalog's Make a team in view");
-    check(!(acts.length > 0 && acts.every((a) => a === "to-projects")),
-      "974c11 the landing is not a screen whose only control is Back (acts: " + acts.join(", ") + ")");
-    check(P.S.screen === "projects" && P.S.home === "team" && P.S.desksLoadedFor === dir,
-      "974c11 the catalog Team is read for is the one the Library named");
+    await P.ACTS["team-new"]();
+    const cover = P.S.cover === "team" ? P.teamCoverHtml() : "";
+    check(P.S.cover === "team" && P.S.teamWant === "new" && /data-act="do-team-new"/.test(cover),
+      "974c11 the press opens the team cover at once, with that catalog not asked for");
+    check(P.S.teamPickDir === "" && P.S.desksLoadedFor === "" && !/Lantern|catalog/i.test(textOf(cover)),
+      "974c11 the cover names no catalog and the Team screen is not read for one");
   });
 
   await leg("974c11b", async () => {
@@ -142,22 +141,12 @@ async function main() {
       teams: [], teamTab: 0, host: { tour: { offered: true } },
     });
     P.paintProjects();
-    await P.ACTS["to-teams"]();
-    const asked = mainHtml();
-    const starts = actsIn(asked).filter((a) => a === "team-start-at");
-    check(starts.length === 2 && /Which catalog does the team start with\?/.test(asked),
-      "974c11b two catalogs ask which one starts the team (" + starts.length + " presses)");
-    check(!(actsIn(asked).length > 0 && actsIn(asked).every((a) => a === "to-projects")),
-      "974c11b the question is not a screen whose only control is Back");
-    const beaconDir = (asked.match(/data-act="team-start-at" data-dir="([^"]*Beacon[^"]*)"/) || [])[1];
-    if (!beaconDir || typeof P.ACTS["team-start-at"] !== "function") {
-      check(false, "974c11b a catalog's press is not there to open Team at its Make a team");
-      return;
-    }
-    await P.ACTS["team-start-at"](attr({ "data-dir": beaconDir.replace(/&#39;|&quot;|&amp;/g, (m) => ({ "&#39;": "'", "&quot;": '"', "&amp;": "&" }[m])) }));
-    const landed = mainHtml();
-    check(/data-act="team-make"/.test(landed) && P.S.screen === "projects" && P.S.home === "team" && P.S.desksLoadedFor === beacon,
-      "974c11b pressing Beacon opens Team on the home tab at Beacon's Make a team");
+    await P.ACTS["team-new"]();
+    const cover = P.S.cover === "team" ? P.teamCoverHtml() : "";
+    check(P.S.cover === "team" && P.S.teamWant === "new" && /data-act="do-team-new"/.test(cover) && actsIn(mainHtml()).indexOf("team-start-at") < 0,
+      "974c11b two catalogs ask no question about which one starts the team: the cover opens");
+    check(!/Lantern|Beacon|Which catalog/.test(textOf(cover + mainHtml())),
+      "974c11b neither catalog is named");
   });
 
   async function takenOff(id, second) {
@@ -215,11 +204,11 @@ async function main() {
     await P.ACTS["do-team-catalog-leave"]();
     const after = mainHtml();
     check(!/Part way off/.test(after), id + " after taking off, no Part way off remains");
-    check(/no folder chosen yet/.test(after) && !/the Etiuda relay/.test(after),
-      id + " after taking off, Writes to reads no folder chosen yet");
+    check(!/Writes to/.test(after) && !/the Etiuda relay/.test(after),
+      id + " after taking off, Catalog details has no Writes to row (was: it read no folder chosen yet)");
     if (second) check(!/also carries/.test(after), id + " the other catalog is not still named as carried from a stale row");
     await P.ACTS.publish();
-    check(P.S.cover === "team", id + " Publish on a catalog with no place opens the place cover (cover: " + String(P.S.cover) + ", open reads: " + openedCalls + ")");
+    check(P.S.screen === "projects" && P.S.home === "team" && P.S.cover === null, id + " Publish on a catalog with no team opens its Team page (was: the place cover) (screen: " + String(P.S.screen) + ", open reads: " + openedCalls + ")");
   }
 
   await leg("974c13", async () => { await takenOff("974c13", false); });
@@ -306,7 +295,7 @@ async function main() {
     const afterLeave = homeLeave.node("#main").innerHTML;
     check(!/Part way off/.test(afterLeave),
       "974c13e leave failing after its team file lands leaves no stale Part way off row");
-    check(!/C:\\quay/.test(afterLeave) && /no folder chosen yet/.test(afterLeave),
+    check(!/C:\\quay/.test(afterLeave) && !/Writes to/.test(afterLeave),
       "974c13e leave failing after its team file lands leaves no stale Writes to row");
   });
 

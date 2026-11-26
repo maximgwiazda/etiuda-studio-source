@@ -1710,8 +1710,8 @@ async function main(argv) {
     });
     await P.page.ACTS["do-team-catalog-leave"]();
     const leftOrphan = left.length === 1 && left[0][0] === "" && left[0][1] === TID1 && left[0][2] === "c-orphan-title";
-    const toastLeave = (P.node("#said") && P.node("#said").textContent.indexOf("The catalog is off the team, and it publishes nowhere until it is given a team or a folder.") >= 0)
-      || /The catalog is off the team, and it publishes nowhere until it is given a team or a folder\./.test(P.node("#main").innerHTML);
+    const toastLeave = (P.node("#said") && P.node("#said").textContent.indexOf("The catalog is off the team, and it publishes nowhere until it is given a team.") >= 0)
+      || /The catalog is off the team, and it publishes nowhere until it is given a team\./.test(P.node("#main").innerHTML);
 
     // Open Move cover for Second Light
     await P.page.ACTS["team-catalog-move"]({

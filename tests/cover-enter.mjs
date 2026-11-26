@@ -205,7 +205,7 @@ function control(box, tag) {
   };
   return c;
 }
-["do-key-restore", "do-team-seal", "do-team-exports", "cover-close", "warn",
+["do-key-restore", "do-team-new", "do-team-exports", "cover-close", "warn",
   "do-member-remove", "do-invite-cancel", "do-team-handover", "vr-discard-go"].forEach(watch);
 
 P.S.plan = { dir: "p", next: 2, lint: { errors: 0, warnings: 1, rows: [] }, langs: ["en"] };
@@ -251,8 +251,9 @@ const withField = {
   card: painted(covers.card), key: painted(covers.key), keyRestore: painted(cover("key", { keyWant: "restore" })), publish: pubWarn,
 };
 const kindOf = { intent: "tag", keyRestore: "key" };
-const sealed = painted(cover("team", { teamWant: "sealed" }));
-const fresh = painted(cover("team", { teamWant: "fresh" }));
+/* MOVED 2026-11-26 (findings 29 and 31): the team's covers that asked where a team meets, Seal and Start the new team over another lead's, are
+   gone; the team made on its own is the one cover with a press and no field. */
+const started = painted(cover("team", { teamWant: "new" }));
 const went = {}, wrong = [];
 for (const [name, box] of Object.entries(withField)) {
   pressed.length = 0;
@@ -261,12 +262,9 @@ for (const [name, box] of Object.entries(withField)) {
   if (!box.typed || !box.act || r.act !== box.act || pressed.join() !== box.act) wrong.push(name);
 }
 pressed.length = 0;
-const t1 = nowhere("team", sealed);
-const t2 = nowhere("team", fresh);
-check(wrong.length === 0 && sealed.act === "do-team-seal" && fresh.act === "do-team-seal" && !sealed.typed && !fresh.typed
-    && t1.act === "" && t2.act === "" && pressed.length === 0,
-  "ce17 from nothing, each cover with a field presses its own solid button, and the team's cover, which has none, presses"
-  + " nothing: " + JSON.stringify(went) + ", team " + JSON.stringify([t1.act, t2.act]) + (wrong.length ? "; wrong " + wrong.join() : ""));
+check(wrong.length === 0 && started.act === "do-team-new" && !started.typed,
+  "ce17 from nothing, each cover with a field presses its own solid button, and the team's cover, which has none, has its own solid button and no field"
+  + " (ce20 holds its Enter): " + JSON.stringify(went) + (wrong.length ? "; wrong " + wrong.join() : ""));
 
 /* ---- AN IME'S ENTER (the test architect's E7) ---------------------------------------------------------------------
    The Enter that ends a composition belongs to the input method, in a language's code and anywhere else. */
@@ -314,8 +312,7 @@ check(pressed.join() === "cover-close" && escErrs.length === 0,
    still held from the last field must not press it: Remove, Cancel an opened invitation, Hand over, Move the team,
    Discard, and the team's Seal, Start the new team, automatic joining and a desk's export (ce21). Enter in Add a
    language's code still adds it (in New project's name until New catalog became a page, board 1019 (12)). */
-const relayStart = painted(cover("team", { teamWant: "sealed", teamWhere: "relay", teamLic: null,
-  desks: { file: "none" } }));
+const relayStart = painted(cover("team", { teamWant: "new" }));
 pressed.length = 0;
 const rs = nowhere("team", relayStart);
 
@@ -324,8 +321,8 @@ pressed.length = 0;
 P.S.cover = "lang";
 const named = key(field("INPUT", "newLang", { closest: (sel) => (sel === "#dlg" ? withField.lang : null) }));
 const kept = named.act === "do-lang-new" && named.prevented && pressed.join() === "do-lang-new";
-check(!relayStart.typed && relayStart.act === "do-team-seal" && relayStart.enter && rs.act === "do-team-seal" && rs.prevented
-    && rsPressed === "do-team-seal" && kept,
+check(!relayStart.typed && relayStart.act === "do-team-new" && relayStart.enter && rs.act === "do-team-new" && rs.prevented
+    && rsPressed === "do-team-new" && kept,
   "ce20 Enter on Start a team on the Etiuda relay, which has no field, starts it, and Enter in a text field still"
   + " presses: " + JSON.stringify({ act: relayStart.act, marked: relayStart.enter, pressed: rsPressed })
   + (kept ? "" : "; name " + named.act));
@@ -336,9 +333,6 @@ const confirmations = [
   ["cancel", painted(cover("team", { teamWant: "cancel", cancelId: "i-1", desks: roster })), "do-invite-cancel"],
   ["handover", painted(cover("team", { teamWant: "handover", desks: roster })), "do-team-handover"],
   ["discard", painted(cover("vr-discard")), "cover-close"],
-  ["sealed", sealed, "do-team-seal"],
-  ["fresh", fresh, "do-team-seal"],
-  ["plain", painted(cover("team", { teamWant: "plain", desks: null })), "do-team-seal"],
   ["exports-plain", painted(cover("team", { teamWant: "exports-plain", desks: null })), "do-team-exports"],
 ];
 const fired = [];
@@ -351,8 +345,8 @@ for (const [name, box, act] of confirmations) {
 }
 check(fired.length === 0,
   "ce21 Enter on a confirmation with no field presses nothing: Remove, Cancel an opened invitation, Hand over, Discard,"
-  + " Seal, Start the new team, Unseal and a desk's export: "
-  + (fired.length ? fired.join(", ") : "the eight, none pressed"));
+  + " and a desk's export (was also Seal, Start the new team and Unseal, which went with the Publishing switch, 2026-11-26): "
+  + (fired.length ? fired.join(", ") : "the five, none pressed"));
 
 /* RESET STUDIO? (the lead engineer's decision of 2026-11-14 on the test architect's read): the word typed, its Reset is
    enabled and solid, and still Enter in the field or from nothing presses nothing, as the desk's Reset Etiuda?. */
@@ -373,7 +367,7 @@ copyPlants({
   root: ROOT, self: SELF, label: "cover-enter", onlyVar: "COVER_ENTER_ONLY", check, skip,
   plants: [
     { mark: "f11-enter", leg: "ce21", rel: "ui/app.js", line: "" },
-    { mark: "f11-relay-enter", leg: "ce20", rel: "ui/app.js", line: '          + ""' },
+    { mark: "ton-cover", leg: "ce20", rel: "ui/app.js", line: '        + "</div>";' },
     { mark: "reset-word-enter", leg: "ce22", rel: "ui/app.js", line: "" },
   ],
 });

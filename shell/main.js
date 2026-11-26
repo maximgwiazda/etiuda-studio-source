@@ -958,7 +958,7 @@ let verbsRunning = 0;
    the first key a publish or a seal makes is held in firstKey. */
 const HELD_BY_NEWER = new Set(["studio:key-make", "studio:key-aside", "studio:key-restore-pick", "studio:key-restore",
   "studio:key-remove",
-  "studio:team-relay", "studio:team-choose", "studio:team-handover",
+  "studio:team-relay", "studio:team-new", "studio:team-choose", "studio:team-handover",
   "studio:team-leave", "studio:team-move-catalog", "studio:team-let-go",
   "studio:licence-signin", "studio:licence-signout",
   /* Each mints a new epoch key kept in teams.json: under a newer teams.json that write throws, and if the team file with the new
@@ -1022,14 +1022,14 @@ const CLOSED_STOPPED = new Set([
   /* The signing key made, set aside, removed or restored: no project, but only project work signs with it. */
   "studio:key-aside", "studio:key-make", "studio:key-remove", "studio:key-restore-pick", "studio:key-restore",
   /* The library's folder and its tabs. */
-  "studio:tabs", "studio:teams", "studio:team-end", "studio:pick-root", "studio:pick-folder",
+  "studio:tabs", "studio:teams", "studio:team-end", "studio:pick-root",
   "studio:open", "studio:new", "studio:discard-untouched", "studio:row-facts", "studio:project-remove", "studio:reveal", "studio:show",
   /* Importing. */
   "studio:import-pick", "studio:bring-pick", "studio:import-dropped", "studio:import-paste", "studio:import-plan", "studio:import-land",
   "studio:v1-pick", "studio:sample-pick", "studio:v1-plan", "studio:v1-land",
   "studio:sheet-plan", "studio:sheet-land",
   /* Editing a draft. */
-  "studio:save-card", "studio:set-folder", "studio:tag-add", "studio:tag-rename", "studio:tag-save", "studio:tag-move", "studio:tag-delete",
+  "studio:save-card", "studio:tag-add", "studio:tag-rename", "studio:tag-save", "studio:tag-move", "studio:tag-delete",
   "studio:lang-add", "studio:lang-move", "studio:lang-remove", "studio:comment-lang", "studio:facts", "studio:variables",
   "studio:card-add", "studio:card-duplicate", "studio:card-delete", "studio:card-retire", "studio:card-restore", "studio:card-undo",
   "studio:card-not-promise", "studio:pair-not-path", "studio:finding-left", "studio:end-not-path", "studio:number-dismiss",
@@ -1046,7 +1046,7 @@ const CLOSED_STOPPED = new Set([
   "studio:invite-copy", "studio:tried-dismiss",
   "studio:policy-save", "studio:policy-copy", "studio:catalog-import", "studio:copy-import",
   "studio:catalog-withdraw", "studio:team-exports", "studio:team-sharing", "studio:team-sealed", "studio:team-choose",
-  "studio:team-leave", "studio:team-move-catalog", "studio:team-let-go", "studio:team-relay", "studio:team-handover",
+  "studio:team-leave", "studio:team-move-catalog", "studio:team-let-go", "studio:team-relay", "studio:team-new", "studio:team-handover",
   "studio:relay-lapse", "studio:relay-lapse-seen",
   "studio:seat-stay", "studio:people-list", "studio:person-admit",
   /* Board 1017's member invitation: a lead invites an address, withdraws it, and confirms or declines an unvouched Join. */
@@ -2613,17 +2613,6 @@ answer("studio:pick-root", async (e, title) => guard(async () => {
   return Object.assign(await thread.call("listProjects", to.root, { userData: app.getPath("userData") }), { open: to.open });
 }));
 
-answer("studio:pick-folder", async (e, title) => guard(async () => {
-  /* STUDIO_TEST_FOLDER answers this pick for a harness, as STUDIO_TEST_ROOT answers the one above. */
-  if (testOnly("STUDIO_TEST_FOLDER"))
-    return { folder: chosen.keep("folder", testOnly("STUDIO_TEST_FOLDER")) };
-  const win = BrowserWindow.fromWebContents(e.sender);
-  const r = await pick("open", win, {
-    title: String(title || ""), properties: ["openDirectory"],
-  });
-  return { folder: chosen.keep("folder", (r.canceled || !r.filePaths.length) ? null : r.filePaths[0]) };
-}));
-
 answer("studio:open", async (e, dir) => guard(async () => {
   const home = projectDir(dir); /* plant:txic-open */
   await bringBack(home);
@@ -2749,12 +2738,6 @@ answer("studio:import-land", async (e, file, override, into, fingerprint) => !ch
 
 answer("studio:save-card", async (e, dir, id, patch) => guard(async () => {
   return thread.call("saveCard", projectDir(dir), String(id || ""), patch || {});
-}));
-
-answer("studio:set-folder", async (e, dir, folder) =>
-  folder != null && !chosen.took("folder", folder, true)
-  ? unchosen("studio:set-folder", folder) : guard(async () => {
-  return thread.call("setPublishFolder", projectDir(dir), folder == null ? null : String(folder));
 }));
 
 /* THE REVIEW QUEUE. Three reads and one decision, and the decision is the same call the command
@@ -4742,7 +4725,12 @@ answer("studio:team-move-catalog", async (e, dir, toTeam) => guard(async () => {
     return { team: r.team, carried: r.carried === true, relay: !!into.relay };
   }));
 }));
-answer("studio:team-relay", async (e, dir) => guard(async () => {
+answer("studio:team-relay", async (e, dir) => guard(async () => startTeamOnRelay(projectDir(dir))));
+/* A TEAM MADE ON ITS OWN (findings 29 and 31 of the pair of 24 November): the same press with no catalog, which needs none, lists none and
+   touches no project. A catalog joins it afterwards by studio:team-choose. */
+answer("studio:team-new", async () => guard(async () => startTeamOnRelay(null)));
+async function startTeamOnRelay(dir) {
+  const own = dir == null || dir === ""; /* plant:ton-shell-own */
   const keyToLock = await teamKeyFor(dir);
   return teamAct(keyToLock, async () => {
     const R = await refusal(), K = await teamStore(), Rl = await relayLib(), S = await signLib(), at = await teamsAt(), key = await keyFileNow();
@@ -4750,21 +4738,27 @@ answer("studio:team-relay", async (e, dir) => guard(async () => {
     if (tm.teamsCount >= K.MAX_TEAMS) {
       throw R.refuse(K.REFUSAL_TEAMS_LIMIT);
     }
+    if (!vault.available()) {
+      throw R.refuse(noKeyring()
+        ? "This computer cannot keep a team key for this account: no keyring is open to seal it. To have one, install GNOME Keyring (the gnome-keyring package) or KDE Wallet, sign in again and reopen Studio."
+        : "This computer cannot keep a team key for this Windows account.");
+    }
+    const project = own ? null : dir; /* already coerced by the handler */
     /* A folder holding another lead's team may be left for a new team elsewhere. Each of the three below is a way a project has a
        team already, and each is refused on its own line: one whose folder has a team kept for it (restorable), one that remembers
        sealing, and one whose folder holds a team file of this Studio's own, or an older one of its own, or one that will not
        read. The thread's `facts.team` is set only with the file "ours", so the file clause already says it. The first is read from
        this computer's teams file and the project's own, before the team folder is read at all. */
-    const shown = (await teamOf(projectDir(dir))).folder;
+    const shown = own ? null : (await teamOf(project)).folder;
     const restorable = shown ? K.teamForFolder(at, shown) : null;
     const keptHere = false
       || !!restorable /* plant:rs926-kept */
       ;
     if (keptHere) throw R.refuse("This catalog has a team already, so no other was started.");
-    const facts = await thread.call("teamFacts", projectDir(dir), withHere({ key }));
-    const had = !facts
+    const facts = own ? null : await thread.call("teamFacts", project, withHere({ key }));
+    const had = !own && (!facts
       || !!facts.mark /* plant:rs926-mark */
-      || (facts.file !== "none" && facts.file !== "theirs"); /* plant:rs926-file */
+      || (facts.file !== "none" && facts.file !== "theirs")); /* plant:rs926-file */
     if (had) throw R.refuse("This catalog has a team already, so no other was started."); /* plant:rs926-first */
     /* THE RELAY COMES WITH A LICENCE (board 935, slice G3): a team is made there only under a grant the vendor's root signed over this
        lead's key, which Studio holds beside the key (src/relay.mjs). With none that holds now, nothing is made and nothing is sent, and
@@ -4780,14 +4774,14 @@ answer("studio:team-relay", async (e, dir) => guard(async () => {
     try {
       /* A team made here lives where this build makes new teams: staging's relay in a test service build (src/relay.mjs). */
       const mirror = K.keepRelay(at, teamId, rt, Rl.NEW_TEAMS_URL); /* plant:rs926-keep */
-      r = await thread.call("startRelayTeam", projectDir(dir), { key, passphrase: await keySecret(), teamId, rt, url: Rl.NEW_TEAMS_URL, /* plant:rts-start */
+      r = await thread.call("startRelayTeam", project, { key, passphrase: await keySecret(), teamId, rt, url: Rl.NEW_TEAMS_URL, /* plant:rts-start */
         mirror, teamKeys: (await teamsNow()).teamKeys });
       K.chooseSealed(at, teamId, true, mirror, r.written);
     } catch (err) {
       /* THE TEAM AND ITS KEY ARE FORGOTTEN ONLY TOGETHER WITH THE TEAM FILE AND THE PROJECT'S PLACE, which the thread may have
          written before this threw, whether or not its reply came back. Where it cannot take them back, all of it is kept. */
       let unwound = true;
-      try { await thread.call("undoRelayTeam", projectDir(dir), { teamId, rt, mirror: K.relayMirror(at, rt), folder: facts.folder || null }); } catch { unwound = false; } /* plant:rs926-unwind */
+      try { await thread.call("undoRelayTeam", project, { teamId, rt, mirror: K.relayMirror(at, rt), folder: (facts && facts.folder) || null }); } catch { unwound = false; } /* plant:rs926-unwind */
       if (unwound) K.forgetTeam(at, teamId); /* plant:rs926-forget */ /* plant:rs926-together */
       throw err;
     }
@@ -4796,7 +4790,7 @@ answer("studio:team-relay", async (e, dir) => guard(async () => {
     const counted = Array.isArray(synced) && synced.some((w) => w && w.team === teamId && w.reason === "team-count" && w.said === Rl.TEAM_COUNT_SAID);
     if (counted) {
       let unwound = true;
-      try { await thread.call("undoRelayTeam", projectDir(dir), { teamId, rt, mirror: K.relayMirror(at, rt), folder: facts.folder || null }); } catch { unwound = false; }
+      try { await thread.call("undoRelayTeam", project, { teamId, rt, mirror: K.relayMirror(at, rt), folder: (facts && facts.folder) || null }); } catch { unwound = false; }
       if (unwound) {
         K.forgetTeam(at, teamId); /* plant:rs932-count-forget */
         throw R.refuse(Rl.TEAM_COUNT_SAID); /* plant:rs932-count-said */
@@ -4805,7 +4799,7 @@ answer("studio:team-relay", async (e, dir) => guard(async () => {
     }
     return { created: true, relay: true, team: r.team };
   });
-}));
+}
 
 /* THE HANDOVER'S REASON (Max's ruling of 2026-11-01 06:13), as the page asks it: "new-computer" keeps the team's lead box,
    "other-hands" gives the new key a box of its own. Anything else is no reason, which src/studio.mjs handoverTeam takes as the

@@ -74,7 +74,8 @@ const blockOf = (html) => { const m = /<div class="(?:dashed )?none">/.exec(html
   const html = P.node("#main").innerHTML, block = blockOf(html);
   check(block.indexOf('<div class="e-fifth-spot"></div>') >= 0 && /Catalogs are kept in/.test(block),
     "1a the empty screen names its folder under the mark's place");
-  const acts = (block.match(/data-act="[^"]+"/g) || []);
+  /* The block holds the three presses; the unconnected map's card, outside it, offers Make a team with no catalog needed (2026-11-26). */
+  const acts = (block.match(/data-act="[^"]+"/g) || []).filter((a) => a !== 'data-act="team-new"');
   check(acts.join() === 'data-act="new",data-act="bring",data-act="sample-open"'
         && block.indexOf('class="btn solid" data-act="new"') >= 0
         && block.indexOf('class="btn" data-act="bring"') >= 0
@@ -92,7 +93,7 @@ const blockOf = (html) => { const m = /<div class="(?:dashed )?none">/.exec(html
   S.rootMissing = true;
   take(P.page, "paintProjects")();
   const missing = blockOf(P.node("#main").innerHTML);
-  check(/is not there yet/.test(missing) && (missing.match(/data-act="[^"]+"/g) || []).join() === 'data-act="new",data-act="bring",data-act="sample-open",data-act="pick-root"',
+  check(/is not there yet/.test(missing) && (missing.match(/data-act="[^"]+"/g) || []).filter((a) => a !== 'data-act="team-new"').join() === 'data-act="new",data-act="bring",data-act="sample-open",data-act="pick-root"',
     "1d the folder-missing twin keeps Change folder below the folder line: " + JSON.stringify(missing.match(/data-act="[^"]+"/g)));
   P.page.paintChrome();
   P.page.paintRail();

@@ -134,184 +134,28 @@ LEGS.ps1 = async () => {
     "ps1 Publish is the main action button, a disc, on a project with no place: hasPublish=" + hasPublish + " noFolderBtn=" + noFolderBtn + " said=" + said);
 };
 
-/* ps2. Publish there opens the same place choice the Desks screen asks, defaulting to the relay. */
+/* ps2. Publish on a catalog with no team opens that catalog's Team page, which says it publishes nowhere yet and offers Make a team.
+   MOVED 2026-11-26 (Max, 00:37: "Retire it."; findings 26, 28 and 32): was the place choice, Where the team meets, defaulting to the relay, with a
+   shared folder's picker behind it (ps3, ps4, ps6, ps7, fd4a to fd4c and nf2 retire with it). */
 LEGS.ps2 = async () => {
   const calls = [];
   const { page: P, node } = pageOf(makeApi(calls));
   P.S.open = mockProject(null);
   await P.ACTS.publish();
-  const dlg = node("#dlg").innerHTML;
-  const asks = dlg.indexOf("Where the team meets") >= 0;
-  const relayOn = dlg.indexOf('aria-checked="true" data-act="team-where" data-v="relay"') >= 0;
-  const noPlan = P.S.plan === null && !called(calls, "publishPlan");
-  check(P.S.cover === "team" && P.S.teamWant === "sealed" && P.S.teamWhere === "relay" && P.S.publishPlace === true
-    && asks && relayOn && noPlan && P.S.err === null,
-    "ps2 Publish on a project with no place opens the place choice, defaulting to the relay: cover=" + P.S.cover
-    + " where=" + P.S.teamWhere + " publishPlace=" + P.S.publishPlace + " asks=" + asks + " relayOn=" + relayOn + " noPlan=" + noPlan);
+  const main = node("#main").innerHTML;
+  const says = /data-no-team/.test(main) && main.indexOf("publishes nowhere yet") >= 0;
+  const offers = /data-act="team-new"/.test(main);
+  const noPlan = P.S.plan === null && !called(calls, "publishPlan") && P.S.cover === null;
+  check(P.S.screen === "projects" && P.S.home === "team" && says && offers && noPlan && called(calls, "desks"),
+    "ps2 Publish on a catalog with no team opens its Team page, which says it publishes nowhere yet and offers Make a team, and asks for no plan: screen="
+    + P.S.screen + " home=" + P.S.home + " says=" + says + " offers=" + offers + " noPlan=" + noPlan);
 
   const pl = pageOf(makeApi([]), "pl");
   pl.page.S.open = mockProject(null);
   await pl.page.ACTS.publish();
-  const plDlg = pl.node("#dlg").innerHTML;
-  check(plDlg.indexOf("Gdzie spotyka się zespół") >= 0 && plDlg.indexOf("przekaźnik Etiudy") >= 0
-    && plDlg.indexOf("wspólny folder") < 0,
-    "ps2 the place choice reuses the Desks screen's Polish sentences and offers no shared folder (was: also offered a shared folder, 2026-11-20)");
-};
-
-/* ps3. The folder answer alone opens the picker. Relay publishes. Cancel says nothing false. */
-LEGS.ps3 = async () => {
-  let relayed = false;
-  const callsA = [];
-  const { page: PA } = pageOf(makeApi(callsA, {
-    desks: async () => (relayed
-      ? { folder: MIRROR, signing: "test-key", file: "ours", inside: false, team: { id: "t-relay", sealed: true, roster: [] }, requests: [], canKeep: true, mark: null, restorable: null }
-      : noTeam(null)),
-    teamRelay: async () => { relayed = true; return { ok: true, signing: { keyId: "test-key" } }; },
-  }));
-  PA.S.open = mockProject(null);
-  await PA.ACTS.publish();
-  check(PA.S.cover === "team" && PA.S.publishPlace === true && PA.S.teamWhere === "relay",
-    "ps3a Publish opened the team cover on the relay");
-  await PA.ACTS["do-team-seal"]();
-  check(called(callsA, "teamRelay") && !called(callsA, "pickFolder") && PA.S.publishPlace === false
-    && PA.S.cover === "publish" && PA.S.plan !== null && PA.S.open.project.folder === MIRROR,
-    "ps3a the relay answer calls teamRelay, never the picker, and the publish plan opens on the mirror: relay="
-    + called(callsA, "teamRelay") + " pick=" + called(callsA, "pickFolder") + " cover=" + PA.S.cover
-    + " folder=" + PA.S.open.project.folder);
-
-  const callsB = [];
-  const { page: PB } = pageOf(makeApi(callsB));
-  PB.S.open = mockProject(null);
-  await PB.ACTS.publish();
-  await PB.ACTS["settings-folder"]();
-  check(called(callsB, "pickFolder") && !called(callsB, "teamRelay") && PB.S.publishPlace === false
-    && PB.S.cover === "publish" && PB.S.plan !== null && PB.S.open.project.folder === CHOSEN && PB.S.err === null,
-    "ps3b the plain folder's own pick (no longer a cover answer) opens the picker, then the publish plan: pick=" + called(callsB, "pickFolder")
-    + " relay=" + called(callsB, "teamRelay") + " cover=" + PB.S.cover + " folder=" + PB.S.open.project.folder);
-
-  const callsC = [];
-  const { page: PC } = pageOf(makeApi(callsC));
-  PC.S.open = mockProject(null);
-  await PC.ACTS.publish();
-  PC.ACTS["cover-close"]();
-  check(PC.S.publishPlace === false && PC.S.cover === null && PC.S.plan === null && !called(callsC, "publishPlan")
-    && PC.S.err === null && PC.S.open.project.folder == null,
-    "ps3c closing the choice leaves the edit unpublished and says nothing: publishPlace=" + PC.S.publishPlace
-    + " cover=" + PC.S.cover + " err=" + PC.S.err);
-
-  const callsD = [];
-  const { page: PD } = pageOf(makeApi(callsD, { pickFolder: async () => null }));
-  PD.S.open = mockProject(null);
-  await PD.ACTS.publish();
-  await PD.ACTS["settings-folder"]();
-  check(called(callsD, "pickFolder") && !called(callsD, "teamRelay") && !called(callsD, "publishPlan")
-    && PD.S.publishPlace === false && PD.S.plan === null && PD.S.err === null && PD.S.open.project.folder == null,
-    "ps3d cancelling the picker leaves the edit unpublished and says nothing: publishPlace=" + PD.S.publishPlace
-    + " err=" + PD.S.err + " plan=" + PD.S.plan);
-
-  const callsE = [];
-  const { page: PE } = pageOf(makeApi(callsE, { setFolder: async () => ({ error: "refused" }) }));
-  PE.S.open = mockProject(null);
-  await PE.ACTS.publish();
-  let threw = null;
-  try { await PE.ACTS["settings-folder"](); } catch (e) { threw = (e && e.message) || String(e); }
-  check(!threw && called(callsE, "pickFolder") && !called(callsE, "publishPlan") && PE.S.publishPlace === false
-    && PE.S.plan === null && !!PE.S.err && PE.S.open.project.folder == null,
-    "ps3e a refused folder is said and not published: publishPlace=" + PE.S.publishPlace + " err=" + PE.S.err
-    + " threw=" + threw);
-};
-
-/* ps4. A project already on a real folder is offered the relay like any other (the owner, 2026-11-17 19:02: folder teams are removed).
-   It was: the choice defaulted to that folder and sealed there. Re-aimed 2026-11-20. */
-LEGS.ps4 = async () => {
-  const callsA = [];
-  const { page: PA, node: nodeA } = pageOf(makeApi(callsA, { desks: async () => noTeam(null) }));
-  PA.landOn(mockProject(REAL));
-  check(PA.S.teamWhere === "relay",
-    "ps4a landing on a real folder no longer defaults the team choice to that folder: " + PA.S.teamWhere);
-  PA.S.screen = "projects";
-  PA.S.home = "team";
-  PA.S.teamDir = PA.S.open.dir;
-  await PA.desksLoad();
-  PA.ACTS["team-seal"](vOf("sealed"));
-  const dlgA = nodeA("#dlg").innerHTML;
-  const relayOn = dlgA.indexOf('aria-checked="true" data-act="team-where" data-v="relay"') >= 0;
-  const noFolderOffer = dlgA.indexOf('data-v="folder"') < 0 && dlgA.indexOf("Choose the folder your team reads from") < 0
-    && dlgA.indexOf("Seal what this folder is given") < 0;
-  check(PA.S.teamWhere === "relay" && relayOn && noFolderOffer,
-    "ps4b the Desks cover on a real folder offers the relay and no folder: where=" + PA.S.teamWhere
-    + " relayOn=" + relayOn + " noFolderOffer=" + noFolderOffer);
-  await PA.ACTS["do-team-seal"]();
-  check(called(callsA, "teamRelay") && !called(callsA, "teamSealed") && !called(callsA, "pickFolder"),
-    "ps4c the press makes the relay team and seals nothing in the folder: sealed=" + called(callsA, "teamSealed")
-    + " relay=" + called(callsA, "teamRelay") + " pick=" + called(callsA, "pickFolder"));
-
-  const { page: PE } = pageOf(makeApi([], { desks: async () => noTeam(null) }));
-  PE.landOn(mockProject(MIRROR));
-  check(PE.S.teamWhere === "relay",
-    "ps4e a relay mirror is not a real folder, and the choice is the relay: " + PE.S.teamWhere);
-
-  const callsH = [];
-  const { page: PH } = pageOf(makeApi(callsH, { desks: async () => noTeam(REAL) }));
-  PH.S.open = mockProject(null);
-  PH.S.desks = noTeam(REAL);
-  await PH.ACTS.publish();
-  check(PH.S.cover === "team" && PH.S.teamWhere === "relay" && PH.S.publishPlace === true,
-    "ps4h Publish on an empty project folder, with a real Desks folder, offers the relay: where=" + PH.S.teamWhere);
-  await PH.ACTS["do-team-seal"]();
-  check(called(callsH, "teamRelay") && !called(callsH, "teamSealed") && !called(callsH, "pickFolder")
-    && called(callsH, "publishPlan") && PH.S.publishPlace === false && PH.S.cover === "publish" && PH.S.plan !== null,
-    "ps4h the relay answer continues into Publish: relay=" + called(callsH, "teamRelay") + " sealed="
-    + called(callsH, "teamSealed") + " plan=" + called(callsH, "publishPlan") + " cover=" + PH.S.cover
-    + " publishPlace=" + PH.S.publishPlace);
-
-  /* A team already held at that folder, the project's own folder not yet set: the cover seals it and Publish continues. */
-  const callsI = [];
-  const held = () => ({ folder: REAL, signing: "test-key", file: "ours", inside: false, team: { id: "t-held", sealed: false, roster: [] },
-    requests: [], canKeep: true, mark: null, restorable: null });
-  const { page: PI } = pageOf(makeApi(callsI, { desks: async () => held() }));
-  PI.S.open = mockProject(null);
-  PI.S.desks = held();
-  await PI.ACTS.publish();
-  await PI.ACTS["do-team-seal"]();
-  check(PI.S.cover === "publish" && PI.S.publishPlace === false && PI.S.plan !== null && called(callsI, "teamSealed")
-    && !called(callsI, "teamRelay") && PI.S.open.project.folder === REAL,
-    "ps4i a team already held at a folder is sealed there and Publish continues: cover=" + PI.S.cover
-    + " publishPlace=" + PI.S.publishPlace + " sealed=" + called(callsI, "teamSealed") + " folder=" + PI.S.open.project.folder);
-};
-
-/* ps6. A project switch drops the flag, so the next project's folder pick does not publish. */
-LEGS.ps6 = async () => {
-  const other = mockProject(null);
-  other.dir = "C:/Projects/other-project";
-  other.name = "Other Project";
-  other.project = Object.assign({}, other.project, { id: "p-fedcba9876543210", title: "Other Project" });
-  const calls = [];
-  let page = null;
-  const loaded = pageOf(makeApi(calls, {
-    teamRelay: async () => {
-      page.landOn(other);
-      return { ok: true, signing: { keyId: "test-key" } };
-    },
-  }));
-  page = loaded.page;
-  page.S.open = mockProject(null);
-  await page.ACTS.publish();
-  check(page.S.publishPlace === true && page.S.cover === "team",
-    "ps6 Publish on a project with no place raises the flag: publishPlace=" + page.S.publishPlace
-    + " cover=" + page.S.cover);
-  await page.ACTS["do-team-seal"]();
-  check(page.S.open.dir === other.dir && page.S.publishPlace === false && page.S.cover !== "publish"
-    && !called(calls, "publishPlan"),
-    "ps6 switching project while the relay call is pending clears the flag and does not publish: dir="
-    + page.S.open.dir + " publishPlace=" + page.S.publishPlace + " cover=" + page.S.cover
-    + " plan=" + called(calls, "publishPlan"));
-  await page.ACTS["settings-folder"]();
-  check(called(calls, "setFolder") && !called(calls, "publishPlan") && page.S.cover !== "publish"
-    && page.S.publishPlace === false,
-    "ps6 a later folder pick in the other project does not open Publish: set=" + called(calls, "setFolder")
-    + " plan=" + called(calls, "publishPlan") + " cover=" + page.S.cover
-    + " publishPlace=" + page.S.publishPlace);
+  const plMain = pl.node("#main").innerHTML;
+  check(plMain.indexOf("Ten katalog nie należy do żadnego zespołu") >= 0 && /Utwórz zespół/.test(plMain) && plMain.indexOf("folder") < 0,
+    "ps2 the page is Polish, and offers no folder");
 };
 
 /* ps5. The tour's Publish step has its target once the main button is Publish: the action button, #discPublish. */
@@ -333,95 +177,6 @@ LEGS.ps5 = async () => {
   const target = step ? step.sel() : null;
   check(target !== null,
     "ps5 the tour's Publish step finds its target on a project with no place: " + (target ? "found" : "null"));
-};
-
-/* fd4. IN EVALUATION THE RELAY'S COVER OFFERS SIGNING IN (Argon's first-day review, F4; the test architect's condition, 2026-11-01
-   01:19: "In evaluation, Start a team on the relay offers the trial that makes the key and the grant, instead of two refusals one
-   after the other."; a first sign-in starts the trial since board 980, stage 4). The licence read is the shell's studio:licence. */
-const EVAL = { licence: { status: "none", paused: false }, grant: null, hasKey: false, relayTeams: [] };
-const HELD = { licence: { status: "active", paused: false }, grant: { until: "2026-12-01", paid: true }, hasKey: true, relayTeams: [] };
-function trialApi(calls, lic, o) {
-  const extra = o || {};
-  let took = false;
-  return makeApi(calls, Object.assign({
-    desks: async () => (took ? { folder: MIRROR, signing: "test-key", file: "ours", inside: false, team: { id: "t-relay", sealed: true, roster: [] }, requests: [], canKeep: true, mark: null, restorable: null }
-      : noTeam(null)),
-    teamRelay: async () => { took = true; return { ok: true }; },
-  }, extra), {
-    licence: async () => { calls.push(["licence"]); return JSON.parse(JSON.stringify(lic)); },
-  });
-}
-/* The page over trialApi with the providers the shell offers at boot (S.host.signIn); none where `offered` is false. */
-function trialPage(calls, lic, lang, offered) {
-  const loaded = pageOf(trialApi(calls, lic), lang);
-  if (offered !== false) loaded.page.S.host.signIn = ["microsoft", "google"];
-  return loaded;
-}
-
-LEGS.fd4a = async () => {
-  const seen = {};
-  for (const lang of ["en", "pl"]) {
-    const calls = [];
-    const { page: P, node } = trialPage(calls, EVAL, lang);
-    P.S.open = mockProject(null);
-    P.S.screen = "projects";
-    P.S.home = "team";
-    P.S.teamDir = P.S.open.dir;
-    P.S.desks = noTeam(null);
-    await P.ACTS["team-seal"](vOf("sealed"));
-    const dlg = node("#dlg").innerHTML, T = P.T;
-    seen[lang] = {
-      noTrialLine: dlg.indexOf("fourteen-day trial") < 0 && dlg.indexOf("czternastodniowy okres próbny") < 0,
-      noDoorOpen: !/data-act="door-open"/.test(dlg),
-      seal: dlg.indexOf('data-act="do-team-seal"') >= 0,
-      noFolderOffer: dlg.indexOf('data-act="team-where" data-v="folder"') < 0,
-    };
-  }
-  const bad = [];
-  for (const l of Object.keys(seen)) for (const k of Object.keys(seen[l])) if (seen[l][k] !== true) bad.push(l + " " + k);
-  check(bad.length === 0,
-    "fd4a team cover no longer offers signing in for a trial (S-3 removed teamTrialWanted): "
-    + (bad.length ? "failing " + JSON.stringify(bad) : "every part holds"));
-};
-
-LEGS.fd4b = async () => {
-  const calls = [];
-  const { page: P } = trialPage(calls, EVAL);
-  P.S.open = mockProject(null);
-  P.S.screen = "projects";
-  P.S.home = "team";
-  P.S.teamDir = P.S.open.dir;
-  P.S.desks = noTeam(null);
-  await P.ACTS["team-seal"](vOf("sealed"));
-  await P.ACTS["door-open"]();
-  const asked = calls.map((c) => c[0]).filter((c) => c !== "licence" && c !== "desks" && c !== "teams");
-  check(P.S.cover === null && P.S.signDoor === "open" && !called(calls, "teamRelay"),
-    "fd4b Sign in closes the team cover and opens the door, starting no team: cover=" + P.S.cover + " door=" + P.S.signDoor
-    + " asked=" + JSON.stringify(asked));
-};
-
-/* ps7. The first Publish cover once said what a shared folder costs, under Where the team meets, on both segments (Claudette,
-   2026-11-10). The folder is gone (the owner, 2026-11-17 19:02), so the line is gone: the relay stays the default with its press,
-   in both languages, and the cover says nothing of a folder's cost. Re-aimed 2026-11-20. */
-const FOLDER_COST = "A shared folder needs no licence and no email: each publish writes the edition into it as a file, and any folder on this computer will do.";
-LEGS.ps7 = async () => {
-  const seen = {};
-  for (const lang of ["en", "pl"]) {
-    const { page: P, node } = trialPage([], EVAL, lang);
-    P.S.open = mockProject(null);
-    await P.ACTS.publish();
-    const relay = node("#dlg").innerHTML;
-    seen[lang] = {
-      noCost: relay.indexOf(P.T(FOLDER_COST)) < 0 && relay.indexOf("data-folder-cost") < 0,
-      relayDefault: relay.indexOf('aria-checked="true" data-act="team-where" data-v="relay"') >= 0,
-      relayPress: /data-act="do-team-seal"/.test(relay),
-    };
-  }
-  const bad = [];
-  for (const l of Object.keys(seen)) for (const k of Object.keys(seen[l])) if (seen[l][k] !== true) bad.push(l + " " + k);
-  check(bad.length === 0,
-    "ps7 the first Publish cover says nothing of a shared folder's cost, and the relay stays the default with its press, in both languages: "
-    + (bad.length ? "failing " + JSON.stringify(bad) : "every part holds"));
 };
 
 /* nf1. THE OWNER'S RULING OF 2026-11-17 19:02 ("Agreed, let's remove it."): no screen offers to make a team that meets in a shared
@@ -448,56 +203,6 @@ LEGS.nf1 = async () => {
     + (bad.length ? "failing " + JSON.stringify(bad) : "every part holds"));
 };
 
-/* nf2. The first-team cover offers the relay alone (and a team this Studio leads where one is held): no folder segment, no cost
-   line, and a forced "folder" answer, or a project that already sits on a real folder, still ends on the relay. */
-LEGS.nf2 = async () => {
-  const seen = {};
-  for (const lang of ["en", "pl"]) {
-    const { page: P, node } = pageOf(makeApi([]), lang);
-    P.S.open = mockProject(null);
-    await P.ACTS.publish();
-    const dlg = node("#dlg").innerHTML;
-    const said = P.T("A shared folder needs no licence and no email: each publish writes the edition into it as a file, and any folder on this computer will do.");
-    await P.ACTS["team-where"](vOf("folder"));
-    const forced = node("#dlg").innerHTML;
-    seen[lang] = {
-      noSegment: dlg.indexOf('data-v="folder"') < 0 && dlg.indexOf(P.T("a shared folder")) < 0,
-      noCost: dlg.indexOf("data-folder-cost") < 0 && dlg.indexOf(said) < 0,
-      relayOn: dlg.indexOf('aria-checked="true" data-act="team-where" data-v="relay"') >= 0,
-      forcedStays: P.S.teamWhere === "relay" && forced.indexOf('aria-checked="true" data-act="team-where" data-v="relay"') >= 0
-        && forced.indexOf("data-folder-cost") < 0,
-    };
-  }
-  const callsF = [];
-  const { page: PF } = pageOf(makeApi(callsF));
-  PF.S.open = mockProject(null);
-  PF.S.desks = noTeam(null);
-  PF.ACTS["team-seal"](vOf("sealed"));
-  PF.S.teamWhere = "folder";            /* forced, as no click can now do */
-  await PF.ACTS["do-team-seal"]();
-  seen.forced = { relayPress: called(callsF, "teamRelay") && !called(callsF, "teamSealed") && !called(callsF, "pickFolder") };
-  const callsG = [];
-  const { page: PG } = pageOf(makeApi(callsG, { desks: async () => noTeam(REAL) }));
-  PG.landOn(mockProject(REAL));
-  seen.real = { relayDefault: PG.S.teamWhere === "relay" };
-  const bad = [];
-  for (const l of Object.keys(seen)) for (const k of Object.keys(seen[l])) if (seen[l][k] !== true) bad.push(l + " " + k);
-  check(bad.length === 0,
-    "nf2 the first-team cover offers no shared folder: no segment, no cost line, a forced folder answer ends on the relay, and a real folder"
-    + " does not default to it: " + (bad.length ? "failing " + JSON.stringify(bad) : "every part holds"));
-};
-
-LEGS.fd4c = async () => {
-  const calls = [];
-  const { page: P, node } = trialPage(calls, EVAL);
-  P.S.open = mockProject(null);
-  await P.ACTS.publish();
-  const dlg = node("#dlg").innerHTML;
-  check(P.S.cover === "team" && P.S.publishPlace === true && dlg.indexOf('data-act="do-team-seal"') >= 0
-    && !/data-act="door-open"/.test(dlg),
-    "fd4c Publish on a project with no place opens the place choice with Seal (no trial offer): cover=" + P.S.cover);
-};
-
 const PLANTS = [
   {
     mark: "u1-publish-btn", leg: "ps1",
@@ -508,21 +213,7 @@ const PLANTS = [
     line: '    discBtn($("#discPublish"), I("folder"), T("Choose the folder your team reads from"), true);',
   },
   { mark: "u1-publish-place", leg: "ps2", line: "      if (false) {" },
-  { mark: "u1-relay-publish", leg: "ps3", line: "      await Promise.resolve();" },
-  { mark: "u1-folder-publish", leg: "ps3", line: "        await Promise.resolve();" },
-  { mark: "u1-pick-cancel", leg: "ps3", line: "        if (false) S.publishPlace = false;" },
-  {
-    mark: "u1-set-fail", leg: "ps3",
-    line: '      if (!set || set.error) { if (false) S.publishPlace = false; S.err = errOf(set); paintMain(); return; }',
-  },
-  { mark: "u1-place-clear", leg: "ps4", line: "        if (false) S.publishPlace = false;" },
-  { mark: "u1-seal-publish", leg: "ps4", line: "        await Promise.resolve();" },
-  { mark: "u1-open-clear", leg: "ps6", line: "    if (false) S.publishPlace = false;" },
   { mark: "nf-chans", leg: "nf1", line: '    const chans = [[58, "sync", T("The relay"), T("teammates join by invitation")], [154, "folder", T("A shared folder"), T("teammates share one folder")]];' },
-  { mark: "nf-seg", leg: "nf2", line: "      + '<div class=\"row2\">' + seg(\"team-where\", [[\"relay\", relayName()], [\"folder\", T(\"a shared folder\")]]" },
-  { mark: "nf-handler", leg: "nf2", line: '      S.teamWhere = v === "folder" ? "folder" : v === "team" && chooseTeams().length ? "team" : "relay"; S.err = null; paintCover();' },
-  { mark: "rs926-route", leg: "nf2", line: "      if (false) return teamOnRelay(dir);" },
-  { mark: "nf-default", leg: "ps2", line: '        S.teamWhere = "folder";' },
 ];
 
 /* fd4's plants retired with teamTrialWanted in S-3. */
