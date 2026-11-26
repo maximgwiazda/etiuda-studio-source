@@ -362,12 +362,15 @@ async function main(argv) {
   const rTID = "t-" + crypto.randomBytes(8).toString("hex"), rRT = crypto.randomBytes(16).toString("hex");
   const relayProj = (await S.newProject(HOME, "Policy relay project", ["en"])).dir;
   const rMirror = path.join(SCRATCH, "relay-mirror", rRT);
-  /* MOVED 2026-11-26 with the folder remnants' retirement. Was: startRelayTeam(relayProj, ...) made the team and took the catalog in one call. Now: the team is made on its own
-     and the catalog joins it by chooseTeam. */
-  const rTeamKeys = { [rTID]: { 1: crypto.randomBytes(32) } };
-  const rBase = { key: keyAt, passphrase: secret, teamId: rTID, rt: rRT, teamKeys: rTeamKeys };
-  await S.startRelayTeam(null, Object.assign({}, rBase, { mirror: rMirror, url: "https://relay.etiuda.test/relay/v1" }));
-  await S.chooseTeam(relayProj, Object.assign({}, rBase, { folder: rMirror, work: rMirror, relay: { rt: rRT, url: "https://relay.etiuda.test/relay/v1" }, elsewhere: [] }));
+  await S.startRelayTeam(relayProj, {
+    key: keyAt,
+    passphrase: secret,
+    teamId: rTID,
+    mirror: rMirror,
+    rt: rRT,
+    url: "https://relay.etiuda.test/relay/v1",
+    teamKeys: { [rTID]: { 1: crypto.randomBytes(32) } },
+  });
   const OUT_RELAY = path.join(SCRATCH, "for IT relay");
   /* sp2i stands aside off Windows (Claude gamma's Linux sweep, 2026-11-14): it holds the Group Policy template and registry lines
      Studio gives the IT department for a relay team, which only a Windows desk reads; off Windows the desk reads no policy

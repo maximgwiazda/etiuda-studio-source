@@ -28,7 +28,8 @@
  *      this team lists only the library's catalogs with no team and sends the one pressed; a Plain team offers none (board 962
  *      stage 5, T5)
  *  974s4  a version read without the box is blank, and the first call that has the passphrase reads it again (board 974, security 4)
- *  974m4  the card says inviting and letting in teammates needs a catalog, and a lead can end an empty team, freeing its slot.
+ *  974m4  the card no longer says inviting and letting in teammates needs a catalog (the ruling of 2026-11-26 07:21: an invitation belongs to the
+ *      team; the old sentence is gone in both languages, tests/team-on-its-own.mjs tib3 holds the press), and a lead can end an empty team, freeing its slot.
  *      A team with a teammate or a catalog draws no End. An empty team's End leaves the key backup holding the team's key.
  *  974e1  a team with one live invitation draws no End, and the same team once that invitation is spent or cancelled draws it.
  *  974m8  a lead holding a linked copy is shown it, and a catalog with no copy still offers to make one
@@ -1991,7 +1992,7 @@ async function main(argv) {
   });
 
   /* BOARD 974, MATURITY 4. The share's team file is left where it is: ending frees this Studio's slot. */
-  await leg("974m4 the card says inviting and letting in teammates needs a catalog, and a lead can end the team", async () => {
+  await leg("974m4 the card no longer says inviting and letting in teammates needs a catalog, and a lead can end the team", async () => {
     const TID = "t-00000000000000e4", PID = "t-00000000000000e5";
     const empty = { id: TID, connection: "relay", folder: "", relay: { rt: "0123456789abcdef0123456789abcdef", url: "https://etiuda.dev" }, sealed: true, led: true, leadPrint: "eeee111122223333",
       catalogs: [], project: null, projects: [], teammates: [], count: 0 };
@@ -2016,14 +2017,16 @@ async function main(argv) {
     P.page.S.teamTab = 1; P.page.paintTeams();
     const rowP = P.node("#main").innerHTML;
     P.page.S.teamTab = 0; P.page.paintTeams();
-    const said = /Invite a teammate is offered here once the team holds a catalog, so an empty team starts with Add a catalog to this team\./.test(rowE) && !/Invite a teammate is offered here/.test(rowP);
+    /* Old sentence beside new: the empty team's card said "Invite a teammate is offered here once the team holds a catalog, so an empty team starts with
+       Add a catalog to this team."; it says nothing of the kind now, on the empty team's card or the plain one's. */
+    const said = rowE.length > 0 && !/Invite a teammate is offered here/.test(rowE) && !/Invite a teammate is offered here/.test(rowP);
     const btn = new RegExp('data-act="team-end" data-team="' + TID + '"').test(rowE) && !/data-act="team-end"/.test(rowP);
     const act = P.page.ACTS["team-end"];
     if (typeof act === "function") await act({ getAttribute: (k) => (k === "data-team" ? TID : null) });
     const after = P.node("#main").innerHTML;
     const freed = ended.length === 1 && ended[0] === TID && after.indexOf(TID) < 0 && after.indexOf(PID) >= 0;
     const rowEp = paint("pl", 0).node("#main").innerHTML;
-    const pl = /Przycisk Zaproś członka zespołu pojawia się tutaj, gdy zespół ma katalog, więc pusty zespół zaczyna od przycisku Dodaj katalog do tego zespołu\./.test(rowEp)
+    const pl = !/Przycisk Zaproś członka zespołu pojawia się tutaj/.test(rowEp)
       && /Zakończ ten zespół/.test(rowEp);
     const Store = await import("../src/team-store.mjs");
     const Studio = await import("../src/studio.mjs");

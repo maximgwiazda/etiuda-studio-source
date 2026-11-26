@@ -465,6 +465,25 @@ function projectDir(dir) {
   }
   return home;
 }
+/* A TEAM WITH NO CATALOG IS NAMED BY ITS OWN ID, where a catalog is named by its folder (the ruling of 2026-11-26 07:21: an invitation belongs
+   to the team, not to a catalog). A page's string is NEVER a path here until projectDir has confined it: the id is read from what projectDir
+   answered (a name directly under the projects root), and the mirror is looked up in this Studio's teams file by that id, never taken from the
+   page. `home` is that answer. A folder holding a catalog stays a catalog; an id that is no relay team of this Studio's names nothing, and the
+   catalog path then refuses it as it always did. */
+const TEAM_PLACE = /^t-[0-9a-f]{16}$/;
+async function teamPlaceOf(home) {
+  const id = path.basename(String(home == null ? "" : home));
+  if (!TEAM_PLACE.test(id)) return null; /* plant:tib-place-shape */
+  try { if (fs.existsSync(path.join(String(home), "project.json"))) return null; } catch { /* unreadable: a catalog's place is not this */ }
+  const row = (await teamStore()).relayTeams(await teamsAt()).find((w) => w.team === id);
+  return row && row.folder ? { team: id, folder: row.folder } : null;
+}
+/** What a handler of the invitation verbs works from, given `home`, the answer of projectDir: `place` (that answer), `thread` (what the
+ *  thread is handed, the mirror for a team and the folder for a catalog) and `here(o)`, withHere that names the mirror for a team. */
+async function placeFor(home) {
+  const tp = await teamPlaceOf(home);
+  return { place: home, thread: tp ? tp.folder : home, here: (o) => withHere(Object.assign(tp ? { atFolder: tp.folder } : {}, o || {})) };
+}
 /* The same rule, for a handler that answers quietly when the directory is not one it may read. */
 function projectPlace(dir) {
   try { return projectDir(dir); } catch { return null; }
@@ -2872,11 +2891,21 @@ async function invitesNow(team, kept, facts) {
    asking read against this Studio's book. */
 async function desksNow(dir) {
   const project = projectDir(dir);
+  const tp = await teamPlaceOf(project);
+  if (tp) return desksAtTeam(tp);
   /* The secret opens the lead's box for one read, so each desk's version is read from its own statistics answer (point 5). */
   const facts = await withKept(await thread.call("teamFacts", project, withHere({ key: await keyFileNow(), invites: await inviteBook(),
     passphrase: await keySecret("open") }))); /* plant:p5-desks-secret */
   if (facts && facts.folder && facts.file === "ours" && facts.team && facts.team.relay === true) await armUseWatch(facts.folder); /* a team held for a shared folder is not watched */
   return withUses(project, facts);
+}
+/* A TEAM WITH NO CATALOG, as the Desks screen reads it: the team file at the mirror under this Studio's key, with its invitations and the
+   desks asking read against the book. No catalog is read, so none is in use. */
+async function desksAtTeam(tp) {
+  const facts = await withKept(await thread.call("teamFacts", tp.folder, withHere({ atFolder: tp.folder, key: await keyFileNow(), invites: await inviteBook(), /* plant:tib-desks-folder */
+    passphrase: await keySecret("open") })));
+  if (facts && facts.folder && facts.file === "ours" && facts.team && facts.team.relay === true) await armUseWatch(facts.folder);
+  return (await catalogUse()).attachUses(facts || {}, []);
 }
 /* Whether this computer holds a grant the relay will take for the key it has now: "holds", or the reason it does not
    (src/relay.mjs grantRefusal, the same judge studio:team-new uses). */
@@ -2973,13 +3002,14 @@ async function withReinvite(facts) {
 }
 answer("studio:desks", async (e, dir) => guard(async () => withLapse(await desksFor(projectDir(dir)))));
 async function desksFor(project) {
-  await bringBack(project);
+  const ofTeam = !!(await teamPlaceOf(projectDir(project)));
+  if (!ofTeam) await bringBack(project); /* a team with no catalog has no project to bring back */
   const facts = await desksNow(project);
   /* THE SIGNING KEY TO BE RESTORED HERE (Claude alpha's ruling of 2026-11-23 00:37, the restore route of 04:41): a project sealed to a
      relay team, on a computer whose signing key does not open (its backup copy put in the key's place, not restored), follows the
      team only once the key is restored; the restore asks the backup's passphrase that one time, and the catch-up then runs by itself.
      The Desks screen says so. */
-  if (facts && await keyToRestoreFor(project)) facts.keyToRestore = true; /* plant:rmo-key-restore */
+  if (facts && !ofTeam && await keyToRestoreFor(project)) facts.keyToRestore = true; /* plant:rmo-key-restore */
   /* A REQUEST THAT PROVES A LIVE INVITATION IS LET IN WHEN STUDIO NEXT SEES IT (Claude alpha's ruling of 2026-10-13 11:30),
      and the screen's read is a sight of it: where one is asking, the watch looks at this folder now, and the screen is read
      again after it. */
@@ -3390,7 +3420,8 @@ answer("studio:invite-make", async (e, dir, name, person) => guard(async () => {
   if (tm.count >= K.MAX_TEAMMATES) {
     throw (await refusal()).refuse(K.REFUSAL_TEAMMATES_LIMIT);
   }
-  const target = Object.assign(await thread.call("inviteTarget", projectDir(dir), await keyFileNow(), withHere()), { signin: await signinHintNow() });
+  const P = await placeFor(projectDir(dir)); /* after the refusals above, as projectDir was reached after them (tests/team-limits.mjs tl-moved-key-floor) */ /* plant:tib-confine-make */
+  const target = Object.assign(await thread.call("inviteTarget", P.thread, await keyFileNow(), P.here()), { signin: await signinHintNow() }); /* plant:tib-make-at */
   const I = await inviteLib();
   /* ON THE RELAY (board 900) the invitation names the relay team and its address in place of the folder, with a token the
      relay is told the sha256 of and the relay's id for it; the team file's copy for it is sealed under a key made from its
@@ -3405,13 +3436,14 @@ answer("studio:invite-make", async (e, dir, name, person) => guard(async () => {
   await publishLead(target.team, target.folder);
   clipboard.writeText(I.clipText(made));
   relaySync();
-  return Object.assign(await desksNow(projectDir(dir)), { invited: made.id });
+  return Object.assign(await desksNow(P.place), { invited: made.id });
 }));
 /* A live invitation again, from its sealed secret, to the clipboard: the https link for a team on the relay, or the etiuda-join:
    text where `form` is "text". Any other value is the default. The reply says which form was
    put there, so the page's note can say it. */
 answer("studio:invite-copy", async (e, dir, id, form) => guard(async () => {
-  const target = Object.assign(await thread.call("inviteTarget", projectDir(dir), await keyFileNow(), withHere()), { signin: await signinHintNow() });
+  const P = await placeFor(projectDir(dir));
+  const target = Object.assign(await thread.call("inviteTarget", P.thread, await keyFileNow(), P.here()), { signin: await signinHintNow() });
   const I = await inviteLib(), K = await teamStore(), at = await teamsAt(), want = String(id || "");
   const rec = K.invitesOf(at, target.team).find((i) => i.id === want), secret = K.inviteSecretOf(at, vault, target.team, want);
   if (!rec || rec.state !== "live" || !secret) throw (await refusal()).refuse("This invitation has ended, so it was not copied.");
@@ -3422,7 +3454,7 @@ answer("studio:invite-copy", async (e, dir, id, form) => guard(async () => {
   const made = I.makeInvite(target, rec.name, secret, rec.made, undefined,
     onRelay ? { rt: kept.relay.rt, url: kept.relay.url, token: onRelay.token, inv: onRelay.inv } : undefined);
   clipboard.writeText(I.clipText(made, copyAs));
-  return Object.assign(await desksNow(projectDir(dir)), { copied: want, as: I.clipForm(made, copyAs) });
+  return Object.assign(await desksNow(P.place), { copied: want, as: I.clipForm(made, copyAs) });
 }));
 /* THE DESKS LINE MOVES THE TEAM TO A NEW KEY and cancels nothing. A spent invitation stays spent. The move is the one a
    cancel's confirm runs: the next key is kept first, then the thread moves the share. The refused attempt leaves the
@@ -3473,8 +3505,8 @@ answer("studio:tried-dismiss", async (e, dir, id, desk) => guard(async () => {
    back from before the cancel would hold the invitation live again under a team at the next epoch, and the next sync would
    seal the new key to the very device the lead cancelled (the read of 227e3ec, E1). */
 answer("studio:invite-cancel", async (e, dir, id, confirm) => guard(async () => {
-  const project = projectDir(dir);
-  const target = await thread.call("inviteTarget", project, await keyFileNow(), withHere());
+  const P = await placeFor(projectDir(dir)), project = P.place;
+  const target = await thread.call("inviteTarget", P.thread, await keyFileNow(), P.here());
   const at = await teamsAt(), K = await teamStore(), want = String(id || "");
   const rec = K.relayInvitesOf(at, vault, target.team).find((i) => i.id === want);
   if (!rec) throw (await refusal()).refuse("This invitation has ended, so it was not cancelled.");
@@ -3518,7 +3550,7 @@ answer("studio:invite-cancel", async (e, dir, id, confirm) => guard(async () => 
   let nextKey = null, cur = 0;
   if (moving) {
     await teamAct(target.team, async () => {
-      const facts = await thread.call("teamFacts", project, withHere({ key: await keyFileNow() }));
+      const facts = await thread.call("teamFacts", P.thread, P.here({ key: await keyFileNow() }));
       cur = facts && facts.team && facts.team.id === target.team && Number.isInteger(facts.team.epoch) ? facts.team.epoch : 0;
       if (cur >= 1) {
         const held = (K.teamKeysOf(at, vault)[target.team] || {})[cur + 1];
@@ -3528,9 +3560,9 @@ answer("studio:invite-cancel", async (e, dir, id, confirm) => guard(async () => 
           K.keepTeamKey(at, vault, target.team, cur + 1, nextKey);
         }
       }
-      const ask = withHere({ confirm: true, teamKeys: (await teamsNow()).teamKeys, invites: await inviteBook(), teamsFile: at });
+      const ask = P.here({ confirm: true, teamKeys: (await teamsNow()).teamKeys, invites: await inviteBook(), teamsFile: at });
       if (nextKey) { ask.nextKey = nextKey; ask.nextEpoch = cur + 1; }
-      const moved = await thread.call("moveTeamKey", project, await keyFileNow(), target.team, await keySecret(), ask);
+      const moved = await thread.call("moveTeamKey", P.thread, await keyFileNow(), target.team, await keySecret(), ask);
       let fresh = null;
       if (moved && moved.teamKey) { fresh = Buffer.from(moved.teamKey); delete moved.teamKey; }
       if (fresh && moved && moved.team) K.keepTeamKey(at, vault, moved.team.id, moved.team.epoch, fresh);
@@ -6282,6 +6314,8 @@ async function serviceDoorsSet(doors) {
  *  the page names, and the refusal comes before the read. */
 async function teamIdOf(project) {
   const home = projectDir(project); /* plant:txic-people */
+  const tp = await teamPlaceOf(home); /* a team with no catalog is named by its own id */
+  if (tp) return tp.team;
   const facts = await thread.call("teamFacts", home, withHere({ key: await keyFileNow() }));
   return facts && facts.team && typeof facts.team.id === "string" ? facts.team.id : "";
 }

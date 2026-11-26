@@ -1763,6 +1763,9 @@
      studio:team-choose requires; the reader says both. The cover's third choice lists these teams, and the Teams screen offers them
      this library's catalogs with no team. */
   const teamTakes = (t) => !!t && !t.unreadable && t.sealed === true && t.led === true;
+  /* A TEAM WITH NO CATALOG that this Studio leads is its own place: invited to, and read, by its id, where a catalog's place is its folder
+     (the ruling of 2026-11-26 07:21: an invitation belongs to the team, not to a catalog). */
+  const teamBare = (t) => teamTakes(t) && !t.held && !!t.relay && !teamProjects(t).length; /* plant:tib-bare */
   const chooseTeams = () => (S.teams || []).filter(teamTakes); /* plant:t5-only-led */
   /* END IS OFFERED ONLY WHERE IT STRANDS NOBODY (board 974, H1). A catalog, or a teammate besides this Studio, would be
      left with a lead who can no longer publish, remove a desk or move the key. This Studio is the lead and is not a
@@ -2316,7 +2319,7 @@
       const ps = teamProjects(t).filter((x) => x && x.dir);
       if (S.teamDir && ps.some((x) => samePath(x.dir, S.teamDir))) return S.teamDir;
       if (S.open && ps.some((x) => samePath(x.dir, S.open.dir))) return S.open.dir;
-      return ps[0] ? ps[0].dir : "";
+      return ps[0] ? ps[0].dir : teamBare(t) ? t.id : ""; /* plant:tib-place-dir */
     }
     if (S.teamDir) return S.teamDir;
     if (S.desks && S.open && S.open.dir && !S.desksLoadedFor) return S.open.dir;
@@ -2398,10 +2401,6 @@
   function teamSummaryHtml(t) {
     const connDesc = T("Relay: {DOMAIN} (team {ID})", { DOMAIN: (t.relay && t.relay.url) || "etiuda.dev", ID: (t.relay && t.relay.rt) || t.id });
     const lead = t.leadPrint ? T("Signing key's print: {PRINT}", { PRINT: t.leadPrint }) : "";
-    const takes = teamTakes(t);
-    const managed = takes && (!t.catalogs || !t.catalogs.length)
-      ? '<p class="dim">' + esc(T("Invite a teammate is offered here once the team holds a catalog, so an empty team starts with Add a catalog to this team.")) + "</p>"
-      : "";
     const rows = (t.teammates || []).map((m) => {
       let catDesc = "-";
       if (m.catalog) {
@@ -2433,7 +2432,7 @@
       + "<h3>" + esc(teamName(t)) + ' <span class="dim">(' + (t.teammates ? t.teammates.length : 0) + " / 30)</span></h3>"
       + "</div>"
       + '<div class="dim" style="font-size:13px;margin-bottom:10px">' + esc(connDesc) + (lead ? " · " + esc(lead) : "") + "</div>"
-      + managed + table + "</div>";
+      + table + "</div>";
   }
 
   function paintTeams() {
@@ -2461,7 +2460,10 @@
         : "";
       const strip = !S.teamPickDir ? teamsTabsHtml(teams, "team-strip") : "";
       const desksMatch = !!S.desks && (dir ? (!S.desksLoadedFor || samePath(S.desksLoadedFor, dir)) : (!curTeam && !S.desksLoadedFor));
+      const bare = !!curTeam && teamBare(curTeam) && desksMatch && !!S.desks.team && S.desks.team.id === curTeam.id;
       const inner = curTeam && curTeam.held ? heldFolderHtml(curTeam) /* plant:fh-held-team */
+        : bare
+        ? '<div class="teams-screen">' + teamSummaryHtml(curTeam) + desksBodyHtml(S.desks, dir, "", true) + teamReceivesHtml(curTeam) + "</div>" /* plant:tib-bare-page */
         : desksMatch
         ? desksBodyHtml(S.desks, dir, curTeam ? teamReceivesHtml(curTeam) : "")
         : (curTeam ? '<div class="teams-screen">' + teamSummaryHtml(curTeam) + teamReceivesHtml(curTeam) + "</div>" : "");
@@ -11884,7 +11886,7 @@
 
   /* `above` is What the team receives: it stands above the roster and Who can read what you publish where the team has a place, and
      after the page where it has none (it was always last, and was hard to find). */
-  function desksBodyHtml(d, dir, above) {
+  function desksBodyHtml(d, dir, above, bare) {
     if (!d) return "";
     /* A team at a shared folder, found there by the project's own Team screen: held, with one line and no roster (see heldFolderHtml). */
     if (d.team && d.team.relay !== true && !onRelay(d.folder)) /* plant:fh-held-desks */
@@ -12072,6 +12074,12 @@
     const keepWords = needsLicence
       ? T("This Studio holds no licence yet, so it cannot work with the team. Once it is signed in with an account that holds the licence, from the Menu, under Settings, then Account, this computer works with the team as the first one does.") /* plant:h2-licence */
       : T("The key's backup copy brings back the signing key and the team's place on the relay, but not the team's files kept there."); /* plant:s932-lost */
+    /* A TEAM WITH NO CATALOG draws its invitations and nothing else of this page: the rest is a catalog's (what it publishes, its plain
+       copy), or waits on one (the roster's removal, the sharing switch, the key's moves, which name a catalog's folder). */
+    if (bare) { /* plant:tib-bare-body */
+      return '<div class="pane team-invites" data-team-invites="' + esc(d.team ? d.team.id : "") + '"><div class="sc">' + peopleHtml(d, dir) + joining + "</div></div>"
+        + (S.dkNote && S.dkNote.length ? '<p class="lede" style="margin-top:12px">' + S.dkNote.map(esc).join("<br>") + "</p>" : "");
+    }
     const who = '<div class="pane"><h3 class="t">' + esc(T("Who can read what you publish")) + '</h3><div class="sc">'
       + publishing + exporting + sharing + joining
       + kv(T("A plain copy"), last ? '<span class="mono">' + esc(edPlain(projInfo && projInfo.project && projInfo.project.rev, last)) + "</span>"
@@ -12150,7 +12158,7 @@
     /* A handover a restore set going that ended after the restore replied (board 984): its ending, by the press's own flag. */
     if (r.handoverDone) S.handoverDone = r.handoverDone;
     S.desks = r; S.desksLoadedFor = dir; S.err = null;
-    if (API && typeof API.archive === "function" && (!S.open || !samePath(S.open.dir, dir))) {
+    if (API && typeof API.archive === "function" && !/^t-[0-9a-f]{16}$/.test(dir) && (!S.open || !samePath(S.open.dir, dir))) {
       try {
         const ar = await API.archive(dir);
         if (ar && !ar.error && Array.isArray(ar.editions)) {

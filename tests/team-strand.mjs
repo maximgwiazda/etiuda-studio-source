@@ -12,7 +12,7 @@
  *          no Part way off, no Writes to row (was: it read no folder chosen yet), and Publish opens the catalog's Team page (was: the place cover)
  * 974c13b  the same, while a second catalog stays on the team
  * 974c13e  a team act failing after its team file lands leaves no stale Part way off, Moving to or Writes to row
- * 974c12   a project with no editions on a relay team (made on its own, the catalog joined by chooseTeam; was startRelayTeam on the project): the Team section names the first publish
+ * 974c12   startRelayTeam on a project with no editions: the Team section names the first publish
  *          and offers its press
  * 974c12d  an admitted desk whose team lists a catalog with no edition says it waits for the lead's
  *          first edition, and that catalog is not offered as a linked copy
@@ -313,18 +313,17 @@ async function main() {
     const teamId = "t-" + crypto.randomBytes(8).toString("hex");
     const rt = crypto.randomBytes(16).toString("hex");
     const mirror = path.join(SCRATCH, "relay-mirror", rt);
-    /* MOVED 2026-11-26 with the folder remnants' retirement. Was: startRelayTeam(made.dir, ...) made the team and took the catalog in one call. Now: the team is made on its own
-       and the catalog joins it by chooseTeam. */
-    const teamKeys = { [teamId]: { 1: crypto.randomBytes(32) } };
-    await Studio.startRelayTeam(null, { key: keyAt, passphrase: secret, teamId, mirror, rt, url: "https://relay.etiuda.test/relay/v1", teamKeys });
-    await Studio.chooseTeam(made.dir, { key: keyAt, passphrase: secret, teamId, folder: mirror, work: mirror,
-      relay: { rt, url: "https://relay.etiuda.test/relay/v1" }, elsewhere: [], teamKeys });
+    await Studio.startRelayTeam(made.dir, {
+      key: keyAt, passphrase: secret, teamId, mirror, rt,
+      url: "https://relay.etiuda.test/relay/v1",
+      teamKeys: { [teamId]: { 1: crypto.randomBytes(32) } },
+    });
     const open = JSON.parse(JSON.stringify(await Studio.openProject(made.dir)));
     const facts = await Studio.teamFacts(made.dir, { key: keyAt, passphrase: secret });
     check(Array.isArray(open.editions) && open.editions.length === 0,
       "974c12 the project has no edition");
     check(!!facts && facts.file === "ours" && !!facts.team && facts.team.sealed === true,
-      "974c12 the team made on its own and joined by chooseTeam is a sealed team this Studio leads (was: startRelayTeam leaves a sealed team this Studio leads)");
+      "974c12 startRelayTeam leaves a sealed team this Studio leads");
     const home = loadPage({ api: { proposals: async () => ({ proposals: [], inbox: "" }) }, uiLang: "en" });
     Object.assign(home.page.S, {
       open, desks: facts, screen: "projects", home: "team", teamDir: open.dir, host: { tour: { offered: true } },

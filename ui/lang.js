@@ -2727,7 +2727,6 @@
     "The catalog is in the team now, and every teammate receives it.": "Katalog jest już w zespole i trafia do wszystkich jego członków.",
     "The catalog is in the team now, and every teammate receives it with its next published edition.": "Katalog jest już w zespole, a jego członkowie otrzymają go z następnym opublikowanym wydaniem.",
     "Add a catalog to this team": "Dodaj katalog do tego zespołu",
-    "Invite a teammate is offered here once the team holds a catalog, so an empty team starts with Add a catalog to this team.": "Przycisk Zaproś członka zespołu pojawia się tutaj, gdy zespół ma katalog, więc pusty zespół zaczyna od przycisku Dodaj katalog do tego zespołu.",
     "End this team": "Zakończ ten zespół",
     "This Studio does not lead that team, so the team was not ended.": "To Studio nie prowadzi tego zespołu, więc zespół nie został zakończony.",
     "This team still has an invitation that can let a teammate in, so it was not ended. Once the invitation is withdrawn, the team can be ended. Nothing was changed.": "Ten zespół ma wciąż zaproszenie, dzięki któremu może dołączyć nowy członek, więc nie został zakończony. Po wycofaniu zaproszenia zespół można zakończyć. Nic nie zmieniono.",
