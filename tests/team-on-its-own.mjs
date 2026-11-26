@@ -227,7 +227,11 @@ await leg("ton13", async () => {
   const text = fs.readFileSync(path.join(ROOT, "ui", "app.js"), "utf8") + fs.readFileSync(path.join(ROOT, "ui", "lang.js"), "utf8");
   const RETIRED = ["Without a team, editions can also be published to a plain folder", "Choose the folder your team reads from",
     "publishes nowhere until it is given a team or a folder", "Plain: any desk that reads this folder can open it.", "Where the team meets",
-    "Give this folder its catalog files in the clear", "Seal what this folder is given", "Start a new team in this folder"];
+    "Give this folder its catalog files in the clear", "Seal what this folder is given", "Start a new team in this folder",
+    /* the pass over the retired folder mechanics, 2026-11-26: the key the first publish made, the control the folder sentences named, the folder team's own caption */
+    "Publishing makes this Studio's signing key and signs the edition with it", "Studio made its signing key, and signs every edition with it from now on.",
+    "Change folder beside Writes to chooses", "choose the folder the team reads from first", "Publishing needs the folder the team reads from",
+    "The edition is in the team's folder.", "This catalog has a team already, so no other was started."];
   const standing = RETIRED.filter((s) => text.indexOf(s) >= 0);
   /* The control: a sentence that stands is found by the same search. */
   const control = text.indexOf("This studio leads no team yet.".replace("studio", "Studio")) >= 0 && text.indexOf("Make a team") >= 0;

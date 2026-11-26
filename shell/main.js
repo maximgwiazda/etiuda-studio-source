@@ -953,12 +953,10 @@ let verbsRunning = 0;
    2026-11-01): a signing key, a team or the place it meets, or this Studio's licence records. This version reads none of what
    the newer one wrote, so a key or a team made here would stand beside the lead's own and strand the desks; and a key file is a
    file of its own, which the store's refused write does not catch. Each act below is refused in the copywriter's saved-data
-   sentence, the one the page shows (savedNewerNow). The key's backup copy stays open, since it only copies out. A seal is held
-   where it would make a team (studio:team-sealed; the verb under it refuses one at a plain folder now, so the hold meets a refusal in that case), and
-   the first key a publish or a seal makes is held in firstKey. */
+   sentence, the one the page shows (savedNewerNow). The key's backup copy stays open, since it only copies out. */
 const HELD_BY_NEWER = new Set(["studio:key-make", "studio:key-aside", "studio:key-restore-pick", "studio:key-restore",
   "studio:key-remove",
-  "studio:team-relay", "studio:team-new", "studio:team-choose", "studio:team-handover",
+  "studio:team-new", "studio:team-choose", "studio:team-handover",
   "studio:team-leave", "studio:team-move-catalog", "studio:team-let-go",
   "studio:licence-signin", "studio:licence-signout",
   /* Each mints a new epoch key kept in teams.json: under a newer teams.json that write throws, and if the team file with the new
@@ -1045,8 +1043,8 @@ const CLOSED_STOPPED = new Set([
   "studio:desks", "studio:desk-refuse", "studio:invite-make",
   "studio:invite-copy", "studio:tried-dismiss",
   "studio:policy-save", "studio:policy-copy", "studio:catalog-import", "studio:copy-import",
-  "studio:catalog-withdraw", "studio:team-exports", "studio:team-sharing", "studio:team-sealed", "studio:team-choose",
-  "studio:team-leave", "studio:team-move-catalog", "studio:team-let-go", "studio:team-relay", "studio:team-new", "studio:team-handover",
+  "studio:catalog-withdraw", "studio:team-exports", "studio:team-sharing", "studio:team-choose",
+  "studio:team-leave", "studio:team-move-catalog", "studio:team-let-go", "studio:team-new", "studio:team-handover",
   "studio:relay-lapse", "studio:relay-lapse-seen",
   "studio:seat-stay", "studio:people-list", "studio:person-admit",
   /* Board 1017's member invitation: a lead invites an address, withdraws it, and confirms or declines an unvouched Join. */
@@ -1499,41 +1497,16 @@ answer("studio:key-make", async () => guard(async () => {
   writeStore(Object.assign({}, readStore(), { keyMade: { pub: await leadPub(), relay } })); /* plant:h2-keymade */
   return signingNow();
 }));
-/* THE FIRST PUBLISH OR SEAL MAKES THE KEY (the sense pass of 2026-10-14, finding 9; Maxim 2026-10-13 15:51: "Etiuda is meant
-   to empower and enhance, not limit and cage."): until the lead found Settings, editions went out unsigned and every desk was
-   offered each new one as a stranger's. So a Studio with no key file makes its key with nothing asked, by key-make's own act,
-   where nothing at the folder trusts another key: no team file there, no team this Studio kept for it and no seal the project
-   remembers. Where the folder's team trusts a key this computer has not got, nothing is made and the page is given that key's
-   print, so Restore comes first (K8). An unreadable key file is never made over, and a computer that cannot keep a key goes on
-   publishing unsigned. A lead who wants no key at all is Maxim's to rule; a switch for it would be read here. `facts` is the
-   thread's teamFacts for the project. */
-async function firstKey(facts) {
+/* THE KEY THE FOLDER'S TEAM TRUSTS WHEN THIS COMPUTER HAS NONE (K8). Studio no longer makes a key of its own accord at a first publish or a first
+   seal (the pass over the retired folder mechanics, 2026-11-26; it did so where no team file stood at the folder, which only a plain folder was):
+   a team is made on the relay, which asks for a licence held over a key, so the key, made in Settings, is there before any team, and a catalog on no
+   team publishes nowhere. What is left is the other half: a Studio with no key whose team's file names one, where nothing is made and the page is
+   given that key's print, so that Restore comes first. An unreadable key file is never made over. `facts` is the thread's teamFacts for the project.
+   plant:u2-hold-first stood on the hold a newer Studio's data put on the making; the mark stays until the plant guard has a way to retire one. */
+async function keyToRestore(facts) {
   const f = facts && typeof facts === "object" ? facts : {};
-  if (!f.folder || !(await keyNone())) return { make: false, lead: "" };
-  if (await savedNewerNow()) return { make: false, lead: "" }; /* plant:u2-hold-first */
-  if (f.file === "theirs" && /^[0-9a-f]{16}$/.test(String(f.lead || ""))) return { make: false, lead: String(f.lead) };
-  const K = await teamStore();
-  const make = f.file === "none" && !f.mark && !K.teamForFolder(await teamsAt(), f.folder) && vault.available();
-  return { make, lead: "" };
-}
-/* The key made by firstKey's verdict, and remembered as made so: the next publish that lands asks the page for its one nudge
-   towards a backup copy (keyNudgeNow). False where the vault refused at the last moment; the edition then goes out unsigned. */
-async function makeFirstKey() {
-  try { await makeKey(); } catch { return false; }
-  const sign = await signingNow();
-  writeStore(Object.assign({}, readStore(), { keyNudge: sign.keyId }));
-  return true;
-}
-/* Once: true for the first publish that lands after a key was made by itself, while that key has no backup copy, and the mark
-   is then taken off either way. */
-async function keyNudgeNow() {
-  const s = readStore();
-  if (!s.keyNudge) return false;
-  const sign = await signingNow(), due = sign.keyId === s.keyNudge && !sign.backup;
-  const next = Object.assign({}, s);
-  delete next.keyNudge;
-  writeStore(next);
-  return due;
+  if (!f.folder || !(await keyNone())) return "";
+  return f.file === "theirs" && /^[0-9a-f]{16}$/.test(String(f.lead || "")) ? String(f.lead) : "";
 }
 /* THE RELAY TEAMS CARRIED ON THE KEY'S BACKUP COPY (board 932). A row is the team's place as this computer holds it and
    the recovery copy from its team file. The thread seals the rows under the signing key. An address that is not https is
@@ -2906,7 +2879,7 @@ async function desksNow(dir) {
   return withUses(project, facts);
 }
 /* Whether this computer holds a grant the relay will take for the key it has now: "holds", or the reason it does not
-   (src/relay.mjs grantRefusal, the same judge studio:team-relay uses). */
+   (src/relay.mjs grantRefusal, the same judge studio:team-new uses). */
 async function relayLicenceNow() {
   const Rl = await relayLib(), S = await signLib(), key = await keyFileNow();
   let lead = null;
@@ -4481,60 +4454,10 @@ answer("studio:team-sharing", async (e, dir, on) => guard(async () => {
   });
 }));
 
-/* `fresh` starts a new team over one another key leads (K8's cost: every desk asks again), never over this Studio's own. */
-answer("studio:team-sealed", async (e, dir, sealed, fresh) => guard(async () => {
-  const keyToLock = await teamKeyFor(dir);
-  return teamAct(keyToLock, async () => {
-    const K = await teamStore(), at = await teamsAt(), key = await keyFileNow(), on = sealed === true;
-    let facts = await thread.call("teamFacts", projectDir(dir), withHere({ key }));
-    if (!on && facts && facts.team && ((Array.isArray(facts.team.catalogs) ? facts.team.catalogs.length : facts.team.catalogs) > 1)) {
-      throw (await refusal()).refuse("Publishing cannot be set to Plain for a team with more than one catalog. Nothing was changed.");
-    }
-    /* Sealing where this Studio holds no team of its own makes one, or its first key: held while a newer Studio's data stand. */
-    if (on && !(facts && facts.team)) await newerHold(); /* plant:u2-hold-sealed */
-    /* THE FIRST SEAL MAKES THE KEY as the first publish does (finding 9), where the folder is one a seal can work in. */
-    const made = on && fresh !== true && !!facts && !facts.inside && (await firstKey(facts)).make && await makeFirstKey();
-    if (made) facts = await thread.call("teamFacts", projectDir(dir), withHere({ key }));
-    const restorable = !facts.team && facts.folder ? K.teamForFolder(at, facts.folder) : null;
-    const kept = restorable ? K.keptTeam(at, restorable).file : null;
-    let teamId = null, teamKey = null;
-    const anew = fresh === true && facts.file === "theirs" && !!facts.lead;
-    if (on && !facts.team && !kept && (facts.file === "none" || anew) && facts.folder && facts.signing && !facts.inside) {
-      const tm = K.studioTeammates(at, { key: await keyFileNow() });
-      if (tm.teamsCount >= K.MAX_TEAMS) {
-        throw (await refusal()).refuse(K.REFUSAL_TEAMS_LIMIT);
-      }
-      teamId = "t-" + require("node:crypto").randomBytes(8).toString("hex");
-      teamKey = require("node:crypto").randomBytes(32);
-      K.keepTeamKey(at, vault, teamId, 1, teamKey);
-    }
-    let r;
-    try {
-      r = await thread.call("setTeamSealed", projectDir(dir), on,
-        withHere({ key, passphrase: await keySecret(), teamId, kept, fresh: anew, teamKeys: (await teamsNow()).teamKeys }));
-    } catch (err) { if (teamId) K.forgetTeam(at, teamId); throw err; }
-    if (r.team) K.chooseSealed(at, r.team.id, on, r.folder, r.written);
-    else if (!on && facts.mark) K.chooseSealed(at, facts.mark, false, facts.folder);
-    return { folder: r.folder, created: r.created, team: r.team, ...(made ? { signing: await signingNow() } : {}) };
-  });
-}));
-
-/* A TEAM FIRST MADE ON THE ETIUDA RELAY (board 926, relay slice 1's missing control): the lead's other choice, beside a shared
-   folder, where a team is first made. It does in the product what a relay team's setup does in tests/relay-studio.mjs, through
-   the same functions: mints the relay team id (src/relay.mjs relayId), keeps the team key as studio:team-sealed does, keeps
-   the mirror through keepRelay with the built-in address, and has the thread write the signed team file into the mirror with
-   the relay as its channel and point the project's publish place at it (src/studio.mjs startRelayTeam). The relay's own space
-   is made by the runner, which owes one to every kept relay team that has none (src/relay.mjs relayRunner), so the sync asked
-   for below makes it, and a Studio offline makes it at the next. Only a team made for the first time is offered this: a
-   project that has one already, here or at its folder, is refused, and moving a team between channels is not this verb's.
-   The reply carries no path, no address and no relay team id. A throw part way, before the thread's writes or after them (the
-   store's own write, the thread's reply, the key facts), takes the whole press back and presses again as a first press: the thread
-   puts the project's place and the team file as they were (src/studio.mjs undoRelayTeam), and only when that has been done is the
-   team, with its key and mirror, forgotten here; where the thread cannot be asked to, all of it is kept together, so the key
-   store never forgets a team whose file, or whose project's place, is still there (the test architect's edit E1).
-   The relay comes with a licence (board 935, slice G3): before anything is kept or made, the grant held beside the signing key is
-   judged, and with none that holds for this key now the press is refused in that sentence and the cover goes on offering the
-   shared folder. */
+/* THE SEAL SWITCH IS GONE (the pass over the retired folder mechanics, 2026-11-26): studio:team-sealed set a team Sealed or Plain at its folder, made a
+   team there on a first seal, and made the signing key on the first seal. A team is made on the relay alone and is sealed from the first (studio:team-new),
+   the page has no Sealed and Plain switch and no member on the bridge for it, so the verb was reached by no one but a leg. plant:u2-hold-sealed stood on the
+   hold it met where it would make a team, and the mark stays until the plant guard has a way to retire one. */
 /* A CATALOG CHOOSES ITS TEAM (board 962 stage 5, T3, 3.1): a catalog with no team joins a sealed team this Studio leads. Inside the
    team's lock, before anything is read from the team's place, the shell refuses what only it knows: a handover of the team
    under way, a relay team past its grant,
@@ -4725,13 +4648,21 @@ answer("studio:team-move-catalog", async (e, dir, toTeam) => guard(async () => {
     return { team: r.team, carried: r.carried === true, relay: !!into.relay };
   }));
 }));
-answer("studio:team-relay", async (e, dir) => guard(async () => startTeamOnRelay(projectDir(dir))));
-/* A TEAM MADE ON ITS OWN (findings 29 and 31 of the pair of 24 November): the same press with no catalog, which needs none, lists none and
-   touches no project. A catalog joins it afterwards by studio:team-choose. */
-answer("studio:team-new", async () => guard(async () => startTeamOnRelay(null)));
-async function startTeamOnRelay(dir) {
-  const own = dir == null || dir === ""; /* plant:ton-shell-own */
-  const keyToLock = await teamKeyFor(dir);
+/* A TEAM MADE ON THE ETIUDA RELAY, ON ITS OWN (board 926, relay slice 1's missing control; findings 29 and 31 of the pair of 24 November): the one way a team is
+   made. It needs no catalog, lists none and touches no project: a catalog joins it afterwards by studio:team-choose. Until 2026-11-26 a second verb, studio:team-relay,
+   made the team through a catalog, and the page never reached it (the pass over the retired folder mechanics); plant:ton-shell-own stood on the shell's reading of "no
+   catalog", which is the only case now, and the mark stays until the plant guard has a way to retire one. It does in the product what a relay team's setup does in
+   tests/relay-studio.mjs, through the same functions: mints the relay team id (src/relay.mjs relayId), keeps the team key, keeps the mirror through keepRelay with the
+   built-in address, and has the thread write the signed team file into the mirror with the relay as its channel (src/studio.mjs startRelayTeam). The relay's own space is
+   made by the runner, which owes one to every kept relay team that has none (src/relay.mjs relayRunner), so the sync asked for below makes it, and a Studio offline makes
+   it at the next. The reply carries no path, no address and no relay team id. A throw part way, before the thread's writes or after them, takes the whole press back and
+   presses again as a first press: the thread puts the team file as it was (src/studio.mjs undoRelayTeam), and only when that has been done is the team, with its key and
+   mirror, forgotten here; where the thread cannot be asked to, all of it is kept together, so the key store never forgets a team whose file is still there (the test
+   architect's edit E1). The relay comes with a licence (board 935, slice G3): before anything is kept or made, the grant held beside the signing key is judged, and with
+   none that holds for this key now the press is refused in that sentence. */
+answer("studio:team-new", async () => guard(async () => startTeamOnRelay()));
+async function startTeamOnRelay() {
+  const keyToLock = await teamKeyFor(null);
   return teamAct(keyToLock, async () => {
     const R = await refusal(), K = await teamStore(), Rl = await relayLib(), S = await signLib(), at = await teamsAt(), key = await keyFileNow();
     const tm = K.studioTeammates(at, { key: await keyFileNow() });
@@ -4743,27 +4674,14 @@ async function startTeamOnRelay(dir) {
         ? "This computer cannot keep a team key for this account: no keyring is open to seal it. To have one, install GNOME Keyring (the gnome-keyring package) or KDE Wallet, sign in again and reopen Studio."
         : "This computer cannot keep a team key for this Windows account.");
     }
-    const project = own ? null : dir; /* already coerced by the handler */
-    /* A folder holding another lead's team may be left for a new team elsewhere. Each of the three below is a way a project has a
-       team already, and each is refused on its own line: one whose folder has a team kept for it (restorable), one that remembers
-       sealing, and one whose folder holds a team file of this Studio's own, or an older one of its own, or one that will not
-       read. The thread's `facts.team` is set only with the file "ours", so the file clause already says it. The first is read from
-       this computer's teams file and the project's own, before the team folder is read at all. */
-    const shown = own ? null : (await teamOf(project)).folder;
-    const restorable = shown ? K.teamForFolder(at, shown) : null;
-    const keptHere = false
-      || !!restorable /* plant:rs926-kept */
-      ;
-    if (keptHere) throw R.refuse("This catalog has a team already, so no other was started.");
-    const facts = own ? null : await thread.call("teamFacts", project, withHere({ key }));
-    const had = !own && (!facts
-      || !!facts.mark /* plant:rs926-mark */
-      || (facts.file !== "none" && facts.file !== "theirs")); /* plant:rs926-file */
-    if (had) throw R.refuse("This catalog has a team already, so no other was started."); /* plant:rs926-first */
+    /* THE CATALOG-KEYED PRESS IS GONE (2026-11-26): "This catalog has a team already, so no other was started." refused a catalog whose folder had a team kept for it
+       (plant:rs926-kept), one that remembered sealing (plant:rs926-mark), or whose folder held a team file (plant:rs926-file), at plant:rs926-first. A team is made with no
+       catalog now, so there is nothing of a catalog to refuse; a catalog already on a team meets the choose's own refusal when it joins another. The marks stay until the
+       plant guard has a way to retire one. */
     /* THE RELAY COMES WITH A LICENCE (board 935, slice G3): a team is made there only under a grant the vendor's root signed over this
        lead's key, which Studio holds beside the key (src/relay.mjs). With none that holds now, nothing is made and nothing is sent, and
        the cover, which still offers the shared folder, says so. A Studio with no key has none, since a grant names a key, so the key is
-       no longer made here: it is made in Settings, or by the first publish or seal (studio:team-sealed makes no team at a folder now). */
+       no longer made here: it is made in Settings. */
     const lead = (() => { try { return S.readKeyFile(key); } catch { return null; } })();
     const no = Rl.grantRefusal(lead ? Rl.readGrant(key) : null, lead ? lead.public : null, Date.now(), relayRootsNow(), await revokedKeysNow()); /* plant:g3-handler */
     if (no) throw R.refuse(no.said, no.vars);
@@ -4774,14 +4692,14 @@ async function startTeamOnRelay(dir) {
     try {
       /* A team made here lives where this build makes new teams: staging's relay in a test service build (src/relay.mjs). */
       const mirror = K.keepRelay(at, teamId, rt, Rl.NEW_TEAMS_URL); /* plant:rs926-keep */
-      r = await thread.call("startRelayTeam", project, { key, passphrase: await keySecret(), teamId, rt, url: Rl.NEW_TEAMS_URL, /* plant:rts-start */
+      r = await thread.call("startRelayTeam", null, { key, passphrase: await keySecret(), teamId, rt, url: Rl.NEW_TEAMS_URL, /* plant:rts-start */
         mirror, teamKeys: (await teamsNow()).teamKeys });
       K.chooseSealed(at, teamId, true, mirror, r.written);
     } catch (err) {
       /* THE TEAM AND ITS KEY ARE FORGOTTEN ONLY TOGETHER WITH THE TEAM FILE AND THE PROJECT'S PLACE, which the thread may have
          written before this threw, whether or not its reply came back. Where it cannot take them back, all of it is kept. */
       let unwound = true;
-      try { await thread.call("undoRelayTeam", project, { teamId, rt, mirror: K.relayMirror(at, rt), folder: (facts && facts.folder) || null }); } catch { unwound = false; } /* plant:rs926-unwind */
+      try { await thread.call("undoRelayTeam", null, { teamId, rt, mirror: K.relayMirror(at, rt), folder: null }); } catch { unwound = false; } /* plant:rs926-unwind */
       if (unwound) K.forgetTeam(at, teamId); /* plant:rs926-forget */ /* plant:rs926-together */
       throw err;
     }
@@ -4790,7 +4708,7 @@ async function startTeamOnRelay(dir) {
     const counted = Array.isArray(synced) && synced.some((w) => w && w.team === teamId && w.reason === "team-count" && w.said === Rl.TEAM_COUNT_SAID);
     if (counted) {
       let unwound = true;
-      try { await thread.call("undoRelayTeam", project, { teamId, rt, mirror: K.relayMirror(at, rt), folder: (facts && facts.folder) || null }); } catch { unwound = false; }
+      try { await thread.call("undoRelayTeam", null, { teamId, rt, mirror: K.relayMirror(at, rt), folder: null }); } catch { unwound = false; }
       if (unwound) {
         K.forgetTeam(at, teamId); /* plant:rs932-count-forget */
         throw R.refuse(Rl.TEAM_COUNT_SAID); /* plant:rs932-count-said */
@@ -7495,14 +7413,14 @@ async function keyOpens(file, secret) {
 }
 /* WHAT THE COVER SAYS ABOUT THE SIGNATURE: the key's id and print, whether this computer opens it, and whether its file
    cannot be read at all, which is not the same as having no key (Settings refuses to make one over it); never the key,
-   and never the file's problem, whose words and path are the command line's. With no key, `makes` where the press will
-   make it (firstKey), or `restore`, the print of the key the folder's team trusts (K8). */
+   and never the file's problem, whose words and path are the command line's. With no key, `restore` is the print of the key the
+   folder's team trusts (K8). */
 async function signingPlan(dir) {
   const at = await keyFileNow(), sign = (await studio()).signingKey(at);
-  const first = sign.keyId || sign.problem ? { make: false, lead: "" }
-    : await firstKey(await thread.call("teamFacts", projectDir(dir), withHere({ key: at })).catch(() => null));
+  const lead = sign.keyId || sign.problem ? ""
+    : await keyToRestore(await thread.call("teamFacts", projectDir(dir), withHere({ key: at })).catch(() => null));
   return { keyId: sign.keyId, print: sign.print, opens: !!sign.keyId && await keyOpens(at, await keySecret("probe")),
-           unreadable: !!sign.problem, ...(first.make ? { makes: true } : {}), ...(first.lead ? { restore: first.lead } : {}) };
+           unreadable: !!sign.problem, ...(lead ? { restore: lead } : {}) };
 }
 
 /* WHAT THE PAGE MAY SAY ABOUT A PUBLISH IS ITS NOTES, THE LEAD'S NOTE FOR THE EDITION, ITS OVERRIDE AND A FIRST FILE NAME, and nothing else. The
@@ -7587,10 +7505,6 @@ answer("studio:publish", async (e, dir, o) => guard(async () => {
   } catch (err) {
     process.stderr.write("studio  the relay could not be caught up with before the publish: " + String(err && err.message || err) + "\n");
   }
-  /* THE FIRST PUBLISH MAKES THE KEY where firstKey says so (finding 9), so this edition is signed with it. */
-  const made = (await keyNone())
-    && (await firstKey(await thread.call("teamFacts", projectDir(dir), withHere({ key: await keyFileNow() })).catch(() => null))).make
-    && await makeFirstKey();
   /* EVERY EDITION FROM THE SCREEN IS SIGNED where this computer opens the key (publish-screen-never-signs), as Settings
      promises; the secret is opened here for this one signature, as keySecret() says, and never reaches the page. */
   const key = await keyFileNow(), secret = await keySecret(), opens = await keyOpens(key, secret);
@@ -7605,9 +7519,8 @@ answer("studio:publish", async (e, dir, o) => guard(async () => {
     });
     return out;
   });
-  /* The page is given the key a publish made, and asked once for the nudge towards its backup copy by the first that lands. */
   if (!r || typeof r !== "object") return r;
-  if (r.refused) return made ? Object.assign({}, r, { signing: await signingNow() }) : r;
+  if (r.refused) return r;
   /* A PUBLISH THAT LANDED ON A RELAY TEAM SYNCS AT ONCE (the test architect's R2): the ring and the signed head go up with the edition, so
      each running desk sees the file now and not at the next focus or the five-minute watch. The sync only starts the channel's upload,
      so the channel is waited out too, and the page is answered once the relay holds them. A folder team's publish meets none of this, and
@@ -7640,11 +7553,9 @@ answer("studio:publish", async (e, dir, o) => guard(async () => {
     syncFailed = true;
     process.stderr.write("studio  the relay could not be kept in step after the publish: " + String(err && err.message || err) + "\n");
   }
-  const nudge = await keyNudgeNow();
-  return made || nudge || syncPending || syncFailed
+  return syncPending || syncFailed
     ? Object.assign({}, r, {
         signing: await signingNow(),
-        ...(nudge ? { keyNudge: true } : {}),
         ...(syncPending && !syncFailed ? { syncPending: true } : {}),
         ...(syncFailed ? { syncFailed: true } : {}),
       })

@@ -169,16 +169,16 @@
  *   rs926g the same where the store's own write fails after the thread's writes landed
  *   rs926h where the thread cannot be asked to take the writes back, nothing is forgotten: the team, its key, its mirror, its
  *        file and the project's place stay together, and a next press is refused as the project has a team
- *   rs926i a project that sealed before (the seal mark alone) is refused in the handler's frame, with nothing written: the teams
+ *   rs926i (RETIRED 2026-11-26 with studio:team-relay) a project that sealed before (the seal mark alone) is refused in the handler's frame, with nothing written: the teams
  *        file and its keys, the signing key, the relay folder, the share and the project byte for byte as they were (E2)
- *   rs926j the same for a project whose folder has a team kept for it (the kept file alone)
- *   rs926k the same for a project whose folder holds this Studio's own team file (the file alone)
+ *   rs926j (RETIRED 2026-11-26 with studio:team-relay) the same for a project whose folder has a team kept for it (the kept file alone)
+ *   rs926k (RETIRED 2026-11-26 with studio:team-relay) the same for a project whose folder holds this Studio's own team file (the file alone)
  *   rsr1a R1 of the test architect's first-hour triage (2026-10-20): a project that published rev 1 and then makes a relay team through the
  *        handler has its latest edition and the ring in the mirror before the first sync, sealed as the team's are (carried from the
  *        archive, not published again); a desk invited and admitted holds rev 1, its edition and the ring, at its first catch-up
  *   rsr1b the control: a project that never published moves as before, and the admitted desk gets no catalog and no error
  *   rsr1c an edition signed by another key, or by none, is not carried, and the move is made as before
- *   rsr1d a press that fails after the edition was carried is taken back whole, the sealed edition and the ring with it
+ *   rsr1d (RETIRED 2026-11-26 with studio:team-relay) a press that fails after the edition was carried is taken back whole, the sealed edition and the ring with it
  *   rsr1e an undo after the draft id changed takes back the edition carry wrote, named from the archived catalog id, and a
  *        file already in the mirror is left as it was
  *   rsr1f an edition whose signature names the lead key and does not verify is not carried, and the move is made as before
@@ -4561,7 +4561,7 @@ async function leadAtRest(lab, name, noKey, o) {
   return { S, ud, keyAt, made, grant, proj, teamsFile: K.teamsFile(ud), vault: shellVault(), projectJson,
     env: Object.assign({ STUDIO_PROJECTS: path.join(lab, "projects"), STUDIO_SIGNING_KEY: keyAt, STUDIO_RELAY_ROOT: GRANT_ROOT_PUB },
       x.passphraseFile ? { STUDIO_KEY_PASSPHRASE: PASS } : {}),
-    thread: (verb, ...a) => (verb === "teamFacts" || verb === "startRelayTeam" || verb === "undoRelayTeam" ? S[verb](...a) : {}) };
+    thread: (verb, ...a) => (verb === "teamFacts" || verb === "startRelayTeam" || verb === "undoRelayTeam" || verb === "chooseTeam" ? S[verb](...a) : {}) };
 }
 /* The shell asks the relay for the team's space as soon as the team is kept, and the lab does not reach it: that sync has said
    its piece when the shell has printed it, and only then is the shell put down, so it leaves no runner behind. The line comes
@@ -4570,7 +4570,15 @@ async function leadAtRest(lab, name, noKey, o) {
    written. Five seconds is the give-up: the line came inside two in every part that prints it, and a loaded machine gets room (the test architect's read); a
    part that proves the line waits in its own until. */
 const shellSettled = (shell) => until(() => shell.said.some((l) => /relay of team|relay could not/.test(l)), 5000);
-const teamRelayHandler = (shell) => typeof shell.handlers["studio:team-relay"] === "function";
+/* A RELAY TEAM WITH A CATALOG ON IT, made as the product makes one (2026-11-26): Make a team with no catalog (studio:team-new), then the catalog joins it
+   (studio:team-choose). A verb of its own, studio:team-relay, made the team through the catalog until then, and the page never reached it. The reply is shaped as that
+   one's was ({ error, created, relay, team }), and carries the choose's refusal where the catalog could not join. */
+const madeWithCatalog = async (shell, proj) => {
+  const made = await shell.ask("studio:team-new");
+  if (!made || made.error || !made.team) return made;
+  const chose = await shell.ask("studio:team-choose", proj, made.team.id);
+  return chose && chose.error ? chose : Object.assign({}, made, { carried: !!(chose && chose.carried) });
+};
 
 /* The lead's choice of the relay, where a team is first made, is one handler in the shell. It mints the relay team id, keeps the
    team's key and the mirror through keepRelay with the built-in address, has the signed team file written into the mirror with the
@@ -4578,10 +4586,10 @@ const teamRelayHandler = (shell) => typeof shell.handlers["studio:team-relay"] =
 LEGS.rs926a = async () => {
   const lab = labDir("relay-rs926a"), R = await leadAtRest(lab, "Lantern Quay");
   const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
-  const have = teamRelayHandler(shell);
+  const have = typeof shell.handlers["studio:team-new"] === "function"; /* the shell answers the one verb that makes a team */
   let reply = null;
   try {
-    if (have) { reply = await shell.ask("studio:team-relay", R.proj); await shellSettled(shell); }
+    if (have) { reply = await madeWithCatalog(shell, R.proj); await shellSettled(shell); }
   } finally { shell.done(); }
   const rec = K.relayTeams(R.teamsFile)[0] || null, mirror = rec ? rec.folder : "";
   const kept = rec ? K.keptTeam(R.teamsFile, rec.team) : null;
@@ -4600,7 +4608,7 @@ LEGS.rs926a = async () => {
     key: !!keys && !!keys[1] && keys[1].length === 32,
     file: !!t && !!rec && t.id === rec.team && t.lead.public === R.made.public && t.sealed === true && t.epoch === 1
       && Engine.relayRules().channel.canon(t.channel) === Engine.relayRules().channel.canon({ kind: "relay", rt: rec.rt, url: Relay.RELAY_URL })
-      && !!t.ring && t.ring.keys.length === 0 && t.catalogs[0] === project.id && t.recovery !== undefined,
+      && !!t.ring && t.ring.keys.length === 1 && t.ring.keys[0].catalog === project.id /* MOVED 2026-11-26: the team was made with the catalog on it and no ring entry (keys.length 0); the choose vouches for the catalog in the ring */ && t.catalogs[0] === project.id && t.recovery !== undefined,
     place: !!rec && project.folder === mirror && project.sealedTeam === (rec && rec.team),
     desks: !!facts && facts.file === "ours" && !!facts.team && facts.team.sealed === true && facts.folder === mirror,
     quiet: leaks.length === 0,
@@ -4618,19 +4626,22 @@ LEGS.rs926b = async () => {
   const lab = labDir("relay-rs926b"), R = await leadAtRest(lab, "Lantern Quay");
   let first = null, second = null;
   const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
-  const have = teamRelayHandler(shell);
+  const have = typeof shell.handlers["studio:team-new"] === "function"; /* the shell answers the one verb that makes a team */
   try {
-    if (have) { first = await shell.ask("studio:team-relay", R.proj); await shellSettled(shell); second = await shell.ask("studio:team-relay", R.proj); }
+    if (have) { first = await madeWithCatalog(shell, R.proj); await shellSettled(shell); second = await madeWithCatalog(shell, R.proj); }
   } finally { shell.done(); }
   const book = () => { try { return Object.keys(JSON.parse(fs.readFileSync(R.teamsFile, "utf8")).teams); } catch { return []; } };
+  /* MOVED 2026-11-26 with studio:team-relay. Was: the second press was refused in "This catalog has a team already, so no other was started." and one team was kept. Now the
+     second Make a team makes a second team on its own, and the catalog's join is refused in the choose's sentence, the catalog staying on the first. */
   const twice = { first: !!first && first.error === null, refused: !!second && !!second.error && !!second.said
-    && second.said.frame === "This catalog has a team already, so no other was started.",
-    one: K.relayTeams(R.teamsFile).length === 1 && book().length === 1 };
+    && second.said.frame === "This catalog has a team already, so it did not join another."
+    && R.projectJson().sealedTeam === (first && first.team && first.team.id),
+    one: K.relayTeams(R.teamsFile).length === 2 && book().length === 2 };
   /* A key that will not open: the thread throws before it writes, and the shell forgets the team it had kept. */
   const labW = labDir("relay-rs926b-key"), W = await leadAtRest(labW, "Quay Lamps", false, { passphraseFile: true });
   let wrong = null;
   const shellW = await loadStudioShell(W.ud, { env: Object.assign({}, W.env, { STUDIO_KEY_PASSPHRASE: "not-the-passphrase" }), thread: W.thread });
-  try { if (teamRelayHandler(shellW)) wrong = await shellW.ask("studio:team-relay", W.proj); } finally { shellW.done(); }
+  try { wrong = await madeWithCatalog(shellW, W.proj); } finally { shellW.done(); }
   const none = { refused: !!wrong && !!wrong.error, book: (() => { try { return Object.keys(JSON.parse(fs.readFileSync(W.teamsFile, "utf8")).teams).length === 0; } catch { return true; } })(),
     relays: K.relayTeams(W.teamsFile).length === 0, mirror: !fs.existsSync(path.join(W.ud, "relay")), place: W.projectJson().folder === null };
   /* A write the signing refuses after the mirror is made: a floor above the team's epoch, kept beside the key, refuses the team
@@ -4658,7 +4669,7 @@ LEGS.rs926c = async () => {
   const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
   let reply = null;
   try {
-    if (teamRelayHandler(shell)) { reply = await shell.ask("studio:team-relay", R.proj); await shellSettled(shell); }
+    { reply = await madeWithCatalog(shell, R.proj); await shellSettled(shell); }
   } finally { shell.done(); }
   const rec = K.relayTeams(R.teamsFile)[0];
   if (!rec) { check(false, "rs926c no relay team was made, so there is nothing for a desk to read" + (reply && reply.error ? ": " + reply.error : "")); return; }
@@ -4774,7 +4785,7 @@ LEGS.rs2comp = async () => {
   const shellA = await loadStudioShell(R.ud, { relay: tA, env: R.env, thread: R.thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { shellA.done(); }
@@ -4830,7 +4841,7 @@ LEGS.rs962t5 = async () => {
   const kept = { id: "t-00000000000000d4", connection: "relay", relay: { rt: "0123456789abcdef0123456789abcdef", url: Relay.RELAY_URL }, sealed: true, led: true,
     leadPrint: "87ad0879ac3e9ff6", catalogs: ["c-lantern"], projects: [{ id: "c-lantern", name: "Lantern Quay", dir: "C:/lib/lantern", rev: 4 }],
     project: { id: "c-lantern", name: "Lantern Quay", dir: "C:/lib/lantern", rev: 4 }, teammates: [{ id: "k-1", name: "Iga", admitted: true, version: "2.0.0" }], count: 1 };
-  const api = { teamRelay: async (d) => { calls.push(["relay", d]); return { error: null }; },
+  const api = {
     teamChoose: async (d, t) => { calls.push(["choose", d, t]); return { error: null, folder: "x", team: { id: t }, carried: true, relay: true }; },
     desks: async () => ({ folder: null, file: "none", signing: "studio-0123456789abcdef", requests: [], canKeep: true, team: null }) };
   const home = loadPage({ api, uiLang: "en" }), P = home.page, T = P.T;
@@ -4864,11 +4875,10 @@ LEGS.rs926d = async () => {
   const made = await S0.newProject(path.join(lab, "projects"), "Lantern Quay", [{ code: "en", name: "English" }]);
   const dir = made.dir, base = await S0.openProject(dir);
   const calls = [];
-  const api = { teamRelay: async (d) => { calls.push(["relay", d]); return { error: null, relay: true, created: true, team: { id: "t-0123456789abcdef" } }; },
+  const api = {
     teamNew: async () => { calls.push(["new"]); return { error: null, relay: true, created: true, team: { id: "t-0123456789abcdef" } }; },
     desks: async () => ({ folder: mirror, file: "ours", signing: "studio-0123456789abcdef", requests: [], canKeep: true,
-      team: { id: "t-0123456789abcdef", epoch: 1, relay: true, roster: [], sealed: true, exportsSealed: true, leadPrint: "87ad0879ac3e9ff6" } }),
-    pickFolder: async () => ({ folder: null }) };
+      team: { id: "t-0123456789abcdef", epoch: 1, relay: true, roster: [], sealed: true, exportsSealed: true, leadPrint: "87ad0879ac3e9ff6" } }) };
   const project = (folder) => Object.assign({}, base, { project: Object.assign({}, base.project, { folder }), fileName: "lanterns.ec" });
   const state = (P, extra) => Object.assign(P.S, { open: project(null), host: { tour: { offered: true } }, screen: "projects", home: "team", teamDir: dir, cover: "team",
     teamWant: "sealed", teamWhere: "relay", err: null, dkNote: null, q: "",
@@ -4969,8 +4979,10 @@ async function standing(R) {
   return { ids, keyed: ids.filter((t) => keys[t] && keys[t][1] && keys[t][1].length === 32), files, fileIds: Object.keys(files).map((m) => files[m]),
     folder: p.folder || null, mark: p.sealedTeam || null, relays: K.relayTeams(R.teamsFile) };
 }
-const wholeTeam = (s) => s.ids.length === 1 && s.keyed.length === 1 && s.fileIds.length === 1 && s.fileIds[0] === s.ids[0] && s.mark === s.ids[0]
-  && s.relays.length === 1 && s.relays[0].team === s.ids[0] && s.folder === s.relays[0].folder && s.files[path.basename(s.relays[0].folder)] === s.ids[0];
+/* MOVED 2026-11-26 with studio:team-relay: a team is made on its own, so it is whole when its key, its file in the mirror and the store's row agree, and the project is
+   untouched (was: the project's place and seal mark pointed at it too). */
+const wholeTeam = (s, n) => s.ids.length === (n || 1) && s.keyed.length === s.ids.length && s.fileIds.length === s.ids.length && s.relays.length === s.ids.length
+  && s.ids.every((id) => s.fileIds.indexOf(id) >= 0 && s.relays.some((r) => r.team === id && s.files[path.basename(r.folder)] === id)) && s.mark === null && s.folder === null;
 const noTeam = (s) => s.ids.length === 0 && s.fileIds.length === 0 && s.folder === null && s.mark === null && s.relays.length === 0;
 /* One press that fails after the thread's writes landed, what the disk says then, and the lead's next press. */
 async function failThenPress(name, fault) {
@@ -4978,25 +4990,24 @@ async function failThenPress(name, fault) {
   const shell = await loadStudioShell(R.ud, { env: R.env, thread: leadThread(R.S, f) });
   const out = { first: null, mid: null, second: null, end: null };
   try {
-    if (teamRelayHandler(shell)) {
-      out.first = await shell.ask("studio:team-relay", R.proj);
+    {
+      out.first = await shell.ask("studio:team-new");
       out.mid = await standing(R);
       f.reply = f.store = f.cannotUndo = false;
-      out.second = await shell.ask("studio:team-relay", R.proj);
+      out.second = await shell.ask("studio:team-new");
       if (out.second && !out.second.error) await shellSettled(shell);
       out.end = await standing(R);
     }
   } finally { shell.done(); }
   return out;
 }
-const HAS_TEAM = "This catalog has a team already, so no other was started.";
 
 /* The thread's reply is lost after it wrote the team file and the project's place: the press is taken back whole (no team, key,
    mirror or file, the project's place and mark as they were), so the lead's next press is a first press and succeeds, leaving one
    team whose key, file and place agree. */
 LEGS.rs926f = async () => {
   const r = await failThenPress("rs926f", { reply: true });
-  const ok = { failed: !!r.first && !!r.first.error && r.first.error !== HAS_TEAM, takenBack: !!r.mid && noTeam(r.mid),
+  const ok = { failed: !!r.first && !!r.first.error, takenBack: !!r.mid && noTeam(r.mid),
     pressed: !!r.second && r.second.error === null && r.second.relay === true && r.second.created === true, whole: !!r.end && wholeTeam(r.end) };
   check(Object.keys(ok).every((k) => ok[k]),
     "rs926f a press whose thread reply is lost after its writes landed is taken back whole, and the next press makes one team: "
@@ -5007,7 +5018,7 @@ LEGS.rs926f = async () => {
 /* The store's own write fails after the thread wrote (the reply it is handed cannot be kept): the same. */
 LEGS.rs926g = async () => {
   const r = await failThenPress("rs926g", { store: true });
-  const ok = { failed: !!r.first && !!r.first.error && r.first.error !== HAS_TEAM, takenBack: !!r.mid && noTeam(r.mid),
+  const ok = { failed: !!r.first && !!r.first.error, takenBack: !!r.mid && noTeam(r.mid),
     pressed: !!r.second && r.second.error === null && r.second.relay === true && r.second.created === true, whole: !!r.end && wholeTeam(r.end) };
   check(Object.keys(ok).every((k) => ok[k]),
     "rs926g a press whose store write fails after the thread's writes landed is taken back whole, and the next press makes one team: "
@@ -5019,10 +5030,11 @@ LEGS.rs926g = async () => {
    with the team file and the project's place that point at them, so the key store never forgets a team whose file is there. */
 LEGS.rs926h = async () => {
   const r = await failThenPress("rs926h", { reply: true, cannotUndo: true });
-  const ok = { failed: !!r.first && !!r.first.error && r.first.error !== HAS_TEAM, kept: !!r.mid && wholeTeam(r.mid),
-    refused: !!r.second && r.second.error === HAS_TEAM, stillWhole: !!r.end && wholeTeam(r.end) };
+  const ok = { failed: !!r.first && !!r.first.error, kept: !!r.mid && wholeTeam(r.mid),
+    /* MOVED 2026-11-26: was "refused": the second press found the project's team and was refused, one team stood. Now it makes a second team on its own, and both stand whole. */
+    another: !!r.second && r.second.error === null, stillWhole: !!r.end && wholeTeam(r.end, 2) };
   check(Object.keys(ok).every((k) => ok[k]),
-    "rs926h a press the thread cannot take back keeps the team, its key, its mirror, its file and the project's place together: "
+    "rs926h a press the thread cannot take back keeps the team, its key, its mirror and its file together, and the next press makes another: "
     + Object.keys(ok).map((k) => k + " " + ok[k]).join(", ") + (r.mid ? "; after the failure " + JSON.stringify({ teams: r.mid.ids.length, keyed: r.mid.keyed.length, files: r.mid.fileIds.length, place: !!r.mid.folder, mark: !!r.mid.mark }) : ""));
 };
 
@@ -5051,82 +5063,10 @@ function treeOfButHold(root) {
   for (const k of Object.keys(out)) if (k.split("/").some((n) => n === HOLD_NAME || n.startsWith(HOLD_NAME + "."))) delete out[k];
   return out;
 }
-/* A project that already has a team in one of the three ways, which `setup` makes, and nothing else: a second press is refused in
-   the handler's frame, and everything the lab holds (the teams file and the keys in it, the signing key, the relay folder, the
-   share, the project and its draft) is byte for byte what it was. `only` says which of the handler's facts the setup leaves set,
-   so the refusal is the one clause's and not another's. */
-async function refusedWhole(name, setup, only) {
-  const lab = labDir("relay-" + name), R = await leadAtRest(lab, "Lantern Quay"), share = path.join(lab, "share");
-  fs.mkdirSync(share, { recursive: true });
-  await setup(R, share);
-  const facts = await R.S.teamFacts(R.proj, { key: R.keyAt });
-  const kept = facts.folder ? K.teamForFolder(R.teamsFile, facts.folder) : null;
-  const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
-  /* THE SHELL'S OWN START-UP WRITES SETTLE BEFORE THE SNAPSHOT. Loading the shell asks the licence once, and that look
-     writes studio.json a moment later; alone it lands before the snapshot, but in a whole-file run under load it landed
-     inside the press's window and read as the press writing (rs926k, twice, 2026-11-10). So the lab must hold still for
-     400 ms, within 10 s, before "before" is taken (the test architect). */
-  const settleTree = async () => {
-    const end = Date.now() + 10000;
-    let last = JSON.stringify(treeOf(lab)), still = 0;
-    while (Date.now() < end && still < 400) {
-      await wait(50);
-      const now = JSON.stringify(treeOf(lab));
-      if (now === last) still += 50; else { last = now; still = 0; }
-    }
-  };
-  let reply = null, before = null, after = null;
-  try {
-    if (teamRelayHandler(shell)) { await settleTree(); before = treeOfButHold(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOfButHold(lab); }
-  } finally { shell.done(); }
-  const was = JSON.stringify(before), now = JSON.stringify(after);
-  const set = { mark: !!facts.mark, kept: !!kept, file: facts.file !== "none" && facts.file !== "theirs" };
-  const ok = {
-    only: Object.keys(set).every((k) => set[k] === (k === only)),
-    refused: !!reply && !!reply.error && !!reply.said && reply.said.frame === HAS_TEAM,
-    nothing: !!before && was === now,
-  };
-  return { ok, set, changed: before && after ? Object.keys(Object.assign({}, before, after)).filter((k) => before[k] !== after[k]) : ["no handler"] };
-}
-const refusedLine = (r) => Object.keys(r.ok).map((k) => k + " " + r.ok[k]).join(", ") + "; facts set " + JSON.stringify(r.set)
-  + (r.changed.length ? "; changed " + JSON.stringify(r.changed.slice(0, 6)) : "");
-
-/* A project that sealed before: it keeps the seal mark, its place has no team file and no team is kept for it. */
-LEGS.rs926i = async () => {
-  const r = await refusedWhole("rs926i", async (R, share) => {
-    await R.S.setPublishFolder(R.proj, share);
-    fs.writeFileSync(path.join(R.proj, "project.json"), JSON.stringify(Object.assign(R.projectJson(), { sealedTeam: "t-" + hex(8) }), null, 1) + "\n");
-  }, "mark");
-  check(Object.keys(r.ok).every((k) => r.ok[k]),
-    "rs926i a project that sealed before is refused, with nothing written: " + refusedLine(r));
-};
-
-/* A project whose folder has a team kept for it: the Studio kept the team's file and key, and the file has gone from the folder. */
-LEGS.rs926j = async () => {
-  const r = await refusedWhole("rs926j", async (R, share) => {
-    await R.S.setPublishFolder(R.proj, share);
-    const id = "t-" + hex(8), key = crypto.randomBytes(32);
-    K.keepTeamKey(R.teamsFile, R.vault, id, 1, key);
-    const team = newTeam({ id, catalogs: [R.projectJson().id], lead: { keyId: R.made.keyId, public: R.made.public }, sealed: true, exportsSealed: true });
-    const written = (await writeTeam(share, team, { key: R.keyAt, passphrase: labSecret(R.keyAt) })).team;
-    K.chooseSealed(R.teamsFile, id, true, share, written);
-    fs.unlinkSync(teamPath(share));
-  }, "kept");
-  check(Object.keys(r.ok).every((k) => r.ok[k]),
-    "rs926j a project whose folder has a team kept for it is refused, with nothing written: " + refusedLine(r));
-};
-
-/* A project whose folder holds this Studio's own team: its file there, signed by this Studio's key, and nothing else says so. */
-LEGS.rs926k = async () => {
-  const r = await refusedWhole("rs926k", async (R, share) => {
-    await R.S.setPublishFolder(R.proj, share);
-    const id = "t-" + hex(8);
-    const team = newTeam({ id, catalogs: [R.projectJson().id], lead: { keyId: R.made.keyId, public: R.made.public }, sealed: true, exportsSealed: true });
-    await writeTeam(share, team, { key: R.keyAt, passphrase: labSecret(R.keyAt) });
-  }, "file");
-  check(Object.keys(r.ok).every((k) => r.ok[k]),
-    "rs926k a project whose folder holds this Studio's own team is refused, with nothing written: " + refusedLine(r));
-};
+/* RETIRED 2026-11-26 with studio:team-relay, rs926i, rs926j and rs926k, and their helper refusedWhole: a project that has a team in one of three ways (it remembers a seal; its
+   folder has a team kept for it; its folder holds this Studio's own team file) was refused a second press in "This catalog has a team already, so no other was started.", with the
+   lab byte for byte what it was. The press that took a catalog is gone, so there is nothing of a catalog to refuse; the catalog's join meets the choose's refusals, held by
+   tests/team-choose.mjs (a catalog on a team, a team file of this Studio's own at its place, a catalog on another team). */
 
 /* Q1 (Claude alpha's ruling of 2026-10-20 07:47), through the shell. A refusal of a desk whose invitation the relay reports unused
    moves nothing and asks nothing. A refusal of one it reports used, asked of the relay at the press whatever the book last
@@ -5499,7 +5439,7 @@ async function relayRefused(name, o, noKey) {
   };
   let reply = null, before = null, after = null;
   try {
-    if (teamRelayHandler(shell)) { await settleTree(); before = treeOfButHold(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOfButHold(lab); }
+    { await settleTree(); before = treeOfButHold(lab); reply = await madeWithCatalog(shell, R.proj); after = treeOfButHold(lab); }
   } finally { await shell.done(); }
   const spoke = shell.said.filter((l) => /relay of team|relay could not/.test(l));
   const wantFrame = noKey ? (Relay.GRANT_SAID ? Relay.GRANT_SAID.nokey : null)
@@ -5560,7 +5500,7 @@ LEGS.rs935e = async () => {
     const shell = await loadStudioShell(R.ud, { relay: t, env: R.env, thread: R.thread });
     let reply = null, rec = null;
     try {
-      if (teamRelayHandler(shell)) reply = await shell.ask("studio:team-relay", R.proj);
+      reply = await madeWithCatalog(shell, R.proj);
       rec = K.relayTeams(R.teamsFile)[0] || null;
       if (rec) await until(() => !!world.store(rec.rt) && !!world.store(rec.rt).get("team"), 20000);
     } finally { await shell.done(); }
@@ -5585,10 +5525,7 @@ LEGS.rs935f = async () => {
   const dir = made.dir, base = await S0.openProject(dir), calls = [];
   const frame = Relay.GRANT_SAID.none;
   const api = { teamNew: async () => { calls.push(["new"]); return { error: frame, said: { frame, vars: {} } }; },
-    teamRelay: async (d) => { calls.push(["relay", d]); return { error: frame, said: { frame, vars: {} } }; },
-    teamSealed: async (d, sealed, fresh) => { calls.push(["folder", d, sealed, fresh]); return { error: null, folder: share, created: true, team: { id: "t-0123456789abcdef" } }; },
-    desks: async () => ({ folder: null, file: "none", signing: "studio-0123456789abcdef", requests: [], canKeep: true, team: null }),
-    pickFolder: async () => ({ folder: null }) };
+    desks: async () => ({ folder: null, file: "none", signing: "studio-0123456789abcdef", requests: [], canKeep: true, team: null }) };
   const seen = {};
   for (const lang of ["en", "pl"]) {
     const home = loadPage({ api, uiLang: lang }), P = home.page;
@@ -5640,7 +5577,7 @@ LEGS.rs935n = async () => {
     const shell = await loadStudioShell(R.ud, { relay, env: Object.assign({}, R.env, noKey ? { STUDIO_KEY_PASSPHRASE: "" } : {}), thread: R.thread });
     let reply = null, before = null, after = null;
     try {
-      if (teamRelayHandler(shell)) { before = treeOfButHold(lab); reply = await shell.ask("studio:team-relay", R.proj); after = treeOfButHold(lab); }
+      { before = treeOfButHold(lab); reply = await madeWithCatalog(shell, R.proj); after = treeOfButHold(lab); }
     } finally { await shell.done(); }
     /* Nothing sent: this case's own lab relay heard no call (the test architect's E1 on the combined run), and nothing was kept:
        no relay team, the project's place and seal untouched. The shell's said lines are not read: they gather every runner's
@@ -5721,7 +5658,7 @@ async function publishedBefore(R, lab, key) {
 async function moveThenAdmit(world, lab, R, thread) {
   const shell = await loadStudioShell(R.ud, { env: R.env, thread: thread || R.thread });
   let reply = null;
-  try { if (teamRelayHandler(shell)) { reply = await shell.ask("studio:team-relay", R.proj); await shellSettled(shell); } } finally { shell.done(); }
+  try { { reply = await madeWithCatalog(shell, R.proj); await shellSettled(shell); } } finally { shell.done(); }
   const rec = K.relayTeams(R.teamsFile)[0] || null;
   if (!rec) return { reply, rec: null };
   const mirror = rec.folder, lines = [], rootNames = () => (fs.existsSync(mirror) ? fs.readdirSync(mirror) : []);
@@ -5802,7 +5739,7 @@ LEGS.rsr1b = async () => {
     nothingCarried: M.atMove.ec.length === 0 && M.atMove.ring === false,
     nothingPublished: !fs.existsSync(path.join(R.proj, "archive")) || fs.readdirSync(path.join(R.proj, "archive")).length === 0,
     admitted: (M.admitted.admitted || []).length === 1 && M.held.has(1) && !!M.deskTeam && M.deskFile === M.leadsFile,
-    noCatalog: M.names.length === 0 && !M.deskTeam.ring.keys.length,
+    noCatalog: M.names.length === 0, /* MOVED 2026-11-26: and no ring entry (!ring.keys.length); the choose vouches for the catalog in the ring before it has published, and the desk still lists no catalog */
     noError: M.lines.length === 0 && M.joiner.ch.online(),
   };
   check(Object.keys(ok).every((k) => ok[k]),
@@ -5826,7 +5763,7 @@ LEGS.rsr1c = async () => {
     const was = treeOf(share);
     const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
     let reply = null;
-    try { if (teamRelayHandler(shell)) { reply = await shell.ask("studio:team-relay", R.proj); await shellSettled(shell); } } finally { shell.done(); }
+    try { { reply = await madeWithCatalog(shell, R.proj); await shellSettled(shell); } } finally { shell.done(); }
     const rec = K.relayTeams(R.teamsFile)[0] || null;
     const root = rec && fs.existsSync(rec.folder) ? fs.readdirSync(rec.folder) : ["no mirror"];
     got[how] = { published: pub.rev === 1, moved: !!reply && reply.error === null && !!rec && R.projectJson().folder === rec.folder,
@@ -5839,38 +5776,9 @@ LEGS.rsr1c = async () => {
 /* A press that fails after the thread carried the edition is taken back whole: no team or key kept, nothing left in the relay
    folder (neither the sealed edition nor the ring), the project's place and mark as the publish left them and the old place
    untouched; the next press carries the edition into one team whose key, file and place agree. */
-LEGS.rsr1d = async () => {
-  const lab = labDir("relay-rsr1d"), R = await leadAtRest(lab, "Lantern Quay"), f = { reply: true };
-  const { share, pub } = await publishedBefore(R, lab);
-  const was = treeOf(share), name = path.basename(pub.ec), base = path.join(R.ud, "relay");
-  const left = () => (fs.existsSync(base) ? Object.keys(treeOf(base)).filter((k) => !/\/$/.test(k)) : []);
-  const shell = await loadStudioShell(R.ud, { env: R.env, thread: leadThread(R.S, f) });
-  const out = {};
-  try {
-    if (teamRelayHandler(shell)) {
-      out.first = await shell.ask("studio:team-relay", R.proj);
-      out.mid = await standing(R); out.midLeft = left(); out.midFolder = R.projectJson().folder;
-      f.reply = false;
-      out.second = await shell.ask("studio:team-relay", R.proj);
-      if (out.second && !out.second.error) await shellSettled(shell);
-      out.end = await standing(R); out.endLeft = left();
-    }
-  } finally { shell.done(); }
-  const ok = {
-    failed: !!out.first && !!out.first.error && out.first.error !== HAS_TEAM,
-    noTeam: !!out.mid && out.mid.ids.length === 0 && out.mid.fileIds.length === 0 && out.mid.relays.length === 0 && out.mid.mark === null,
-    nothingLeft: !!out.midLeft && out.midLeft.length === 0,
-    placeBack: !!out.mid && out.midFolder === path.resolve(share),
-    oldPlace: JSON.stringify(treeOf(share)) === JSON.stringify(was),
-    pressed: !!out.second && out.second.error === null && out.second.relay === true,
-    whole: !!out.end && wholeTeam(out.end),
-    carried: !!out.endLeft && out.endLeft.some((k) => k.endsWith("/" + name)) && out.endLeft.some((k) => k.endsWith("/etiuda-ring.json")),
-  };
-  check(Object.keys(ok).every((k) => ok[k]),
-    "rsr1d a press that fails after the edition was carried is taken back whole, with the sealed edition and the ring gone from the relay folder, and the next press carries it: "
-    + Object.keys(ok).map((k) => k + " " + ok[k]).join(", ") + "; left after the failure " + JSON.stringify(out.midLeft));
-};
-
+/* rsr1d RETIRED 2026-11-26 with studio:team-relay: a press that fails after the edition was carried is taken back whole, with the sealed edition and the ring gone from the
+   relay folder, and the next press carries it. The carry at a team's start is the retired press's; the choose carries the edition as its fifth step (a stop after it is
+   team-choose's own leg), and the module function startRelayTeam keeps the undo that rsr1e and rsr1f read. */
 /* An undo after the draft id has changed still takes back the file carryEdition wrote. The name follows the catalog id
    where the project has no fixed file name and the archived report names none, a publish from before file names were
    kept; with a fixed name the draft id does not change the file, so this leg takes that name off before the move.
@@ -5888,7 +5796,7 @@ LEGS.rsr1e = async () => {
   const previousId = String(JSON.parse(fs.readFileSync(path.join(R.proj, project.draft || "draft.json"), "utf8")).id || "");
   const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
   let reply = null;
-  try { if (teamRelayHandler(shell)) { reply = await shell.ask("studio:team-relay", R.proj); await shellSettled(shell); } } finally { shell.done(); }
+  try { { reply = await madeWithCatalog(shell, R.proj); await shellSettled(shell); } } finally { shell.done(); }
   const rec = K.relayTeams(R.teamsFile)[0] || null;
   if (!reply || reply.error || !rec) {
     check(false, "rsr1e no relay team was made" + (reply && reply.error ? ": " + reply.error : ""));
@@ -5948,7 +5856,7 @@ LEGS.rsr1f = async () => {
   const was = treeOf(share);
   const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
   let reply = null;
-  try { if (teamRelayHandler(shell)) { reply = await shell.ask("studio:team-relay", R.proj); await shellSettled(shell); } } finally { shell.done(); }
+  try { { reply = await madeWithCatalog(shell, R.proj); await shellSettled(shell); } } finally { shell.done(); }
   const rec = K.relayTeams(R.teamsFile)[0] || null;
   const root = rec && fs.existsSync(rec.folder) ? fs.readdirSync(rec.folder) : ["no mirror"];
   const ok = {
@@ -5971,7 +5879,7 @@ async function carriedTeam(lab) {
   const { share, pub } = await publishedBefore(R, lab);
   const shell = await loadStudioShell(R.ud, { env: R.env, thread: R.thread });
   let reply = null;
-  try { if (teamRelayHandler(shell)) { reply = await shell.ask("studio:team-relay", R.proj); await shellSettled(shell); } } finally { shell.done(); }
+  try { { reply = await madeWithCatalog(shell, R.proj); await shellSettled(shell); } } finally { shell.done(); }
   const rec = K.relayTeams(R.teamsFile)[0] || null;
   const teamKeys = K.teamKeysOf(R.teamsFile, R.vault);
   const key = rec && teamKeys[rec.team] ? teamKeys[rec.team][1] : null;
@@ -6026,7 +5934,7 @@ LEGS.rsce2 = async () => {
   } catch (e) { two = { refused: String(e && e.message || e) }; }
   const shell = await loadStudioShell(R0.ud, { env: R0.env, thread: R0.thread });
   let reply = null;
-  try { if (teamRelayHandler(shell)) { reply = await shell.ask("studio:team-relay", R0.proj); await shellSettled(shell); } } finally { shell.done(); }
+  try { { reply = await madeWithCatalog(shell, R0.proj); await shellSettled(shell); } } finally { shell.done(); }
   const rec = K.relayTeams(R0.teamsFile)[0] || null;
   const teamKeys = K.teamKeysOf(R0.teamsFile, R0.vault), key = rec && teamKeys[rec.team] ? teamKeys[rec.team][1] : null;
   if (!rec || !key || !two || two.rev !== 2) {
@@ -6650,7 +6558,7 @@ LEGS.g2s5 = async () => {
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
   try {
     shell.win.webContents.send = (ch) => { nudged.push(ch); };
-    await shell.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shell, R.proj);
     const rec = () => K.relayTeams(R.teamsFile)[0] || null;
     await until(() => !!rec() && !!world.store(rec().rt) && !!world.store(rec().rt).get("team") && !!rec().lapse, 20000);
     const store = world.store(rec().rt), team = rec().team, now0 = Date.now();
@@ -6790,7 +6698,7 @@ LEGS.g2s7 = async () => {
   const shell = await loadStudioShell(R.ud, { relay: t, env: R.env, thread });
   const ok = {};
   try {
-    await shell.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shell, R.proj);
     const rec = () => K.relayTeams(R.teamsFile)[0] || null;
     ok.told = await until(() => !!rec() && !!rec().lapse && rec().lapse.state === "working", 20000);
     const r = await shell.ask("studio:relay-lapse"), lic = await shell.ask("studio:licence"), desks = await shell.ask("studio:desks", R.proj);
@@ -6835,7 +6743,7 @@ LEGS.g2s9 = async () => {
   const ok = {};
   let shell = await launch();
   try {
-    await shell.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shell, R.proj);
     await until(() => !!rec() && !!world.store(rec().rt) && !!world.store(rec().rt).get("team") && !!rec().lapse, 20000);
     const store = world.store(rec().rt), r = Date.now() - 40 * G2_DAY;
     granted(R.keyAt, R.made.public, r - G2_DAY);
@@ -8226,7 +8134,7 @@ LEGS.g2s22 = async () => {
   const shell = await loadStudioShell(R.ud, { relay: t, env: R.env, thread });
   const ok = {};
   try {
-    await shell.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shell, R.proj);
     const rec = () => K.relayTeams(R.teamsFile)[0] || null;
     ok.made = await until(() => !!rec() && !!rec().lapse, 20000);
     K.markRelay(R.teamsFile, rec().team, { taken: true });
@@ -8251,7 +8159,7 @@ LEGS.rsk10 = async () => {
   let rt = "", why = "";
   const t1 = world.transport("old-computer"), old = await loadStudioShell(R.ud, { relay: t1, env: R.env, thread: R.thread });
   try {
-    const made = teamRelayHandler(old) ? await old.ask("studio:team-relay", R.proj) : null;
+    const made = await madeWithCatalog(old, R.proj);
     const rec = K.relayTeams(R.teamsFile)[0] || null;
     rt = rec ? rec.rt : "";
     if (!made || made.error || !rt || !(await until(() => !!world.store(rt) && !!world.store(rt).get("team"), 20000)))
@@ -8273,7 +8181,7 @@ LEGS.rsk10 = async () => {
     const answer = lead ? { ok: true, grant: grantKit.grantFor(lead, Date.now()) } : { ok: false, reason: "refused" };
     return { status: lead ? 200 : 400, header: () => null, bytes: Buffer.from(JSON.stringify(answer)) };
   };
-  const verbs = ["teamFacts", "teamKeyBack", "openProject", "readBackup", "openBackup"];
+  const verbs = ["teamFacts", "teamKeyBack", "openProject", "readBackup", "openBackup", "chooseTeam"];
   const thread = (verb, ...a) => (verbs.includes(verb) ? Promise.resolve().then(() => R.S[verb](...a)) : Promise.resolve({}));
   const env = { STUDIO_PROJECTS: path.join(lab, "projects"), STUDIO_SIGNING_KEY: keyAt, STUDIO_RELAY_ROOT: GRANT_ROOT_PUB, STUDIO_TEST_RESTORE: copy };
   const shell = await loadStudioShell(ud, { relay: t2, env, thread });
@@ -8332,12 +8240,12 @@ LEGS.rsk10 = async () => {
 LEGS.h2a = async () => {
   const world = await relayWorld(), lab = labDir("relay-h2a");
   const R = await leadAtRest(path.join(lab, "a"), "Lantern Quay");
-  const verbs = ["teamFacts", "teamKeyBack", "openProject", "startRelayTeam", "undoRelayTeam", "listProjects"];
+  const verbs = ["teamFacts", "teamKeyBack", "openProject", "startRelayTeam", "chooseTeam", "undoRelayTeam", "listProjects"];
   const threadA = (verb, ...a) => (verbs.includes(verb) ? R.S[verb](...a) : {});
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("h2a-a"), env: R.env, thread: threadA });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { shellA.done(); }
@@ -8383,11 +8291,11 @@ LEGS.h2b = async () => {
   const { loadPage } = await import("./page-stand-in.mjs");
   const world = await relayWorld(), lab = labDir("relay-h2b");
   const R = await leadAtRest(path.join(lab, "a"), "Lantern Quay");
-  const verbs = ["teamFacts", "teamKeyBack", "openProject", "startRelayTeam", "undoRelayTeam"];
+  const verbs = ["teamFacts", "teamKeyBack", "openProject", "startRelayTeam", "chooseTeam", "undoRelayTeam"];
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("h2b-a"), env: R.env, thread: (verb, ...a) => (verbs.includes(verb) ? R.S[verb](...a) : {}) });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { shellA.done(); }
@@ -8503,7 +8411,7 @@ async function rsroWorld(tag, o) {
   const world = await relayWorld(), lab = labDir("relay-" + tag);
   const R = await leadAtRest(path.join(lab, "a"), "Lantern Quay");
   signedIn(R.ud);
-  const verbs = ["teamFacts", "teamKeyBack", "teamKeyFromFile", "openProject", "startRelayTeam", "undoRelayTeam", "publishProject", "desksFor", "removeMember", "listProjects",
+  const verbs = ["teamFacts", "teamKeyBack", "teamKeyFromFile", "openProject", "startRelayTeam", "chooseTeam", "undoRelayTeam", "publishProject", "desksFor", "removeMember", "listProjects",
     "backupKey", "readBackup", "openBackup", "resealAside"];
   const failing = new Set((o && Array.isArray(o.failOnce)) ? o.failOnce : []), failed = [];
   const threadOf = (verb, ...a) => {
@@ -8515,7 +8423,7 @@ async function rsroWorld(tag, o) {
   let shellA = await loadStudioShell(R.ud, { relay: tA, env: R.env, thread: threadOf });
   let rec = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     rec = K.relayTeams(R.teamsFile)[0] || null;
     if (rec) await until(() => !!world.store(rec.rt) && !!world.store(rec.rt).get("team"), 20000);
     await shellSettled(shellA);
@@ -8944,12 +8852,12 @@ LEGS.h2e = async () => {
   const world = await relayWorld(), lab = labDir("relay-h2e");
   const R = await leadAtRest(path.join(lab, "a"), "Lantern Quay");
   signedIn(R.ud);
-  const verbs = ["teamFacts", "teamKeyBack", "openProject", "startRelayTeam", "undoRelayTeam", "publishProject"];
+  const verbs = ["teamFacts", "teamKeyBack", "openProject", "startRelayTeam", "chooseTeam", "undoRelayTeam", "publishProject"];
   const threadA = (verb, ...a) => (verbs.includes(verb) ? R.S[verb](...a) : {});
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("h2e-a"), env: R.env, thread: threadA });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
     await shellSettled(shellA);
@@ -9015,12 +8923,12 @@ LEGS.rpm1 = async () => {
   const world = await relayWorld(), lab = labDir("relay-rpm1");
   const R = await leadAtRest(path.join(lab, "a"), "Lantern Quay");
   signedIn(R.ud);
-  const verbs = ["teamFacts", "teamKeyBack", "openProject", "startRelayTeam", "undoRelayTeam", "publishProject"];
+  const verbs = ["teamFacts", "teamKeyBack", "openProject", "startRelayTeam", "chooseTeam", "undoRelayTeam", "publishProject"];
   const threadOf = (verb, ...a) => (verbs.includes(verb) ? R.S[verb](...a) : {});
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("rpm1-a"), env: R.env, thread: threadOf });
   let recA = null, replyA1 = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
     await shellSettled(shellA);
@@ -10133,7 +10041,7 @@ LEGS.rs932 = async () => {
   const thread = async (verb, ...a) => (verb === "listProjects" ? R.S.listProjects(...a) : R.thread(verb, ...a));
   const shell = await loadStudioShell(R.ud, { relay: t, env: R.env, thread });
   try {
-    await shell.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shell, R.proj);
     const uploaded = await until(() => {
       const rec = K.relayTeams(R.teamsFile)[0];
       return !!rec && rec.created === true && t.log.some((l) => l.indexOf("PUT ") === 0 && l.indexOf("b/") >= 0);
@@ -10371,7 +10279,7 @@ LEGS.rsho_b = async () => {
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("shell-a"), env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -10422,7 +10330,7 @@ LEGS.rsho_c = async () => {
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("shell-a"), env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -10489,7 +10397,7 @@ async function b984Parked(name, o) {
   const shellA = await loadStudioShell(R.ud, { relay: tA, env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -10834,7 +10742,7 @@ LEGS.rsho_c2 = async () => {
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("shell-a"), env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -10885,7 +10793,7 @@ LEGS.rsho_c3 = async () => {
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("shell-a"), env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -10965,7 +10873,7 @@ LEGS.rsho_c4 = async () => {
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("shell-a"), env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -11039,7 +10947,7 @@ LEGS.rsho_c5 = async () => {
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("shell-a"), env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -11139,7 +11047,7 @@ LEGS.rsho_e = async () => {
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("shell-a"), env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -11202,7 +11110,7 @@ async function leadBoxWorld(tag) {
   const shellA = await loadStudioShell(R.ud, { relay: world.transport("shell-a"), env: R.env, thread });
   let recA = null;
   try {
-    if (teamRelayHandler(shellA)) await shellA.ask("studio:team-relay", R.proj);
+    await madeWithCatalog(shellA, R.proj);
     recA = K.relayTeams(R.teamsFile)[0] || null;
     if (recA) await until(() => !!world.store(recA.rt) && !!world.store(recA.rt).get("team"), 20000);
   } finally { await shellA.done(); }
@@ -11294,6 +11202,9 @@ LEGS.rslb_f = async () => {
 };
 
 /* ---- the plants ------------------------------------------------------------------------------------------------------ */
+/* PLANTS RETIRED 2026-11-26 with studio:team-relay, nine of them: rsr1d's r1-take-ec and r1-take-ring, rs926a's rs926-place, rs926f's rs926-restore and rs926-unmark (the lines
+   that put a project's place back, which no press the shell makes reaches now), and rs926-first, -mark, -kept and -file, the catalog press's refusals (their marks stay as comments in
+   shell/main.js). Plants run in the release profile, not here. */
 const PLANTS = [
   { leg: "rts1", file: "src/wire.cjs", mark: "wire-test-relay", line: "const RELAY_TEST = \"https://etiuda.dev/relay-staging/v1/\";" },
   { leg: "rts1", file: "src/relay.mjs", mark: "rts-elsewhere", line: "      if (false) {" },
@@ -11329,8 +11240,6 @@ const PLANTS = [
   { leg: "rsr1a", file: "src/publish.mjs", mark: "r1-seal", line: "  writeWhole(ecAt, bytes);" },
   { leg: "rsr1a", file: "src/publish.mjs", mark: "r1-ring", line: "  const ring = { file: ringPath(folder) };" },
   { leg: "rsr1c", file: "src/publish.mjs", mark: "r1-signer", line: "  ;" },
-  { leg: "rsr1d", file: "src/studio.mjs", mark: "r1-take-ec", line: "    ;" },
-  { leg: "rsr1d", file: "src/studio.mjs", mark: "r1-take-ring", line: "    ;" },
   { leg: "rsr1e", file: "src/studio.mjs", mark: "r1-take-name", line: "      name = fixedName(home, p.project, String(p.draft.id || \"\"));" },
   { leg: "rsr1f", file: "src/publish.mjs", mark: "r1-signer", line: "  if (!read || !catalog.sig || catalog.sig.keyId !== read.keyId) return null;" },
   { leg: "rsce1", file: "src/publish.mjs", mark: "ce-taken", line: "  ;" },
@@ -11339,19 +11248,10 @@ const PLANTS = [
   { leg: "rsce3", file: "src/studio.mjs", mark: "ce-take-holds", line: "    const ours = true;" },
   { leg: "rs926a", file: "shell/main.js", mark: "rs926-keep", line: "    const mirror = path.join(path.dirname(at), \"relay\", rt);" },
   { leg: "rs926a", file: "src/studio.mjs", mark: "rs926-channel", line: "  ;" },
-  { leg: "rs926a", file: "src/studio.mjs", mark: "rs926-place", line: "    writeProject(home, Object.assign({}, found.project, { draft: found.draftName, sealedTeam: written.id }));" },
-  /* rs926k, not rs926b: since finding 9 a team kept for the folder is refused first (rs926-kept), so rs926b's second press is
-     refused twice over; rs926k's project has a team file of its own and no kept team, so this throw is its only guard. */
-  { leg: "rs926k", file: "shell/main.js", mark: "rs926-first", line: "    ;" },
-  { leg: "rs926i", file: "shell/main.js", mark: "rs926-mark", line: "    || false" },
-  { leg: "rs926j", file: "shell/main.js", mark: "rs926-kept", line: "    || false" },
-  { leg: "rs926k", file: "shell/main.js", mark: "rs926-file", line: "    || false;" },
   { leg: "rs926b", file: "shell/main.js", mark: "rs926-forget", line: "    ;" },
   { leg: "rs926f", file: "shell/main.js", mark: "rs926-unwind", line: "    ;" },
   { leg: "rs926g", file: "shell/main.js", mark: "rs926-unwind", line: "    ;" },
   { leg: "rs926h", file: "shell/main.js", mark: "rs926-together", line: "    K.forgetTeam(at, teamId);" },
-  { leg: "rs926f", file: "src/studio.mjs", mark: "rs926-restore", line: "    ;" },
-  { leg: "rs926f", file: "src/studio.mjs", mark: "rs926-unmark", line: "    ;" },
   { leg: "rs926g", file: "src/studio.mjs", mark: "rs926-unlink", line: "  ;" },
   { leg: "rs926b", file: "src/studio.mjs", mark: "rs926-undo", line: "    ;" },
   { leg: "rs926c", file: "shell/main.js", mark: "rs926-key", line: "  ;" },

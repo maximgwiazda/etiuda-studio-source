@@ -83,8 +83,8 @@
  *         network, on the electron stand-in, in a grandchild's stdin or fork channel, among the sealed bytes outside
  *         the key file, or in the capture. The publish phase starts no child process and opens no socket, and no
  *         child runs from publish-begin until the scenario child exits (the shell's reg.exe runs at load, before it)
- *   lh3   per scenario: the publish did what the scenario says (signed revision 2 with its ring; unsigned; refused; signed
- *         by the key it made, with its ring)
+ *   lh3   per scenario: the publish did what the scenario says (signed revision 2 with its ring; unsigned, the missing key's
+ *         included, which the first publish no longer makes (2026-11-26); refused)
  *   lh4   CONTROLS, in a copy of the signed scenario run with LEAK_PLANT set by this leg alone: one planted leak per
  *         channel kind, each found on its channel where it was planted; the transient file found by the act channel and
  *         absent from the end state; every honest check group of lh2 seen to have something to fail on; and the
@@ -106,9 +106,8 @@
  * lh1e and what it would have written later is not read; a grandchild still writing when the reap bound kills it is missed
  * after that kill. http2 is not patched. DNS is recorded at the call; this leg's own dns control does not put the
  * needle in the hostname, because that would ask the machine's resolver. The Linux paths (the keyring bus) run only
- * where the leg runs on Linux. In the missing-key scenario the publish makes a key inside the child, so that key's own secret
- * is not among the needles, which are fixed before the child starts: the scenario hunts the passphrase it was handed, and
- * the made key's secret is not hunted. On Linux a passphrase scenario's STUDIO_KEY_PASSPHRASE, which this leg sets, is
+ * where the leg runs on Linux. In the missing-key scenario the publish goes out unsigned
+ * and makes no key (it made one until 2026-11-26): the scenario hunts the passphrase it was handed. On Linux a passphrase scenario's STUDIO_KEY_PASSPHRASE, which this leg sets, is
  * allowed in the env at exit and in a child's inherited env and counted as information. The sealed bytes are allowed
  * in the key file and as the argument of safeStorage decryptString or encryptString, which is the vault call, and a
  * copy anywhere else is a finding.
@@ -598,7 +597,7 @@ async function parent() {
     { name: "signed-passphrase", key: "passphrase", vault: "ok", publishes: 1, expect: "signed" },
     { name: "wrong-secret-os", key: "os-wrong", vault: "ok", publishes: 1, expect: "unsigned" },
     { name: "wrong-passphrase", key: "passphrase-wrong", vault: "ok", publishes: 1, expect: "unsigned" },
-    { name: "key-missing", key: "missing", vault: "ok", publishes: 1, expect: "made" },
+    { name: "key-missing", key: "missing", vault: "ok", publishes: 1, expect: "unsigned" }, /* was expect "made": the first publish made the key, retired 2026-11-26 */
     { name: "key-not-json", key: "os-not-json", vault: "ok", publishes: 1, expect: "unsigned" },
     { name: "key-tampered", key: "passphrase-tampered", vault: "ok", publishes: 1, expect: "unsigned" },
     { name: "keychain-refuses", key: "os", vault: "refuse", publishes: 1, expect: "unsigned" },
@@ -879,8 +878,8 @@ async function parent() {
     const pubCarries = posts.filter((p) => p.verb === "publishProject" && p.hits.length).length, pubAll = posts.filter((p) => p.verb === "publishProject").length;
     const opensWanted = sc.expect === "signed" || sc.expect === "error";
     check(pubAll === sc.publishes && (opensWanted ? pubCarries === pubAll : pubCarries === 0),
-      P + "lh1c publishProject carried the secret in " + pubCarries + " of " + pubAll + " message(s), " + (opensWanted ? "every one, as the key opens" : sc.expect === "made" ? "none of the needles, as the key made in the child is not among them" : "none, as the key does not open") + " (the publish phase's other thread messages are listed, not judged: " + summarise(posts.map((p) => p.verb + (p.hits.length ? "*" : ""))) + "; * carries)");
-    if (sc.expect === "unsigned" || sc.expect === "made") {
+      P + "lh1c publishProject carried the secret in " + pubCarries + " of " + pubAll + " message(s), " + (opensWanted ? "every one, as the key opens" : "none, as the key does not open") + " (the publish phase's other thread messages are listed, not judged: " + summarise(posts.map((p) => p.verb + (p.hits.length ? "*" : ""))) + "; * carries)");
+    if (sc.expect === "unsigned") {
       let ok = false, how = "";
       const mainPid = mainBoot.length ? mainBoot[0].pid : null;
       if (sc.key === "passphrase-wrong" || sc.key === "missing" || sc.key === "passphrase-tampered") {
@@ -944,12 +943,6 @@ async function parent() {
       const ok = result && result.plan && result.plan.opens && reps.length === sc.publishes && reps.every((r, i) => r.error === null && r.rev === i + 1)
         && doc && doc.sig && doc.sig.keyId === result.plan.keyId && doc.rev === sc.publishes && shareFiles.some((f) => /ring\.json$/.test(f));
       check(!!ok, P + "lh3 signed: the plan opens the key, " + reps.length + " publish(es) answered revs " + reps.map((r) => r.rev).join(",") + " with no error, the share's edition is revision " + (doc && doc.rev) + " signed by the plan's key (" + !!(doc && doc.sig) + "), its ring beside it");
-    } else if (sc.expect === "made") {
-      /* THE FIRST PUBLISH MAKES THE KEY (the sense pass of 2026-10-14, finding 9): with no key file, the plan says the press
-         makes one, and the edition is signed by the key then at the scenario's key path, its ring beside it. */
-      const ok = result && result.plan && result.plan.makes && !result.plan.opens && reps.length === 1 && reps[0].error === null && reps[0].rev === 1
-        && result.plan2 && result.plan2.opens && doc && doc.sig && doc.sig.keyId === result.plan2.keyId && shareFiles.some((f) => /ring.json$/.test(f));
-      check(!!ok, P + "lh3 made: the plan says the publish makes the key (" + !!(result && result.plan && result.plan.makes) + "), the publish answered rev " + reps.map((r) => r.rev).join(",") + " with no error, and the share's edition is signed by the key it made (" + !!(doc && doc.sig) + "), its ring beside it");
     } else if (sc.expect === "unsigned") {
       const ok = result && result.plan && !result.plan.opens && reps.every((r) => r.error === null && r.rev === 1) && doc && !doc.sig;
       check(!!ok, P + "lh3 unsigned: the plan says the key does not open (keyId " + !!(result && result.plan && result.plan.keyId) + ", unreadable " + !!(result && result.plan && result.plan.unreadable) + "), the publish answered rev " + reps.map((r) => r.rev).join(",") + " with no error, and the share's edition carries no signature (" + !!(doc && doc.sig) + ")");

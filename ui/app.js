@@ -13787,29 +13787,24 @@
     if (!list.length) return [0, 1, 2].map(() => ({ name: T("Any desk"), a: 2, use: null }));
     return list.map((r) => ({ name: String(r.name || ""), a: r.admitted ? 1 : 0, use: prUseOf(r) }));
   }
-  /** On a folder team, what this desk itself wrote back, or that it can read the folder. Never that the new edition arrived. */
-  function prHeldLine(use, admitted) {
-    if (!admitted) return T("not admitted");
-    if (use && use.kind) return useSaying(use); /* plant:f2-folder-held */
-    return T("reads this folder");
-  }
-  /** The map's key, icon class then words. A folder team does not claim the new edition has arrived.
-      A publish whose relay sync failed or is pending drops that claim too. */
-  function prMapParts(folderHonest, named, r) {
+  /* THE MAP NAMES THE RELAY AND NO FOLDER A TEAM READS FROM (the pass over the retired folder mechanics, 2026-11-26): a team is made on the relay alone, so the map has
+     one kind of team. Gone with the folder team's branch: prHeldLine, what a desk of a folder team itself wrote back or that it could read the folder, never that the
+     new edition arrived (plant:f2-folder-held stood on it); the key's folderHonest, which dropped "has the new edition" for a folder team; and prFliesToDesks's
+     folder, which stopped the chip at the folder (plant:f2-folder-flies stood on it). The marks stay until the plant guard has a way to retire one. */
+  /** The map's key, icon class then words. A publish whose relay sync failed or is pending does not claim the new edition has arrived. */
+  function prMapParts(named, r) {
     const parts = [];
-    if (!folderHonest && !(r && (r.syncFailed || r.syncPending))) parts.push(["ln", T("has the new edition")]); /* plant:w3-sync-key */
+    if (!(r && (r.syncFailed || r.syncPending))) parts.push(["ln", T("has the new edition")]); /* plant:w3-sync-key */
     parts.push(["dt", T("reads this folder")]);
     if (named) parts.push(["nb", T("named, not admitted")]);
     return parts;
   }
-  function prMapKey(folderHonest, named, r) {
-    return prMapParts(folderHonest, named, r).map((p) => p[1]).join("");
+  function prMapKey(named, r) {
+    return prMapParts(named, r).map((p) => p[1]).join("");
   }
-  /** Chips fly to the desks on the relay, and where there is no folder yet. A folder team stops at the folder,
-      and a publish whose relay sync failed or is pending stops at the relay. */
-  function prFliesToDesks(folder, r) {
-    if (r && (r.syncFailed || r.syncPending)) return false; /* plant:w3-sync-map */
-    return !folder || onRelay(folder); /* plant:f2-folder-flies */
+  /** Chips fly to the desks on the relay; a publish whose relay sync failed or is pending stops at the relay. */
+  function prFliesToDesks(r) {
+    return !(r && (r.syncFailed || r.syncPending)); /* plant:w3-sync-map */
   }
   /** What the folder holds and who reads it, said once under the map and again in the bubble that follows. */
   function prDeskLine() {
@@ -13949,23 +13944,22 @@
       + (team && team.leadPrint ? keyHtml("studio", team.leadPrint) : ""),
       esc(T("Sealed for the team: only an admitted teammate can open it.")));
     const licGate = lic ? prGate("licence", "licence", locked ? "stop" : "ok", esc(lic.v), lic.where) : "";
-    /* THE SIGNATURE (publish-screen-never-signs): what the shell's plan says it will do with this computer's key. With no
-       key, the press makes one where nothing at the folder trusts another (`makes`, the sense pass's finding 9), and where
-       the folder's team trusts a key this computer has not got, that key is named and Restore comes first (`restore`, K8). */
+    /* THE SIGNATURE (publish-screen-never-signs): what the shell's plan says it will do with this computer's key. Where the
+       folder's team trusts a key this computer has not got, that key is named and Restore comes first (`restore`, K8); the press
+       no longer makes a key of its own accord (the pass over the retired folder mechanics, 2026-11-26), Settings does. */
     const sg = p.signing || {};
     const none = !sg.opens && !sg.keyId && !sg.unreadable;
-    const makes = none && sg.makes === true, restore = none && !makes && /^[0-9a-f]{16}$/.test(String(sg.restore || ""));
+    const restore = none && /^[0-9a-f]{16}$/.test(String(sg.restore || ""));
     /* AFTER SIGNED EDITIONS AN UNSIGNED ONE DOES NOT GO (Grok's review mu, 2026-11-22, the second B): the publisher refuses it,
        since every desk that trusts the key would refuse the file, so the gate stops and says where the key is restored. */
-    const unsignedRefused = !sg.opens && !makes && p.signedBefore === true; /* plant:s1-cover */
-    const signGate = prGate("sign", sg.opens || makes ? "signed" : "key", unsignedRefused ? "stop" : "ok", sg.opens
-      ? esc(T("Signed")) + (sg.print ? keyHtml("studio", sg.print) : "") : esc(makes ? T("Signed") : T("Unsigned")),
+    const unsignedRefused = !sg.opens && p.signedBefore === true; /* plant:s1-cover */
+    const signGate = prGate("sign", sg.opens ? "signed" : "key", unsignedRefused ? "stop" : "ok", sg.opens
+      ? esc(T("Signed")) + (sg.print ? keyHtml("studio", sg.print) : "") : esc(T("Unsigned")),
       unsignedRefused ? esc(T("Earlier editions of this catalog were signed and the signing key cannot be opened here now, so this edition cannot be published unsigned: desks that trust the key would refuse it. Restore the key from the Menu, under Settings, then Signing key."))
       : restore ? withKeyHtml(T("The team trusts the signing key {KEY}, and it is not on this computer."), "studio", sg.restore)
       : esc(sg.opens ? T("The key's print is written beside the catalog file, so a desk can check the edition came from here.")
         : sg.keyId ? T("This computer could not open the signing key, so the edition goes out unsigned.")
         : sg.unreadable ? T("The signing key's file on this computer cannot be read, so the edition goes out unsigned.")
-        : makes ? T("Publishing makes this Studio's signing key and signs the edition with it, so every desk offers the later editions as newer versions.")
         : T("There is no signing key yet: one is made from the Menu, under Settings, then Signing key.")),
       restore ? '<div class="row2">' + keySettingsBtn() + "</div>" : "");
     const copy = T("a copy of rev {n} in the catalog's archive", { n: revText(p.next, p.edition) });
@@ -14045,9 +14039,8 @@
     const chip = o.chip, was = o.was || "";
     const roster = (o.desks || []).map((d, i) => ({ name: d.name, a: d.a, use: d.use || null, i }));
     let foldSub = o.sub || "", foldLit = o.foldLit !== false, foldEl = null, nodes = [], alive = true;
-    const held = (n) => prHeldLine(n.use, n.a !== 0);
-    const status0 = (n) => (o.folderHonest ? held(n) : (n.a === 0 ? T("not admitted") : was ? T("has rev {REV}", { REV: was }) : T("reads this folder")));
-    const status1 = (n) => (o.folderHonest ? held(n) : (n.a === 0 ? T("cannot open rev {REV}", { REV: chip }) : T("offers rev {REV}", { REV: chip })));
+    const status0 = (n) => (n.a === 0 ? T("not admitted") : was ? T("has rev {REV}", { REV: was }) : T("reads this folder"));
+    const status1 = (n) => (n.a === 0 ? T("cannot open rev {REV}", { REV: chip }) : T("offers rev {REV}", { REV: chip }));
     const mark = mini ? "dmHeadM" : "dmHeadB";
     function build() {
       root.innerHTML = "";
@@ -14106,7 +14099,7 @@
       if (!mini) {
         const key = document.createElement("div");
         key.className = "dm-keys";
-        key.innerHTML = prMapParts(!!o.folderHonest, roster.some((r) => r.a === 0), o.r)
+        key.innerHTML = prMapParts(roster.some((r) => r.a === 0), o.r)
           .map((p) => '<span><i class="' + p[0] + '"></i>' + esc(p[1]) + "</span>").join("");
         root.appendChild(key);
       }
@@ -14241,7 +14234,6 @@
        architect's condition 6); `chipRev` is the travelling chip's, a short label. */
     const was = big ? revText(p.rev, p.was) : p.rev, next = big ? revText(p.next, p.edition) : p.next; /* plant:txrd-rd12 */
     return { desks: prDesks(), mini: !big, chip: next, chipRev: p.next, was: p.rev ? was : 0, foldLit: !!p.folder && !first,
-      folderHonest: !!(p && p.folder && !onRelay(p.folder)),
       r: r || null,
       fold: big ? prFolderName(p.folder) : "",
       sub: !p.folder ? T("nothing yet") : big ? (first ? T("nothing published yet") : T("{FILE}, rev {REV}", { FILE: prFile(p), REV: was }))
@@ -14250,16 +14242,10 @@
   const prFile = (p) => (/\.ec$/.test(String(p.fileName)) ? String(p.fileName) : String(p.fileName) + ".ec");
   /** The folder's own name as the publish window draws it; a relay team's is the relay's, not its mirror's. */
   const prFolderName = (folder) => (onRelay(folder) ? relayName() : prLeaf(folder));
-  /** What a folder publish may say: the edition is in the team's folder. Not that any desk has taken it. */
-  function prFolderWritten() {
-    return T("The edition is in the team's folder."); /* plant:f2-folder-written */ /* Claudette's words, 2026-10-28 */
-  }
-  /** What the publish map's caption says: on the relay each desk takes the file once the relay has it; a folder team's is written to the folder. */
-  /* Claudette's words, 2026-10-27, for the relay. The folder sentence is a draft for the copywriter. */
-  function prPressCap(folder) {
-    return onRelay(folder)
-      ? T("Each running desk takes the file once the relay has it and offers it to the person at it; a desk that is closed finds it when it next starts.") /* plant:w2-press-cap */
-      : prFolderWritten();
+  /** What the publish map's caption says: each desk takes the file once the relay has it. Claudette's words, 2026-10-27, for the relay. The folder team's sentence, "The
+      edition is in the team's folder." (plant:f2-folder-written stood on it), is gone with the folder team; the mark stays until the plant guard has a way to retire one. */
+  function prPressCap() {
+    return T("Each running desk takes the file once the relay has it and offers it to the person at it; a desk that is closed finds it when it next starts."); /* plant:w2-press-cap */
   }
   /** The team at the project's folder as the Desks screen reads it, or nothing where it cannot be read. */
   async function prDesksRead(dir) {
@@ -14350,7 +14336,7 @@
       const frame = document.createElement("div");
       frame.className = "pwc-map";
       frame.innerHTML = '<div class="pwc-con big" id="pwcBig"><div class="dm"></div></div><div class="pwc-cap" id="pwcCap">' + I("info")
-        + "<span>" + esc(prDeskLine() + " " + prPressCap(p && p.folder)) + "</span></div>";
+        + "<span>" + esc(prDeskLine() + " " + prPressCap()) + "</span></div>";
       cols.appendChild(frame); made.push(frame);
       const bigBox = $("#pwcBig"), cap = $("#pwcCap");
       if (cap) cap.style.opacity = "0";
@@ -14383,7 +14369,7 @@
       if (strip) { strip.classList.remove("first"); strip.innerHTML = prStripHtml(Object.assign({}, p, { next: r.rev }), true); prFitStrip(); }
       const back = Promise.all([prAnim($("#pwcBars"), [{ transform: "scaleX(.05)", opacity: 0 }, { transform: "scaleX(1)", opacity: 1 }], prT("wash", 1.2)),
         prAnim($("#dlg .pwc-labels"), [{ opacity: 0 }, { opacity: 1 }], prT("wash"))]);
-      const fly = prFliesToDesks(p && p.folder, r);
+      const fly = prFliesToDesks(r);
       await Promise.all([back, fly ? big.send(prT("travel", 2.4)) : null]);
       if (fly) big.finish();
       await prAnim(cap, [{ opacity: 0 }, { opacity: 1 }], prT("reveal", 2));
@@ -14441,22 +14427,12 @@
       : ec && up > 0 && ec.indexOf(String(r.folder)) === 0 ? ec.slice(up) : ec;
     /* plant:w4-ring-head-later stood on the line for a publish whose team records could not be brought up to date at a shared folder, which is
        gone; the mark stays until the plant guard has a way to retire one. */
-    const written = r && r.folder && !onRelay(r.folder) ? " " + prFolderWritten() : "";
     /* The folder held a newer edition of this catalog than this project knew of, and this one went above it (Grok's review 29, finding 2). */
     const above = r && r.folderNewer ? " " + T("The folder already held rev {N} of this catalog, newer than this project's, so this edition went out above it.", { N: r.folderNewer }) : ""; /* plant:r2-press */
-    $("#pressedBody").textContent = T("Edition {EDITION}.", { EDITION: r.edition }) + above + written + " " + line
+    $("#pressedBody").textContent = T("Edition {EDITION}.", { EDITION: r.edition }) + above + " " + line
       + (r && r.syncFailed
         ? " " + T("The relay could not be reached just now. The edition is written, and Studio sends it at its next look, within a few minutes; nothing more needs doing.") /* plant:w2-sync-failed Claudette's words, 2026-10-27 */
         : r && r.syncPending ? " " + T("The edition is published. The team will have it shortly, and nothing more needs doing.") : "");
-    /* THE NUDGE TOWARDS A BACKUP COPY, once (the sense pass's finding 9): the shell asks for it on the first landing after
-       Studio made its key by itself, and every other landing leaves both lines hidden. */
-    const nudge = $("#pressedKey"), backup = $("#pressedBackup");
-    if (nudge) {
-      nudge.hidden = !r.keyNudge;
-      nudge.textContent = r.keyNudge ? T("Studio made its signing key, and signs every edition with it from now on.") + " "
-        + T("A backup copy brings it to another computer.") : "";
-    }
-    if (backup) { backup.hidden = !r.keyNudge; backup.innerHTML = r.keyNudge ? I("backup") + esc(T("Make a backup copy…")) : ""; }
     $("#pressedArchive").innerHTML = I("archive") + esc(T("Open the archive"));
     box.hidden = false;
     tell(T("Rev {N} is in the folder.", { N: revText(r.rev, r.edition) }));
@@ -20679,10 +20655,6 @@
     "pressed-archive": () => {
       prLandedHide();
       ACTS.section({ getAttribute: () => "archive" });
-    },
-    "pressed-backup": () => {
-      prLandedHide();
-      ACTS["key-backup"]();
     },
     "stats-more": (el) => {
       const k = el.getAttribute("data-v");

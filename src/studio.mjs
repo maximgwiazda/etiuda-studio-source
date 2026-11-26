@@ -3789,8 +3789,7 @@ async function renameProject(dir, name, o) {
     const rel = share ? path.relative(home, share) : "..";
     if (!same && rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel))
       throw refuse("The team reads this catalog from {DIR}, which is inside the catalog's own folder,"
-        + " so renaming it would move that folder out of its reach. Change folder beside Writes"
-        + " to chooses one outside the catalog, and the rename can follow.", { DIR: share });
+        + " so renaming it would move that folder out of its reach.", { DIR: share });
     renamePatiently(home, to);
   }
   try {
@@ -4235,8 +4234,7 @@ async function setTeamSealed(dir, sealed, o) {
   if (!found) throw refuse("no catalog in {DIR}", { DIR: home });
   const sealedAt = folderHere(found.project, opts);
   const shown = sealedAt ? path.resolve(sealedAt) : null;
-  if (!shown) throw refuse("Publishing needs the folder the team reads from, and Change"
-    + " beside Writes to chooses it.");
+  if (!shown) throw refuse("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.");
   const folder = shown;
   const key = readKeyFile(opts.key);
   if (!key) throw refuse("A team file is signed with this Studio's signing key, and Settings shows there is none yet.");
@@ -5046,7 +5044,7 @@ async function exportStatsBook(dir, file, words, o) {
   const facts = await statsFor(dir, o || {});
   if (facts.refusal) throw new Error(facts.refusal);
   if (!facts.folder || !facts.views) {
-    throw refuse("this catalog has no folder yet: choose the folder the team reads from first");
+    throw refuse("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.");
   }
   const found = readProject(path.resolve(dir));
   const draft = found.draft;
@@ -5127,7 +5125,7 @@ async function setStatsSpan(dir, span, o) {
   const opts = o || {};
   const spanAt = folderHere(found.project, opts);
   const folder = spanAt ? path.resolve(spanAt) : null;
-  if (!folder) throw refuse("this catalog has no folder yet: choose the folder the team reads from first");
+  if (!folder) throw refuse("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.");
   const read = readKeyFile(opts.key);
   if (!read) throw refuse("A team file is signed with this Studio's signing key, and Settings shows there is none yet.");
   let open;
@@ -5264,8 +5262,7 @@ async function publishProject(dir, o) {
   const relayTeam = !!(p.project.relay && /^[0-9a-f]{32}$/.test(String(p.project.relay.rt || "")));
   const resolved = folderHere(p.project, opts);
   const folder = opts.folder ? String(opts.folder) : resolved; /* plant:h2-publish */
-  if (!folder) throw refuse("Publishing needs the folder the team reads from, and Change"
-    + " beside Writes to chooses it.");
+  if (!folder) throw refuse("This catalog is on no team, so it publishes nowhere yet. Put it on a team, or make one first.");
   const work = path.resolve(folder);
   let done;
   try {
