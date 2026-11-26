@@ -921,13 +921,8 @@ LEGS["tl-moved-key-floor"] = async () => {
     teams: { [teamId]: { epoch: w.team.epoch, rev: floorRev } }
   }, null, 1) + "\n");
   const shellText = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
-  /* MOVED 2026-11-26: three sites passed the key's own path (P2 took the desk-admit one), and now two: studio:team-sealed, the third, went with the Sealed switch (the pass over
-     the retired folder mechanics). The floor itself did not move: invite-make below still answers the unreadable-teams refusal from the key's floor file. The control reads the
-     same text with one site made bare and must fail the count. */
-  const SITES = 2, siteCount = (t) => ({ passed: t.split("studioTeammates(at, { key: await keyFileNow() })").length - 1, bare: (t.match(/studioTeammates\(at\)/g) || []).length });
-  const { passed, bare } = siteCount(shellText);
-  const planted = siteCount(shellText.replace("studioTeammates(at, { key: await keyFileNow() })", "studioTeammates(at)"));
-  const controlRed = !(planted.passed === SITES && planted.bare === 0);
+  const passed = shellText.split("studioTeammates(at, { key: await keyFileNow() })").length - 1;
+  const bare = (shellText.match(/studioTeammates\(at\)/g) || []).length;
   const guessedRevs = path.join(ud, "team-revs.json");
   const wasKey = process.env.STUDIO_SIGNING_KEY;
   const wasPass = process.env.STUDIO_KEY_PASSPHRASE;
@@ -946,8 +941,8 @@ LEGS["tl-moved-key-floor"] = async () => {
   }
   process.stdout.write("       moved floorRev " + floorRev + " passed " + passed + " bare " + bare
     + " guessedRevs " + fs.existsSync(guessedRevs) + " invite " + JSON.stringify(said) + "\n");
-  /* P2: four sites asked the count with the key's own path; the desk-admit verb was one of them, and went with the code door, so three did; two do since 2026-11-26. */
-  return passed === SITES && bare === 0 && controlRed && !fs.existsSync(guessedRevs) && said === TeamStore.REFUSAL_TEAMS_UNREADABLE;
+  /* P2: four sites asked the count with the key's own path; the desk-admit verb was one of them, and went with the code door, so three do. */
+  return passed === 3 && bare === 0 && !fs.existsSync(guessedRevs) && said === TeamStore.REFUSAL_TEAMS_UNREADABLE;
 };
 
 const PLANTS = [

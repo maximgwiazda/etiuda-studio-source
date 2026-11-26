@@ -22,7 +22,7 @@ import { loadPage } from "./page-stand-in.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const SCRATCH = path.join(ROOT, "scratch", "publish-press");
-const EXPECTED = 32; /* 32 at the merge base, and pr2s and pr2t on main, one retired by the folder removal, and pr3i retired with the folder team's branch of the map (2026-11-26) */
+const EXPECTED = 33; /* 32 at the merge base, and pr2s and pr2t on main, one retired by the folder removal */
 
 /* ETIUDA_PLANTS=off (a merge's area run) skips the plant legs pr3i, pr3l and pr3n and counts them toward EXPECTED;
    the release profile runs with plants on, so they still run there. */
@@ -196,7 +196,7 @@ async function main(argv) {
       "pr3a Publish writes rev 2 with the notes typed, and the window lands once the drawing is finished: "
       + JSON.stringify([busyMid, coverMid, proj.rev, P.S.cover, P.S.tabs[0].rev]));
     check(home.node("#pressed").hidden === false && said(home.node("#pressedTitle").textContent) === "Rev 2 is in the folder."
-          && /^Edition \S+\. 2 teammates admitted read this folder\. 1 more is named/.test(said(home.node("#pressedBody").textContent))
+          && /^Edition \S+\. The edition is in the team's folder\. 2 teammates admitted read this folder\. 1 more is named/.test(said(home.node("#pressedBody").textContent))
           && /^Rev 2 \(\S+\) is in the folder\.$/.test(said(home.node("#said").textContent)),
       "pr3b the bubble under the tab says the new rev is in the folder and where, and a reader is told: "
       + JSON.stringify([home.node("#pressedTitle").textContent, home.node("#pressedBody").textContent, home.node("#said").textContent, home.node("#pressed").hidden]));
@@ -208,21 +208,20 @@ async function main(argv) {
       "pr3e a publish reply with syncPending shows the pending sentence beside the landed notice, and one without does not: "
       + JSON.stringify([bodyWithout.includes("shortly"), bodyWith.includes("shortly")]));
 
-    /* (a) the press caption says W2's caption, in English and in Polish. MOVED 2026-11-26 with the folder team's branch of the map: was "the press caption on a relay
-       team says W2's caption and a folder team's says today's" ("The edition is in the team's folder." / "Wydanie jest już w folderze zespołu."); the caption is one now, the
-       relay's, whatever place the page is handed. */
+    /* (a) the press caption on a relay team says W2's caption and a folder team's says today's, in English and in Polish */
     const relayFolder = path.join(SCRATCH, "relay", "0123456789abcdef0123456789abcdef");
     const capOf = (page, dir) => { try { return page.__get("prPressCap")(dir); } catch { return ""; } };
     const enRelayCap = capOf(P, relayFolder);
     const enFolderCap = capOf(P, share);
     const plRelayCap = capOf(pl.page, relayFolder);
+    const plFolderCap = capOf(pl.page, share);
     const w2RelayEn = "Each running desk takes the file once the relay has it and offers it to the person at it; a desk that is closed finds it when it next starts.";
     const w2FolderEn = "The edition is in the team's folder.";
     const w2RelayPl = "Każde włączone stanowisko weźmie plik, gdy tylko dotrze on do przekaźnika, i zaproponuje go osobie, która przy nim pracuje; wyłączone znajdzie go przy następnym uruchomieniu.";
     const w2FolderPl = "Wydanie jest już w folderze zespołu.";
-    check(enRelayCap === w2RelayEn && enFolderCap === w2RelayEn && plRelayCap === w2RelayPl,
-      "pr3f the press caption says W2's relay caption in English and in Polish, whatever place the page is handed (no folder team's caption is left): "
-      + JSON.stringify([enRelayCap === w2RelayEn, enFolderCap === w2RelayEn, plRelayCap === w2RelayPl]));
+    check(enRelayCap === w2RelayEn && enFolderCap === w2FolderEn && plRelayCap === w2RelayPl && plFolderCap === w2FolderPl,
+      "pr3f the press caption on a relay team says W2's caption and a folder team's says today's, in English and in Polish: "
+      + JSON.stringify([enRelayCap === w2RelayEn, enFolderCap === w2FolderEn, plRelayCap === w2RelayPl, plFolderCap === w2FolderPl]));
 
     /* (b) a publish reply with syncFailed shows the W2 failure sentence in English and Polish, and a sync that outlasts the wait still says today's sentence */
     P.__get("prLanded")({ rev: 2, edition: "2026-10-22", ec: "press.ec", folder: relayFolder, syncFailed: true }, {}, P.__get("prDeskLine")());
@@ -253,9 +252,9 @@ async function main(argv) {
     const bodyOrdEn = said(home.node("#pressedBody").textContent);
     pl.page.__get("prLanded")({ rev: 2, edition: "2026-10-22", ec: "press.ec", folder: share }, {}, pl.page.__get("prDeskLine")());
     const bodyOrdPl = said(pl.node("#pressedBody").textContent);
-    check(!bodyLaterEn.includes(w4LaterEn) && !bodyLaterEn.includes("records could not") && !bodyLaterEn.includes(w2FolderEn)
-          && !bodyLaterPl.includes(w4LaterPl) && !bodyLaterPl.includes("Zapisów zespołu nie udało się") && !bodyLaterPl.includes(w2FolderPl),
-      "pr3o a reply that carries ringHeadLater says nothing of it, in English and Polish, and no folder sentence follows (was: the ordinary folder sentence stood, and before that a rolled-forward publish showed her line): "
+    check(!bodyLaterEn.includes(w4LaterEn) && !bodyLaterEn.includes("records could not") && bodyLaterEn.includes(w2FolderEn)
+          && !bodyLaterPl.includes(w4LaterPl) && !bodyLaterPl.includes("Zapisów zespołu nie udało się") && bodyLaterPl.includes(w2FolderPl),
+      "pr3o a reply that carries ringHeadLater says nothing of it, in English and Polish: the ordinary folder sentence stands (was: a rolled-forward publish showed her line): "
       + JSON.stringify([bodyLaterEn.includes("records could not"), bodyLaterPl.includes("Zapisów zespołu nie udało się")]));
 
     /* (d) Grok's review 29, finding 2: a publish that went above a newer edition the folder already held says so, with that rev, in
@@ -270,28 +269,40 @@ async function main(argv) {
       "pr3q a publish that went above a newer edition in the folder says the folder held rev 5, in English and Polish, and an ordinary publish"
       + " does not: " + JSON.stringify([bodyAboveEn.includes(r2En), bodyAbovePl.includes(r2Pl)]));
 
-    /* MOVED 2026-11-26 with the folder team's branch of the map. Was: "a folder map says what that desk wrote back and does not send the edition on, and a relay map still
-       names the new edition" (prHeldLine, the key's folderHonest, prFliesToDesks's folder). Now the map has one kind of team: it names the new edition, sends it on, and the
-       folder team's lines are gone from the page. */
-    let keyRelay = "", flyRelay = null, noFolderBranch = false, mapUses = false, goUses = false, heldWhy = "";
-    const gone = (name) => { try { P.__get(name); return false; } catch { return true; } };
+    /* A folder map says what each desk wrote back, and does not fly the edition out to them. The relay map still does. */
+    let held = "", quiet = "", blocked = "", keyFolder = "", keyRelay = "", flyFolder = null, flyRelay = null;
+    let honest = null, relayHonest = null, olaUse = false, mapUses = false, goUses = false, heldWhy = "";
     const savedPlan = P.S.plan, savedDesks = P.S.planDesks;
     try {
-      P.S.plan = { folder: relayFolder, rev: 1, next: 2, edition: "2026-10-22", was: "2026-09-01", fileName: "press.ec" };
+      P.S.plan = { folder: share, rev: 1, next: 2, edition: "2026-10-22", was: "2026-09-01", fileName: "press.ec" };
       P.S.planDesks = { team: { sealed: true, roster: [
         { name: "Ola", admitted: true }, { name: "Jan", admitted: true }, { name: "Ewa", admitted: false },
       ] }, uses: [{ name: "Ola", kind: "edition", rev: 1, n: "2026-09-01" }] };
-      keyRelay = P.__get("prMapKey")(false);
-      flyRelay = P.__get("prFliesToDesks")();
-      noFolderBranch = gone("prHeldLine") && gone("prFolderWritten") && String(P.__get("prMapOpts")).indexOf("folderHonest") < 0
-        && String(P.__get("deskMap")).indexOf("folderHonest") < 0 && P.__get("prMapOpts")(true).folderHonest === undefined;
-      mapUses = String(P.__get("deskMap")).indexOf("prMapParts") >= 0;
+      const use = { kind: "edition", rev: 1, n: "2026-09-01" };
+      held = P.__get("prHeldLine")(use, true);
+      quiet = P.__get("prHeldLine")(null, true);
+      blocked = P.__get("prHeldLine")(null, false);
+      keyFolder = P.__get("prMapKey")(true, true);
+      keyRelay = P.__get("prMapKey")(false, false);
+      flyFolder = P.__get("prFliesToDesks")(share);
+      flyRelay = P.__get("prFliesToDesks")(relayFolder);
+      const opts = P.__get("prMapOpts")(true);
+      honest = opts.folderHonest;
+      const ola = (opts.desks || []).find(d => d.name === "Ola");
+      olaUse = !!(ola && ola.use && ola.use.kind === "edition");
+      P.S.plan = Object.assign({}, P.S.plan, { folder: relayFolder });
+      relayHonest = P.__get("prMapOpts")(true).folderHonest;
+      mapUses = String(P.__get("deskMap")).indexOf("prHeldLine") >= 0 && String(P.__get("deskMap")).indexOf("prMapParts") >= 0;
       goUses = String(P.__get("prGo")).indexOf("prFliesToDesks") >= 0;
     } catch (e) { heldWhy = e && e.message ? e.message : String(e); }
     finally { P.S.plan = savedPlan; P.S.planDesks = savedDesks; }
-    check(keyRelay.indexOf("has the new edition") >= 0 && keyRelay.indexOf("reads this folder") >= 0 && flyRelay === true && noFolderBranch && mapUses && goUses,
-      "pr3h the map has one kind of team: its key names the new edition, the chip flies on to the desks, and the folder team's lines (what a desk wrote back, folderHonest, the folder sentence) are gone from the page: "
-      + JSON.stringify([keyRelay, flyRelay, noFolderBranch, mapUses, goUses, heldWhy]));
+    check(held === "rev 1 (2026-09-01), published here" && quiet === "reads this folder" && blocked === "not admitted"
+          && keyFolder.indexOf("has the new edition") < 0 && keyFolder.indexOf("reads this folder") >= 0
+          && keyFolder.indexOf("named, not admitted") >= 0 && keyRelay.indexOf("has the new edition") >= 0
+          && flyFolder === false && flyRelay === true && honest === true && relayHonest === false
+          && olaUse && mapUses && goUses,
+      "pr3h a folder map says what that desk wrote back and does not send the edition on, and a relay map still names the new edition: "
+      + JSON.stringify([held, quiet, blocked, flyFolder, flyRelay, honest, relayHonest, olaUse, mapUses, goUses, heldWhy]));
 
     const appPath = path.join(ROOT, "ui", "app.js");
     const goodApp = fs.readFileSync(appPath);
@@ -307,8 +318,32 @@ async function main(argv) {
       if (back !== goodHash) throw new Error("sha256 restore failed");
       return { red, why };
     };
-    /* pr3i RETIRED 2026-11-26 with the folder team's branch of the map: removing the folder sentence (plant:f2-folder-written), the still-on-the-desk guard (plant:f2-folder-flies)
-       or the written-back line (plant:f2-folder-held) made that claim again. The three lines are gone from the page; their marks stay as comments there. */
+    if (PLANTS_OFF) {
+      skip("pr3i removing the folder sentence, the still-on-the-desk guard or the written-back line makes that claim again, and the file is unchanged (ETIUDA_PLANTS=off)");
+    } else {
+      const words = plantOne(
+        'T("The edition is in the team\'s folder."); /* plant:f2-folder-written */',
+        'T("Each running desk sees the file at once and offers it to the person at it; a desk that is closed finds it when it next starts.");',
+        (page, box) => {
+          const cap = page.__get("prPressCap")(share);
+          page.__get("prLanded")({ rev: 2, edition: "2026-10-22", ec: "press.ec", folder: share }, {}, "2 teammates admitted read this folder.");
+          const body = said(box.node("#pressedBody").textContent);
+          return cap === w2FolderEn && body.indexOf(w2FolderEn) >= 0 && body.indexOf("sees the file at once") < 0;
+        });
+      const flies = plantOne(
+        "return !folder || onRelay(folder); /* plant:f2-folder-flies */",
+        "return true; /* plant:f2-folder-flies */",
+        (page) => page.__get("prFliesToDesks")(share) === false && page.__get("prFliesToDesks")(relayFolder) === true);
+      const heldPlant = plantOne(
+        "return useSaying(use); /* plant:f2-folder-held */",
+        "/* plant:f2-folder-held */",
+        (page) => String(page.__get("prHeldLine")({ kind: "edition", rev: 1, n: "2026-09-01" }, true)).indexOf("published here") >= 0);
+      const tree = crypto.createHash("sha256").update(fs.readFileSync(appPath)).digest("hex");
+      check(words.red && flies.red && heldPlant.red && tree === goodHash
+            && P.__get("prPressCap")(share) === w2FolderEn,
+        "pr3i removing the folder sentence, the still-on-the-desk guard or the written-back line makes that claim again, and the file is unchanged: "
+        + JSON.stringify({ words: words.red, flies: flies.red, held: heldPlant.red, why: [words.why, flies.why, heldPlant.why].filter(Boolean) }));
+    }
 
     /* The plant of pr3q: the press's sentence for a newer edition in the folder taken out turns it red. */
     if (PLANTS_OFF) {
@@ -330,7 +365,7 @@ async function main(argv) {
       skip("pr2t the cover's reading of an earlier signed edition planted out turns pr2s red, and the file is unchanged (ETIUDA_PLANTS=off)");
     } else {
       const stopped = plantOne(
-        "const unsignedRefused = !sg.opens && p.signedBefore === true; /* plant:s1-cover */",
+        "const unsignedRefused = !sg.opens && !makes && p.signedBefore === true; /* plant:s1-cover */",
         "const unsignedRefused = false; /* plant:s1-cover */",
         (page) => {
           Object.assign(page.S, { open: opened, screen: "project", section: "cards", lang: "en", uiLang: "en", planDesks: null, cover: "publish",
@@ -372,7 +407,7 @@ async function main(argv) {
       const p = page.__get("prGo")(reply);
       page.__get("prSkip")();
       await p;
-      return { marks, sent, finished, flies: page.__get("prFliesToDesks")(reply), keysText };
+      return { marks, sent, finished, flies: page.__get("prFliesToDesks")(relayFolder, reply), keysText };
     };
 
     const mapFailed = await marksFor({ rev: 2, edition: "2026-10-30", ec: "press.ec", syncFailed: true });
@@ -392,9 +427,9 @@ async function main(argv) {
     check(mapFailed.keysText.indexOf("has the new edition") < 0
           && mapPending.keysText.indexOf("has the new edition") < 0
           && mapGood.keysText.indexOf("has the new edition") >= 0
-          && P.__get("prMapKey")(false, { syncFailed: true }).indexOf("has the new edition") < 0
-          && P.__get("prMapKey")(false, { syncPending: true }).indexOf("has the new edition") < 0
-          && P.__get("prMapKey")(false).indexOf("has the new edition") >= 0,
+          && P.__get("prMapKey")(false, false, { syncFailed: true }).indexOf("has the new edition") < 0
+          && P.__get("prMapKey")(false, false, { syncPending: true }).indexOf("has the new edition") < 0
+          && P.__get("prMapKey")(false, false).indexOf("has the new edition") >= 0,
       "pr3m a failed or pending sync drops 'has the new edition' from the publish map key: "
       + JSON.stringify([mapFailed.keysText, mapPending.keysText, mapGood.keysText]));
 
@@ -403,20 +438,20 @@ async function main(argv) {
       skip("pr3n removing the failed or pending sync map key guard keeps 'has the new edition' on the map key, and the file is unchanged (ETIUDA_PLANTS=off)");
     } else {
       const syncMapPlant = plantOne(
-        "return !(r && (r.syncFailed || r.syncPending)); /* plant:w3-sync-map */",
-        "return true; /* plant:w3-sync-map */",
-        (page) => page.__get("prFliesToDesks")({ syncFailed: true }) === false
-          && page.__get("prFliesToDesks")({ syncPending: true }) === false);
+        "if (r && (r.syncFailed || r.syncPending)) return false; /* plant:w3-sync-map */",
+        "/* plant:w3-sync-map */",
+        (page) => page.__get("prFliesToDesks")(relayFolder, { syncFailed: true }) === false
+          && page.__get("prFliesToDesks")(relayFolder, { syncPending: true }) === false);
       const treeW3 = crypto.createHash("sha256").update(fs.readFileSync(appPath)).digest("hex");
       check(syncMapPlant.red && treeW3 === goodHash,
         "pr3l removing the failed or pending sync map guard sends the edition to the desks when the relay does not hold it, and the file is unchanged: "
         + JSON.stringify({ syncMap: syncMapPlant.red, why: syncMapPlant.why }));
 
       const syncKeyPlant = plantOne(
-        'if (!(r && (r.syncFailed || r.syncPending))) parts.push(["ln", T("has the new edition")]); /* plant:w3-sync-key */',
-        'parts.push(["ln", T("has the new edition")]); /* plant:w3-sync-key */',
-        (page) => page.__get("prMapKey")(false, { syncFailed: true }).indexOf("has the new edition") < 0
-          && page.__get("prMapKey")(false, { syncPending: true }).indexOf("has the new edition") < 0);
+        'if (!folderHonest && !(r && (r.syncFailed || r.syncPending))) parts.push(["ln", T("has the new edition")]); /* plant:w3-sync-key */',
+        'if (!folderHonest) parts.push(["ln", T("has the new edition")]); /* plant:w3-sync-key */',
+        (page) => page.__get("prMapKey")(false, false, { syncFailed: true }).indexOf("has the new edition") < 0
+          && page.__get("prMapKey")(false, false, { syncPending: true }).indexOf("has the new edition") < 0);
       const treeW3k = crypto.createHash("sha256").update(fs.readFileSync(appPath)).digest("hex");
       check(syncKeyPlant.red && treeW3k === goodHash,
         "pr3n removing the failed or pending sync map key guard keeps 'has the new edition' on the map key, and the file is unchanged: "

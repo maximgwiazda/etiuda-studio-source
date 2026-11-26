@@ -138,7 +138,7 @@ function refusedOf(r) {
  * The relay makes a team only under a grant: a document the vendor's root key signed over this lead's public key, with the dates
  * it holds for and whether the licence is paid (tools/sign.mjs grant makes one). Studio keeps it in relay-grant.json in the folder
  * its signing key sits in, and judges it with the pinned relay's own grantOk before any request is made, so a lead without one
- * sends nothing and is told so at the place it chooses the relay (shell/main.js studio:team-new). Only a leg names other roots
+ * sends nothing and is told so at the place it chooses the relay (shell/main.js studio:team-relay). Only a leg names other roots
  * than the pinned constant, through `roots`; production code passes none. Each refusal is the copywriter's (2026-11-17), with no shared
  * folder offered in its place now that folder teams are gone. */
 const GRANT_SAID = {

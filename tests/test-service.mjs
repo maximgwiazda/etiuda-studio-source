@@ -288,7 +288,7 @@ try {
   }, "ts9c with plant:rts-new-teams put in another form a test service build makes its teams on the relay, and with plant:wire-testing an"
     + " ordinary build makes them on staging's, the copy unplanted answering as ts9a does, so ts9a has teeth");
   await plantCheck(async () => {
-    const reds = [["rts-start", "      r = await thread.call(\"startRelayTeam\", null, { key, passphrase: await keySecret(), teamId, rt, url: Rl.RELAY_URL,"]]
+    const reds = [["rts-start", "      r = await thread.call(\"startRelayTeam\", String(dir || \"\"), { key, passphrase: await keySecret(), teamId, rt, url: Rl.RELAY_URL,"]]
       .map(([tag, to]) => shellRight(lift(SHELL, tag, to)).ok);
     return reds.every((ok) => ok === false);
   }, "ts9d with plant:rts-start put in another form (the relay's address in place of where new teams are made), ts9b goes red");
