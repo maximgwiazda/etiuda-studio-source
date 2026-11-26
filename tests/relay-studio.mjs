@@ -157,8 +157,10 @@
  *        a key, so the relay no longer makes the key (board 935, G3; the leg was the first team making it)
  *   rs962s6g board 962 stage 6, U1: a desk on a relay team of two catalogs follows A only once B is taken off (its team file, its
  *        mirror's files, the head), and once A is taken off too the runner deletes the head and the desk holds none
- *   rs962t5 the relay's first-team cover offers a team this Studio leads as a third place; chosen, no relay sentence or trial, no
- *        relay team id or address, and the press asks studio:team-choose (board 962 stage 5, T5)
+ *   rs962t5 RETIRED 2026-11-26 as a choice: was "the relay's first-team cover offers a team this Studio leads as a third place;
+ *        chosen, ... the press asks studio:team-choose". A team is now made on its own and a catalog is put on a team from the
+ *        catalog's own page (team-on-its-own ton14), so the cover offers no place: now "the Make a team cover offers no choice of
+ *        place, no existing team and no studio:team-choose press, and names no relay team id or address"
  *   rs926d the page: where a team is first made the lead is asked, the relay by default and a shared folder as it was; an
  *        existing team's cover asks nothing; no screen shows the mirror's path, the address or the relay team id
  *   rs926f a press whose thread reply is lost after its writes landed (the team file written, the project's place pointed at it)
@@ -204,7 +206,8 @@
  *   rs935d the same five, through the shell's own handler (studio:team-relay): refused in the licence sentence, nothing written
  *   rs935e a good grant makes the team through the handler and the shell's sync: one create carrying the grant, and the relay keeps
  *        its end and its paid, a paid licence's and a trial's
- *   rs935f the cover says the licence sentence in English and in Polish, stays open and still offers the shared folder
+ *   rs935f the Make a team cover says the licence sentence in English and in Polish when studio:team-new refuses, stays open and
+ *        offers no shared folder (was: through do-team-seal, with a forced folder answer going the relay's way; retired 2026-11-26)
  *   rs934a board 934, the test architect's condition 4: Studio asks the relay for invitation states at the relay's own route,
  *        GET /t/<relay team id>/states, and reads the shape that route gives, {states: [{id, state, usedAt}]}; the lab has no
  *        stand-in for it, so the pinned route answers: a used invitation reads used with the relay's time, an unused one reads
@@ -345,8 +348,9 @@
  *        sentences. team-size, an upload refused bad-signature, replay-counter or epoch (out of step), and rate each show
  *        their line; the third out-of-step look in a row shows the three-in-a-row line in its place; a success between
  *        resets the count; a later success clears the line. The shell's Desks reply carries the kind the runner kept
- *   rs932c team-count on Make a team and on Start a new team here: the stand-in answers team-count to the create,
- *        the cover says the copywriter's sentence in English and in Polish, and nothing is left on the desks or in Studio
+ *   rs932c team-count on Make a team (studio:team-new; Start a new team here went 2026-11-26, its press is the same Make a
+ *        team): the stand-in answers team-count to the create, the cover says the copywriter's sentence in English and in
+ *        Polish, from a Team screen with no team and from one showing another lead's team, and nothing is left behind
  *   b984a board 984: a relay handover parked at step (iii) with its old key's file gone takes the old key's backup copy through
  *        the restore: the key in the key's place stays byte for byte, the old key is kept aside, sealed, beside it and recorded,
  *        and step (iii) runs at once, the team file signed by the handover and the record cleared; the Desks screen then says the
@@ -4835,20 +4839,18 @@ LEGS.rs962t5 = async () => {
     screen: "projects", home: "team", teamDir: base.dir, teamPickDir: base.dir, cover: "team", teamWant: "sealed", teamWhere: "relay", err: null, dkNote: null, q: "",
     teamLic: { licence: { status: "none" }, grant: null }, teams: [kept],
     desks: { folder: null, file: "none", signing: "studio-0123456789abcdef", requests: [], canKeep: true, team: null } });
-  const relayFirst = String(P.teamCoverHtml());
-  P.ACTS["team-where"]({ getAttribute: () => "team" });
-  const chosen = String(P.teamCoverHtml());
-  try { await P.ACTS["do-team-choose"](); } catch { /* a repaint the stand-in cannot finish; the calls are what is read */ }
+  /* Retired as a choice 2026-11-26: the team cover is Make a team's, and a catalog goes on a team from its own page. */
+  P.S.teamWant = "new";
+  const cover = String(P.teamCoverHtml());
   const f = {
-    two: ["relay", "team"].every((v) => relayFirst.indexOf('data-act="team-where" data-v="' + v + '"') >= 0) && relayFirst.indexOf('data-v="folder"') < 0,
-    chosen: chosen.indexOf('aria-checked="true" data-act="team-where" data-v="team"') >= 0 && chosen.indexOf("Lantern Quay") >= 0
-      && chosen.indexOf(T("the Etiuda relay")) >= 0 && chosen.indexOf("data-trial") < 0
-      && chosen.indexOf(T("Editions travel through the Etiuda relay sealed, so that only the team can read them.")) < 0,
-    hidden: [kept.relay.rt, Relay.RELAY_URL, "etiuda.dev"].every((x) => chosen.indexOf(x) < 0),
-    pressed: calls.length === 1 && calls[0][0] === "choose" && calls[0][1] === made.dir && calls[0][2] === kept.id,
+    noPlace: cover.indexOf('data-act="team-where"') < 0 && cover.indexOf('data-v="folder"') < 0 && cover.indexOf('data-v="team"') < 0,
+    noChoose: cover.indexOf("do-team-choose") < 0 && cover.indexOf("Lantern Quay") < 0 && typeof P.ACTS["do-team-choose"] !== "function",
+    press: cover.indexOf('data-act="do-team-new"') >= 0,
+    hidden: [kept.relay.rt, Relay.RELAY_URL, "etiuda.dev"].every((x) => cover.indexOf(x) < 0),
+    nothing: calls.length === 0,
   };
-  check(Object.keys(f).every((k) => f[k]), "rs962t5 the relay's first-team cover offers a team this Studio leads as a second place (a third until 2026-11-20, when the shared folder went); chosen, it drops"
-    + " the relay sentence and the trial, names no relay team id or address, and the press asks studio:team-choose, never a new relay team: "
+  check(Object.keys(f).every((k) => f[k]), "rs962t5 the Make a team cover offers no choice of place, no existing team and no studio:team-choose press, and names no relay team id or address"
+    + " (was: the first-team cover offered a team this Studio leads; retired 2026-11-26, when a team came to be made on its own): "
     + JSON.stringify(f));
 };
 
@@ -5582,7 +5584,8 @@ LEGS.rs935f = async () => {
   const made = await S0.newProject(path.join(lab, "projects"), "Lantern Quay", [{ code: "en", name: "English" }]);
   const dir = made.dir, base = await S0.openProject(dir), calls = [];
   const frame = Relay.GRANT_SAID.none;
-  const api = { teamRelay: async (d) => { calls.push(["relay", d]); return { error: frame, said: { frame, vars: {} } }; },
+  const api = { teamNew: async () => { calls.push(["new"]); return { error: frame, said: { frame, vars: {} } }; },
+    teamRelay: async (d) => { calls.push(["relay", d]); return { error: frame, said: { frame, vars: {} } }; },
     teamSealed: async (d, sealed, fresh) => { calls.push(["folder", d, sealed, fresh]); return { error: null, folder: share, created: true, team: { id: "t-0123456789abcdef" } }; },
     desks: async () => ({ folder: null, file: "none", signing: "studio-0123456789abcdef", requests: [], canKeep: true, team: null }),
     pickFolder: async () => ({ folder: null }) };
@@ -5590,25 +5593,22 @@ LEGS.rs935f = async () => {
   for (const lang of ["en", "pl"]) {
     const home = loadPage({ api, uiLang: lang }), P = home.page;
     Object.assign(P.S, { open: Object.assign({}, base, { project: Object.assign({}, base.project, { folder: null }) }), host: { tour: { offered: true } },
-      screen: "projects", home: "team", teamDir: base.dir, cover: "team", teamWant: "sealed", teamWhere: "relay", err: null, dkNote: null, q: "",
+      screen: "projects", home: "team", teamDir: base.dir, cover: "team", teamWant: "new", err: null, dkNote: null, q: "",
       desks: { folder: share, file: "none", signing: "studio-0123456789abcdef", requests: [], canKeep: true, team: null } });
     calls.length = 0;
-    try { await P.ACTS["do-team-seal"](); } catch { /* a repaint the stand-in cannot finish; the calls and the cover are what is read */ }
+    try { await P.ACTS["do-team-new"](); } catch { /* a repaint the stand-in cannot finish; the calls and the cover are what is read */ }
     const html = String(P.teamCoverHtml()), said = P.T(frame);
-    const relayCall = calls.length === 1 && calls[0][0] === "relay";
-    const offers = html.indexOf('data-act="team-where" data-v="folder"') < 0 && html.indexOf(P.T("a shared folder")) < 0;
+    const newCall = calls.length === 1 && calls[0][0] === "new";
+    const offers = html.indexOf('data-act="team-where"') < 0 && html.indexOf('data-v="folder"') < 0 && html.indexOf(P.T("a shared folder")) < 0;
     const open = P.S.cover === "team" && !!P.S.err;
     const sentence = html.indexOf(said.replace(/&/g, "&amp;")) >= 0 && (lang === "en" ? said === frame : said !== frame);
-    P.ACTS["team-where"]({ getAttribute: () => "folder" });
-    calls.length = 0;
-    try { await P.ACTS["do-team-seal"](); } catch { /* as above */ }
-    const folderWay = calls.length === 1 && calls[0][0] === "relay";
-    seen[lang] = { relayCall, open, offers, sentence, folderWay };
+    seen[lang] = { newCall, open, offers, sentence };
   }
   const bad = [];
   for (const l of ["en", "pl"]) for (const k of Object.keys(seen[l])) if (seen[l][k] !== true) bad.push(l + " " + k);
   check(bad.length === 0,
-    "rs935f the cover says the licence refusal in English and in Polish when the shell refuses the press, stays open, no longer offers a shared folder (it did, until 2026-11-20), and a forced folder answer's press goes the relay's way: "
+    "rs935f the Make a team cover says the licence refusal in English and in Polish when studio:team-new refuses the press, stays open and offers no shared folder"
+    + " (was: through do-team-seal, with a forced folder answer going the relay's way; retired 2026-11-26): "
     + (bad.length ? "failing " + JSON.stringify(bad) : "every part holds"));
 };
 
@@ -10318,7 +10318,7 @@ LEGS.rs932c = async () => {
   const shell = await loadStudioShell(R.ud, { relay: t, env: R.env, thread: R.thread });
   let reply = null;
   try {
-    if (teamRelayHandler(shell)) reply = await shell.ask("studio:team-relay", R.proj);
+    if (typeof shell.handlers["studio:team-new"] === "function") reply = await shell.ask("studio:team-new");
   } finally { await shell.done(); }
   const book = (() => { try { return Object.keys(JSON.parse(fs.readFileSync(R.teamsFile, "utf8")).teams || {}); } catch { return []; } })();
   const project = R.projectJson();
@@ -10333,7 +10333,7 @@ LEGS.rs932c = async () => {
   const enc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const { loadPage } = await import("./page-stand-in.mjs");
   const pageBad = [];
-  const api = { teamRelay: async () => ({ error: RS932_COUNT.en, said: { frame: RS932_COUNT.en, vars: {} } }) };
+  const api = { teamNew: async () => ({ error: RS932_COUNT.en, said: { frame: RS932_COUNT.en, vars: {} } }) };
   try {
     for (const lang of ["en", "pl"]) {
       for (const how of ["make", "fresh"]) {
@@ -10344,13 +10344,11 @@ LEGS.rs932c = async () => {
         Object.assign(P.S, { open: { dir: "C:/quay", draft: { langs: [{ code: "en", name: "English" }], cards: [] }, editions: [],
           project: { rev: 0 }, counts: { cards: 0, intents: 0, cats: 0 }, lint: { errors: 0, warnings: 0 } },
           host: { tour: { offered: true } }, screen: "projects", home: "team", teamDir: "C:/quay", cover: null, err: null, dkNote: null, q: "",
-          desks, teamWant: "", teamWhere: "folder" });
-        try { if (how === "fresh") P.ACTS["team-fresh"](); else P.ACTS["team-make"](); }
+          desks, teamWant: "" });
+        /* One press since 2026-11-26: Make a team (team-new), from a Team screen with no team and from one showing another lead's. */
+        try { await P.ACTS["team-new"](); }
         catch { /* a full paint the stand-in does not finish; the want is already set */ }
-        /* The lead chooses the relay on the cover: team-count is a relay create's answer, and a real folder was
-           the cover's default until 2026-11-20, when the relay became the only default. */
-        P.S.teamWhere = "relay";
-        try { await P.ACTS["do-team-seal"](); } catch { /* paintCover may not finish; the dialog is what is read */ }
+        try { await P.ACTS["do-team-new"](); } catch { /* paintCover may not finish; the dialog is what is read */ }
         const html = home.node("#dlg").innerHTML;
         const words = lang === "pl" ? RS932_COUNT.pl : RS932_COUNT.en;
         if (html.indexOf(enc(words)) < 0) pageBad.push(lang + " " + how);
@@ -10358,7 +10356,7 @@ LEGS.rs932c = async () => {
     }
   } catch (e) { pageBad.push("threw " + String(e && e.message || e)); }
   const bad = Object.keys(left).filter((k) => left[k] !== true);
-  check(bad.length === 0 && pageBad.length === 0, "rs932c a create the relay refuses as team-count says the copywriter's sentence, for Make a team and for Start a new team here, in English and in Polish, and leaves nothing behind: "
+  check(bad.length === 0 && pageBad.length === 0, "rs932c a create the relay refuses as team-count says the copywriter's sentence on Make a team (studio:team-new), with no team and beside another lead's, in English and in Polish, and leaves nothing behind: "
     + (bad.length || pageBad.length ? "failing " + bad.join(", ") + " (" + JSON.stringify(reply && { error: reply.error, frame: reply.said && reply.said.frame }) + "); page " + pageBad.join(", ") : "every part holds"));
 };
 
