@@ -180,7 +180,10 @@ async function main() {
        walks over it with the stage's judge. Was: the twenty above. Now, for such a pin: those and these two. */
     nsh.indexOf("etiuda-files.ini") > -1 ? ["etiudaAsideList", "etiudaListWalkFunction"] : []);
   const INCLUDED_HOOKS = HOOKS.concat(SWAP_HOOKS);
-  const DESK = ["customInit", "customUnInit", "TurnEmit", "TurnLang", "customWelcomePage", "customUnWelcomePage"];
+  /* From engine 86c4cf78 the desk's turning block also defines the one-Setup guard and the two files-page hooks that stop the turning
+     while a section runs. Was: the six. Now, for such a pin: those and these three, none of them in the cut. */
+  const DESK = ["customInit", "customUnInit", "TurnEmit", "TurnLang", "customWelcomePage", "customUnWelcomePage"].concat(
+    nsh.indexOf("!macro customPageAfterChangeDir") > -1 ? ["etiudaOneSetup", "customPageAfterChangeDir", "customUninstallPage"] : []);
   const KNOWN = INCLUDED_HOOKS.concat(DESK);
   const run = bodyOf(hookText, "customCheckAppRunning") || [];
   const kills = run.filter(l => /taskkill/i.test(l));

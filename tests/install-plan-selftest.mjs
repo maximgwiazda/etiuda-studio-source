@@ -548,7 +548,8 @@ ok(P.uninstallContextFault(contextCut) !== "", "6b a script that never switches 
     const b = m.slice(at, choice);
     return /^!ifndef BUILD_UNINSTALLER\s+\$\{If\} \$\{Silent\}\s+\$\{AndIf\} \$\{UAC_IsAdmin\}\s/.test(b)
       && /\$\{GetOptions\} \$R0 "\/allusers" \$R1\s+\$\{If\} \$\{Errors\}\s+\$\{GetOptions\} \$R0 "\/currentuser" \$R1\s+\$\{If\} \$\{Errors\}\s+Push \$R2\s+Push \$R3\s+Push \$R4\s+StrCpy \$R4 "0"/.test(b)
-      && /whoami\.exe" \/user \/FO CSV \/NH \| "\$SYSDIR\\findstr\.exe" \/C:"\\"S-1-5-18\\""`\s+Pop \$R2\s+\$\{If\} \$R2 == "0"\s+StrCpy \$R4 "1"/.test(b)
+      /* Was: /C "$SYSDIR\whoami.exe" ..., which cmd.exe could not parse. Now: the line after /C in one more pair (studio-installer-mends sm6). */
+      && /\/C ""\$SYSDIR\\whoami\.exe" \/user \/FO CSV \/NH \| "\$SYSDIR\\findstr\.exe" \/C:"\\"S-1-5-18\\"""`\s+Pop \$R2\s+\$\{If\} \$R2 == "0"\s+StrCpy \$R4 "1"/.test(b)
       && /GetCurrentProcessId\(\) i \.R2'\s+System::Call 'kernel32::ProcessIdToSessionId\(i R2, \*i \.R3\) i \.R2'\s+\$\{If\} \$R2 <> 0\s+\$\{AndIf\} \$R3 == "0"\s+StrCpy \$R4 "1"/.test(b)
       && /\$\{If\} \$R4 == "1"\s+StrCpy \$hasPerMachineInstallation "1"\s+StrCpy \$hasPerUserInstallation "0"\s+\$\{EndIf\}\s+Pop \$R4\s+Pop \$R3\s+Pop \$R2\s/.test(b)
       && (b.match(/\$hasPer\w+Installation/g) || []).length === 2 && /!endif\s*$/.test(b);
@@ -855,7 +856,9 @@ ok(P.uninstallContextFault(contextCut) !== "", "6b a script that never switches 
         const progs = [first];
         if (/\\cmd\.exe"?$/i.test(first)) {
           const rest = cmd.slice(first.length);
-          const c = /\s\/C\s+("[^"]*"|\S+)/i.exec(rest);
+          /* From engine 9942d4f7 the line after /C sits in one more pair of quotes, which cmd.exe takes away; the program is read
+             inside it. Was: the program straight after /C. Now: after /C and that quote where there is one. */
+          const c = /\s\/C\s+"?("[^"]*"|\S+)/i.exec(rest);
           if (c) progs.push(c[1]);
           for (const p of rest.matchAll(/\|\s*("[^"]*"|\S+)/g)) progs.push(p[1]);
         }
@@ -868,8 +871,9 @@ ok(P.uninstallContextFault(contextCut) !== "", "6b a script that never switches 
     const counted = Object.values(mine).reduce((n, t) => n + code(t).filter(l => RUNS.test(l) && !/^!(define|macro)\b/.test(l)).length, 0);
     ok(named.length === 0 && counted >= 4, "14e every program Studio's include runs is named by its full path, after /C and"
       + " after each pipe too: " + counted + " lines in " + Object.keys(mine).join(", ") + ", unnamed " + (named.join("; ") || "none"));
-    const kill = "nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"$SYSDIR\\taskkill.exe\" /IM \"${APP_EXECUTABLE_FILENAME}\"";
-    ok(HOOKS.includes(kill) && unnamed(own(NSH, HOOKS.replace(kill, "nsExec::Exec `taskkill /IM \"${APP_EXECUTABLE_FILENAME}\""))).length === 1,
+    /* The hook's taskkill line as the pin writes it, wrapped in cmd.exe's extra pair (engine 9942d4f7) or not. */
+    const kill = (/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C ""?\$SYSDIR\\taskkill\.exe" \/IM "\$\{APP_EXECUTABLE_FILENAME\}"/.exec(HOOKS) || [""])[0];
+    ok(!!kill && HOOKS.includes(kill) && unnamed(own(NSH, HOOKS.replace(kill, "nsExec::Exec `taskkill /IM \"${APP_EXECUTABLE_FILENAME}\""))).length === 1,
       "14e control: the template's bare taskkill, as its KILL_PROCESS runs it, in place of the hook's reads red");
     ok(unnamed(own(NSH, HOOKS.replace(kill, "nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C taskkill.exe /IM \"${APP_EXECUTABLE_FILENAME}\""))).length === 1,
       "14e control: a bare program after cmd.exe's /C reads red");
@@ -1057,7 +1061,8 @@ ok(P.uninstallContextFault(contextCut) !== "", "6b a script that never switches 
     const guarded = /\$\{If\} \$\{FileExists\} "\$etiudaBase\\\$\{APP_EXECUTABLE_FILENAME\}"\n\s*!insertmacro etiudaRenameRetry "\$etiudaBase" "\$etiudaAside"\n\s*\$\{If\} \$0 != "moved"\n[\s\S]*?!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\n\s*\$\{EndIf\}\n\s*StrCpy \$etiudaAsideMade "1"/.test(m);
     const restore = /!insertmacro etiudaRenameRetry "\$etiudaStage" "\$etiudaBase"\n\s*\$\{If\} \$0 != "moved"\n\s*\$\{If\} \$etiudaAsideMade == "1"\n\s*!insertmacro etiudaRenameRetry "\$etiudaAside" "\$etiudaBase"\n\s*\$\{If\} \$0 != "moved"\n[\s\S]*?SetErrorLevel 2\n\s*Quit\n\s*\$\{EndIf\}\n\s*StrCpy \$etiudaAsideMade "0"\n\s*\$\{EndIf\}\n[\s\S]*?!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\b/.test(m);
     const r = code(macro(nsh, "etiudaRenameRetry"));
-    const tries = /Rename "\$\{FROM\}" "\$\{TO\}"/.test(r) && /\$\{If\} \$0 < 30\n\s*Sleep 2000/.test(r)
+    /* Was: the count in $0. Now, from engine 86c4cf78: in $etiudaRenameTries, which nothing else writes. Either pin reads here. */
+    const tries = /Rename "\$\{FROM\}" "\$\{TO\}"/.test(r) && /\$\{If\} \$(?:0|etiudaRenameTries) < 30\n\s*Sleep 2000/.test(r)
       && /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(appCannotBeClosed\)" \/SD IDCANCEL IDRETRY/.test(r);
     return cwd > -1 && cwd < aside && aside < into && into < back && guarded && restore && tries;
   };
@@ -1532,7 +1537,9 @@ ok(P.uninstallContextFault(contextCut) !== "", "6b a script that never switches 
     const m = code(macro(nsh, "customCheckAppRunning"));
     const own = at(m, "/FI \"USERNAME eq %USERNAME%\" /FI \"IMAGENAME eq");
     const from = own < 0 ? -1 : m.indexOf("${If} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"", own);
-    const to2 = m.indexOf("nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"$SYSDIR\\taskkill.exe\"", from);
+    /* The taskkill line, wrapped in cmd.exe's extra pair from engine 9942d4f7 or not. */
+    const k = /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C ""?\$SYSDIR\\taskkill\.exe"/.exec(from < 0 ? "" : m.slice(from));
+    const to2 = k ? from + k.index : -1;
     return from > -1 && to2 > from ? m.slice(from, to2) : "";
   };
   const closesThrough = nsh => {
