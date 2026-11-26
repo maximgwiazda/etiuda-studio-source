@@ -433,9 +433,9 @@ async function main(argv) {
 
     /* The two languages filled through the editor, so that what is compared at the end is a
        catalog a desk could load rather than a stub. */
-    await press('[data-act="lang"][data-v="both"]', 450);
-    await type('[data-f="title"][data-l="pl"]', NEW_PL);
     await type('[data-f="body"][data-l="en"]', NEW_BODY_EN);
+    await press('[data-act="lang"][data-v="pl"]', 450);
+    await type('[data-f="title"][data-l="pl"]', NEW_PL);
     await type('[data-f="body"][data-l="pl"]', NEW_BODY_PL);
     await sleep(900);
 

@@ -115,7 +115,7 @@ const SCREENS = [
   { key: "variables", go: `document.querySelector('#rail a[data-v="variables"]').click()`,
     ready: `!!document.querySelector("#main .vr-list") && !!document.querySelector("#main .vr-open")`,
     panel: "#main .vr-list", content: "#main .vr-open", part: true },
-  { key: "import", go: `document.querySelector('#chrome [data-act="import"], #rail a[data-v="import"]').click()`,
+  { key: "import", go: `(document.querySelector('#discImport') || document.querySelector('#rail a[data-v="import"]')).click()`,
     ready: `/Import/.test((document.querySelector("#rail .grp") || {}).textContent || "")`, panel: "#rail", content: "#main" },
 ];
 

@@ -274,22 +274,22 @@ async function main(argv) {
   /* BOARD 994 (the product designer's choice of 2026-11-12 07:36): the round + covered "Invite a teammate…" on the Team screen at
      some scroll positions. The screen's right padding is now as wide as the discs standing, counted to the leftmost one shown;
      red on 5016b500 (no count on body, no gutter in the sheet). */
-  await leg("sk2g2 the Team screen's right padding clears the corner's discs as they stand: New card alone, Review with it, the"
+  await leg("sk2g2 the Team screen's right padding clears the corner's discs as they stand: New card with Publish and Import, Review with them, the"
     + " backup disc beyond, and none outside a project", async () => {
     const at = () => body.getAttribute("data-discs");
     corner(made({ admitted: 0 }));
-    const one = at() === "1";
+    const one = at() === "3";
     corner(made({ admitted: 0 }), 2);
-    const two = at() === "2";
+    const two = at() === "4";
     corner(made({ admitted: 1 }));
-    const three = at() === "3";
+    const three = at() === "5";
     Object.assign(P.S, { screen: "projects" });
     P.paintDiscs();
     const none = at() == null;
     const sheet = fs.readFileSync(path.join(ROOT, "ui", "index.html"), "utf8");
     const room = (n) => { const m = new RegExp('body\\[data-discs="' + n + '"\\]\\{--disc-room:([0-9]+)px\\}').exec(sheet); return m ? Number(m[1]) : null; };
     /* 22 px from the window's edge, 44 px a disc with 10 px between, and a 12 px gap before the screen's words. */
-    const sized = [1, 2, 3].every((n) => room(n) === 22 + 44 * n + 10 * (n - 1) + 12);
+    const sized = [3, 4, 5].every((n) => room(n) === 22 + 44 * n + 10 * (n - 1) + 12);
     const gutter = /#main > \.pad\.desks-screen\{padding-right:max\(var\(--app-pad\),var\(--disc-room,0px\)\)\}/.test(sheet);
     const app = fs.readFileSync(path.join(ROOT, "ui", "app.js"), "utf8");
     const screen = app.indexOf("'<div class=\"pad desks-screen\"><h1>' + esc(T(\"Team\"))") >= 0;
@@ -432,11 +432,11 @@ async function main(argv) {
       && /<button type="button" class="disc q" id="discBackup" data-act="key-backup"/.test(sheet);
   });
   await leg("sk3b the ring is the desk's nudge ported: three rings of --m-nudge, Review's once, off under reduced motion; and"
-    + " the card acts and the bulk bar keep 174 px clear while the disc shows", async () => {
+    + " the card acts and the bulk bar keep 282 px clear while the disc shows", async () => {
     return /\.disc\.nudge::after\{[^}]*animation:fabNudge var\(--m-nudge\) ease-out 3 both/.test(sheet)
       && /\.disc\.nudge\.once::after\{animation-iteration-count:1\}/.test(sheet)
       && /@media \(prefers-reduced-motion:reduce\)\{ \.disc\.nudge::after\{animation:none;display:none\} \}/.test(sheet)
-      && /body\.bd-on \.row2\.acts\{padding-right:174px\}/.test(sheet) && /body\.bd-on \.bulk\{padding-right:calc\(var\(--app-pad\) \+ 174px\)\}/.test(sheet);
+      && /body\.bd-on \.row2\.acts\{padding-right:282px\}/.test(sheet) && /body\.bd-on \.bulk\{padding-right:calc\(var\(--app-pad\) \+ 282px\)\}/.test(sheet);
   });
 
   /* ---- 4. the first key on the page (the sense pass of 2026-10-14, finding 9) ------------------------------------- */

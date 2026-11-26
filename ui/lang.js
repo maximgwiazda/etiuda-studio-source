@@ -116,7 +116,6 @@
     "New catalog": "Nowy katalog",
     "Close catalog": "Zamknij katalog",
     "Search cards, intents and categories": "Szukaj kart, intencji i kategorii",
-    "Both": "Oba",
     "All": "Wszystkie",
     "Published": "Opublikowane",
     "Read by a team": "Czytane przez zespół",

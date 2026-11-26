@@ -2,14 +2,14 @@
  *
  *     node tests/publish-start.mjs
  *
- *   ps1  Publish is the main button in #chrome on a project with no place.
+ *   ps1  Publish is the main action button, a disc in the corner, on a project with no place.
  *   ps2  Publish there opens the place choice (Where the team meets), defaulting to the relay.
  *   ps3  The folder answer alone opens the picker. The relay publishes there. Cancelling, and a
  *        refused folder, leave the edit unpublished and say nothing false.
  *   ps4  A project on a real folder keeps it: the choice defaults to that folder, a relay mirror
  *        does not count as one, and nothing moves a real folder unless the lead chooses the relay.
  *        Sealing an existing real folder that Publish opened continues into Publish.
- *   ps5  The tour's Publish step finds #chrome [data-act="publish"] on a project with no place.
+ *   ps5  The tour's Publish step finds #discPublish on a project with no place.
  *   ps6  Switching project while the relay answer is still out clears publishPlace, so a later
  *        folder pick in the other project does not open Publish.
  *   fd4  In evaluation with no relay licence and a provider offered, the relay's team cover offers signing in (Argon's
@@ -118,17 +118,20 @@ const called = (calls, name) => calls.some((c) => c[0] === name);
 
 const LEGS = {};
 
-/* ps1. Publish is the main button on a project with no place. */
+/* ps1. Publish is the main action button on a project with no place: since 26 November a filled disc in the corner (it was the toolbar
+   row's filled button), saying the rev it makes, and no button asks for the folder. */
 LEGS.ps1 = async () => {
   const { page: P, node } = pageOf(makeApi([]));
   P.S.open = mockProject(null);
   P.paintChrome();
+  P.paintDiscs();
   const chrome = node("#chrome").innerHTML;
-  const hasPublish = /<button class="btn solid" data-act="publish">/.test(chrome) && /Publish/.test(chrome)
-    && chrome.indexOf("rev" + String.fromCharCode(160) + "1") >= 0;
+  const disc = node("#discPublish");
+  const said = disc.attrs["aria-label"] || "";
+  const hasPublish = /Publish/.test(said) && said.indexOf("rev" + String.fromCharCode(160) + "1") >= 0 && /<svg/.test(disc.innerHTML) && !/data-act="publish"/.test(chrome);
   const noFolderBtn = !/data-act="settings-folder"/.test(chrome);
   check(hasPublish && noFolderBtn,
-    "ps1 Publish is the main button in #chrome on a project with no place: hasPublish=" + hasPublish + " noFolderBtn=" + noFolderBtn);
+    "ps1 Publish is the main action button, a disc, on a project with no place: hasPublish=" + hasPublish + " noFolderBtn=" + noFolderBtn + " said=" + said);
 };
 
 /* ps2. Publish there opens the same place choice the Desks screen asks, defaulting to the relay. */
@@ -311,23 +314,22 @@ LEGS.ps6 = async () => {
     + " publishPlace=" + page.S.publishPlace);
 };
 
-/* ps5. The tour's Publish step has its target once the main button is Publish. */
+/* ps5. The tour's Publish step has its target once the main button is Publish: the action button, #discPublish. */
 LEGS.ps5 = async () => {
-  const { page: P, node, doc } = pageOf(makeApi([]));
+  const { page: P, doc } = pageOf(makeApi([]));
   P.S.open = mockProject(null);
   P.paintChrome();
+  P.paintDiscs();
   const orig = doc.querySelector.bind(doc);
   doc.querySelector = (sel) => {
-    if (sel === '#chrome [data-act="publish"]') {
-      return /data-act="publish"/.test(node("#chrome").innerHTML) ? orig(sel) : null;
-    }
+    if (sel === "#discPublish") return /Publish/.test(orig(sel).attrs["aria-label"] || "") ? orig(sel) : null;
     return orig(sel);
   };
   const TOUR = P.__get("TOUR");
   const step = TOUR.find((s) => s.key === "publish");
   const src = step ? Function.prototype.toString.call(step.sel) : "";
-  check(!!step && src.indexOf('#chrome [data-act="publish"]') >= 0,
-    "ps5 the tour's Publish step points at #chrome [data-act=\"publish\"]");
+  check(!!step && src.indexOf("#discPublish") >= 0,
+    "ps5 the tour's Publish step points at #discPublish");
   const target = step ? step.sel() : null;
   check(target !== null,
     "ps5 the tour's Publish step finds its target on a project with no place: " + (target ? "found" : "null"));
@@ -499,11 +501,11 @@ LEGS.fd4c = async () => {
 const PLANTS = [
   {
     mark: "u1-publish-btn", leg: "ps1",
-    line: '      + (p.project.folder ? \'<button class="btn solid" data-act="publish">\' + I("publish") + esc(T("Publish")) + \'<span class="count">\' + esc(T("rev {REV}", { REV: (p.project.rev | 0) + 1 })) + "</span></button>" : \'<button class="btn solid" data-act="settings-folder">\' + I("folder") + esc(T("Choose the folder your team reads from")) + "</button>");',
+    line: '    discBtn($("#discPublish"), I("folder"), T("Choose the folder your team reads from"), true);',
   },
   {
     mark: "u1-publish-btn", leg: "ps5",
-    line: '      + (p.project.folder ? \'<button class="btn solid" data-act="publish">\' + I("publish") + esc(T("Publish")) + \'<span class="count">\' + esc(T("rev {REV}", { REV: (p.project.rev | 0) + 1 })) + "</span></button>" : \'<button class="btn solid" data-act="settings-folder">\' + I("folder") + esc(T("Choose the folder your team reads from")) + "</button>");',
+    line: '    discBtn($("#discPublish"), I("folder"), T("Choose the folder your team reads from"), true);',
   },
   { mark: "u1-publish-place", leg: "ps2", line: "      if (false) {" },
   { mark: "u1-relay-publish", leg: "ps3", line: "      await Promise.resolve();" },

@@ -8377,7 +8377,7 @@ function firstCloseTraced(win) {
   t.end(got, null);
   return got;
 }
-/* THE TRAY BUBBLE: at the first close of a start Studio's own blue bubble, the family's, stands over the tray icon in place of
+/* THE TRAY BUBBLE: at the first close of a start Studio's own violet bubble, the family's shape, stands over the tray icon in place of
    Windows's notification. Once a start; Don't show again writes trayBubble false to the store, which Settings reads and writes too. */
 const BUBBLE_W = 360, BUBBLE_PAD = 20, BUBBLE_MS = 9000;
 let bubbleWin = null, bubbleTimer = null, bubbleSized = null, bubbleDesk = null;
@@ -8410,14 +8410,16 @@ function bubbleGo(url) {
   const m = /^bubble:(ok|off|open)$/.exec(String(url || ""));
   return m ? m[1] : "";
 }
-/* The bubble's document: the family's blue bubble as the desk draws it (the cobalt fill ui/index.html writes out for it, in both
-   themes), its pointer on the tray icon where there is one, the quiet button on the left and OK filled on the right. */
-function bubbleDoc(w, side, tip) {
+/* The bubble's document: the family's bubble as the desk draws it, in Studio's violet (the fill ui/index.html's --bub holds for Studio: the title
+   band's violet in the light theme, the lighter violet in the dark one, each with its glow in its own hue), its pointer on the tray icon where there is one, the quiet button on the left and OK filled on the right. */
+function bubbleDoc(w, side, tip, dark) {
+  let fill = "#5729a6", glow = "rgba(87,41,166,.32)";
+  if (dark) { fill = "#6d3fc4"; glow = "rgba(124,58,237,.30)"; } /* plant:bubble-dark */
   const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return '<!DOCTYPE html>\n<html lang="en">\n<meta charset="utf-8">\n'
     + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'">\n'
     + '<title>Etiuda Studio</title>\n<style>\n'
-    + ':root{color-scheme:light;--bub:#2563eb;--bub-ink:#fff;--bub-dim:rgba(255,255,255,.92);--bub-shadow:rgba(37,99,235,.32);--radius-sm:8px;'
+    + ':root{color-scheme:light;--bub:' + fill + ';--bub-ink:#fff;--bub-dim:rgba(255,255,255,.92);--bub-shadow:' + glow + ';--radius-sm:8px;'
     + '--sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}\n'
     + 'html,body{margin:0;height:100%;overflow:hidden;background:transparent}\n'
     + 'body{font:14px/1.35 var(--sans);cursor:default;user-select:none;-webkit-user-select:none}\n'
@@ -8455,6 +8457,8 @@ function showTrayBubble(win) {
   catch { d = screen.getPrimaryDisplay(); }
   const place = (h) => bubblePlace({ bounds: bounds, display: { bounds: d.bounds, workArea: d.workArea }, size: { width: BUBBLE_W, height: h } });
   const first = place(160);
+  let dark = false;
+  try { dark = !!nativeTheme.shouldUseDarkColors; } catch { dark = false; }
   const bw = new BrowserWindow({
     width: BUBBLE_W + 2 * BUBBLE_PAD, height: 160 + 2 * BUBBLE_PAD, show: false, frame: false, resizable: false, focusable: false,
     transparent: true, alwaysOnTop: true, skipTaskbar: true, minimizable: false, maximizable: false, fullscreenable: false, hasShadow: false,
@@ -8480,7 +8484,7 @@ function showTrayBubble(win) {
     bw.webContents.executeJavaScript("(function(){var e=document.querySelector('.bub');return e?Math.ceil(e.getBoundingClientRect().height):0})()")
       .then((h) => { if (bubbleSized && bubbleWin === bw) bubbleSized(h); }, () => {});
   });
-  bw.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(bubbleDoc(w, first.side, first.tip)));
+  bw.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(bubbleDoc(w, first.side, first.tip, dark)));
   return true;
 }
 /* The close's note: the bubble where it can be made and the person has not turned it off, else the Windows notification as before. */

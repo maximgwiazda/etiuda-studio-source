@@ -613,7 +613,7 @@ const CHECKS = {
     const chrome = w.pg.node("#chrome").innerHTML;
     if (chrome.includes('data-act="pick-root"')) return no("pr16", "pick-root still in chrome");
     if (chrome.includes('data-act="bring"')) return no("pr16", "bring still in chrome");
-    if (!chrome.includes('id="q"') || !chrome.includes('data-act="new"')) return no("pr16", "chrome missing q or new");
+    if (!chrome.includes('id="q"') || chrome.includes('data-act="new"')) return no("pr16", "chrome missing q, or still holding New catalog (the band's plus makes one)");
 
     w.P.__get("paintRail")();
     const rail = w.pg.node("#rail").innerHTML;

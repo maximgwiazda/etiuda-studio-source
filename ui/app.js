@@ -629,6 +629,9 @@
   function langName(code) {
     return code === "en" ? T("English") : code === "pl" ? T("Polish") : code.toUpperCase();
   }
+  /* The languages the editors and the lists draw: the one chosen, or every declared language where S.lang is "both", which no control sets
+     since the segment lost its Both and All parts (26 November). The state stays because the editors draw one box per language in this
+     list and the new editors will draw them all; the tests drive it. */
   function shown() {
     const all = langs();
     if (S.lang === "both") return all;
@@ -798,7 +801,7 @@
       + ' data-v="' + dir + '" tabindex="-1" title="' + esc(word) + '" aria-label="' + esc(word) + '">' + glyph + "</button>";
     const bits = [];
     bits.push("<span" + saidOn("page", S.screen === "projects", "tab ico")
-      + ' data-act="to-projects" tabindex="0">' + I("home") + esc(S.home === "team" ? T("Team") : S.home === "library" ? T("Library") : T("Overview")) + "</span>"); /* plant:wf-home */
+      + ' data-act="to-projects" tabindex="0">' + I("home") + esc(T("Overview")) + "</span>"); /* plant:wf-home */ /* plant:sm30-name */
     bits.push(nav("tabsPrev", -1, I("chevron-left"), T("Scroll tabs left")), '<div class="tabs-bar" id="tabsBar">');
     /* THE STRIP IN THE BAND'S ORDER, catalogs and screen tabs as the hand left them (board 982, finding 16) */
     for (const b of bandTabs()) {
@@ -1173,7 +1176,7 @@
   function faceBlank(name) {
     const face = document.createElement("div");
     face.className = "face va blank";
-    face.innerHTML = '<div class="chrome"></div><div class="work"><nav class="rail"></nav><div class="main">'
+    face.innerHTML = '<div class="topline"><div class="chrome"></div></div><div class="work"><nav class="rail"></nav><div class="main">'
       + '<div class="pad"><h1>' + esc(name) + '</h1></div></div></div><footer class="sbar"></footer>';
     face.setAttribute("aria-hidden", "true");
     face.inert = true;
@@ -1224,7 +1227,7 @@
   }
   const PLACE_FULL = { transform: "translate(0px,0px) scale(1)", borderRadius: "0px",
     boxShadow: "0 0 0 0 rgba(0,0,0,0), 0 0 0 0 rgba(0,0,0,0)" };
-  const PLACE_SHUT = ["#chrome", "#screen > .work", "#undo", "#bulk", "#discs", "#foot", "#sbar"];
+  const PLACE_SHUT = ["#topline", "#screen > .work", "#undo", "#bulk", "#discs", "#foot", "#sbar"];
 
   /** The empty place's own markup: a word and a glyph. Pressed, it opens the New catalog tab (board 1019 (12)). */
   function placeNewHtml() {
@@ -1495,17 +1498,15 @@
     if (S.screen === "projects") {
       $("#chrome").innerHTML =
         '<input class="field grow" id="q" placeholder="' + esc(T("Search catalogs"))
-        + '" value="' + esc(S.q) + '">'
-        + '<button class="btn solid" data-act="new">' + I("new-project")
-        + esc(T("New catalog")) + "</button>";
+        + '" value="' + esc(S.q) + '">';
       return;
     }
     const p = S.open;
-    /* THE LAST ITEM IS "BOTH" AT TWO LANGUAGES AND "ALL" ABOVE TWO (board 579). "Both" is simply
-       wrong of three and the Polish is worse: "Oba" is the DUAL, so a five-language desk read
-       "EN PL DE ES IT Oba". The stored value stays "both" either way, because what it means -
-       show every declared language at once - has not changed and a screen's word is not a state.
-       THE SEGMENT ALSO WRAPS, and nothing but the widest sets ever sees it wrap: measured on
+    /* THE SEGMENT HAS A PART FOR EACH LANGUAGE AND NOTHING ELSE: it once ended in "Both" (at two languages) or "All" (above two), which
+       showed every declared language at once in the editors, and it went because nothing here may assume two languages and a part
+       that means "all of them" is a part per catalog that reads differently at every count. A finding in a language the segment is
+       not on switches the segment to that language instead (the finding's own jump).
+       THE SEGMENT WRAPS, and nothing but the widest sets ever sees it wrap: measured on
        Claudia's stub at the 900px minimum, the row overflowed at sixteen languages by 100px in
        English and 106 in Polish while the search box had already floored at 22px. The wrap and
        the field's floor are in index.html; this class is what they key off. */
@@ -1513,8 +1514,7 @@
     /* NOT ON THE LINT LIST, which has no language column to choose: there the control did
        nothing and at 900px its room was what the lint's own filter needed (polish 04, item 11). */
     const lang = all.length > 1 && S.section !== "lint"
-      ? seg("lang", all.map((c) => [c, c.toUpperCase()])
-          .concat([["both", all.length > 2 ? T("All") : T("Both")]]), S.lang, "langs")
+      ? seg("lang", all.map((c) => [c, c.toUpperCase()]), S.lang, "langs") /* plant:sm23-both */
       : "";
     /* A FOURTH ITEM SINCE BOARD 544, and on this segment rather than on a second control
        because the list it narrows is one list. It is there whether or not anything is awaiting,
@@ -1537,16 +1537,9 @@
       + (S.section === "cards" && !S.find ? seg("cards-as", [["table", T("Table")], ["shelves", T("Shelves")]], S.cardsAs,
         "views", T("View")) : "")
       + lang + lint
-      /* THE ROW NAMES WHERE THE FILE GOES (board 539, frame B). The button was "Import a
-         file", which said nothing about the one thing that decides everything: this door now
-         lands the pile in THIS project as a proposal, and the projects screen keeps "Import
-         catalog" for the file that becomes a new one. The wizard's first step asks the same
-         question again and can still be answered the other way; the label is the default, not
-         a promise, which is why it is not "into this project only". */
-      + '<button class="btn" data-act="import">' + I("import")
-      + esc(T("Import into this catalog")) + "</button>"
-      /* THE MAIN BUTTON IS PUBLISH FROM THE FIRST EDIT (board 938, condition U1): on a project with no place, Publish asks where the team meets. */
-      + '<button class="btn solid" data-act="publish">' + I("publish") + esc(T("Publish")) + '<span class="count">' + esc(T("rev {REV}", { REV: (p.project.rev | 0) + 1 })) + "</span></button>"; /* plant:u1-publish-btn */
+      /* IMPORT AND PUBLISH ARE ACTION BUTTONS, NOT THE ROW'S: two discs in the corner beside New card (paintDiscs), so the row ends in
+         the account, theme and menu buttons that every screen keeps (#tbtns). */
+      ;
   }
 
   /* ---- the rail --------------------------------------------------------------------------- */
@@ -1659,9 +1652,9 @@
       const kept = listedProjects();
       const reqN = teamsWaiting() || "";
       $("#rail").innerHTML = ""
+        + homeRow("overview", T("Overview"), "", S.home !== "library" && S.home !== "team")
         + homeRow("team", T("Team"), reqN, S.home === "team") /* plant:team-home-move */
         + '<div class="grp">' + esc(T("catalogs")) + "</div>"
-        + homeRow("overview", T("Overview"), "", S.home !== "library" && S.home !== "team")
         + homeRow("library", T("Library"), kept.length, S.home === "library")
         + '<div class="grp wide-rail">' + esc(T("Start")) + "</div>"
         + railAct("pick-root", T("Open a folder"), I("folder"))
@@ -2490,7 +2483,7 @@
       const desksMatch = !!S.desks && (dir ? (!S.desksLoadedFor || samePath(S.desksLoadedFor, dir)) : (!curTeam && !S.desksLoadedFor));
       const inner = curTeam && curTeam.held ? heldFolderHtml(curTeam) /* plant:fh-held-team */
         : desksMatch
-        ? desksBodyHtml(S.desks, dir) + (curTeam ? teamReceivesHtml(curTeam) : "")
+        ? desksBodyHtml(S.desks, dir, curTeam ? teamReceivesHtml(curTeam) : "")
         : (curTeam ? '<div class="teams-screen">' + teamSummaryHtml(curTeam) + teamReceivesHtml(curTeam) + "</div>" : "");
       body = headActs + strip + inner;
     }
@@ -2796,7 +2789,7 @@
       + ctx.langs.map((l) => {
         const full = !!text(c.body, l).trim();
         return '<td data-lang="' + esc(l) + '" class="' + (full ? "ok" : "miss") + '">'
-          + '<span class="cell-chip ' + (full ? "full" : "empty") + '">' + esc(full ? ctx.full : ctx.empty) + "</span></td>";
+          + '<span class="cell-chip ' + (full ? "full" : "empty") + '">' + I(full ? "accept" : "reject") + '<span class="sr">' + esc(full ? ctx.full : ctx.empty) + "</span></span></td>"; /* plant:sm24-glyph */
       }).join("")
       + '<td class="wide-only">' + esc(label(it, ctx.langs)) + "</td>"
       + '<td class="mono">' + esc(c.edited ? ago(c.edited) : "") + "</td>"
@@ -11930,7 +11923,9 @@
     if (S.screen === "projects" && S.home === "team") paint();
   }
 
-  function desksBodyHtml(d, dir) {
+  /* `above` is What the team receives: it stands above the roster and Who can read what you publish where the team has a place, and
+     after the page where it has none (it was always last, and was hard to find). */
+  function desksBodyHtml(d, dir, above) {
     if (!d) return "";
     /* A team at a shared folder, found there by the project's own Team screen: held, with one line and no roster (see heldFolderHtml). */
     if (d.team && d.team.relay !== true && !onRelay(d.folder)) /* plant:fh-held-desks */
@@ -12182,6 +12177,7 @@
           )
           + reinviteLine(d)
           + firstLine
+          + (above || "") /* plant:sm25-receives */
           + '<div class="cols team-cols"><div class="pane"><h3 class="t">' + esc(T("Roster")) + '</h3><div class="sc">' + roster
           + "</div></div>" + who + "</div>"
         /* WITH NO FOLDER THE TEAM CAN STILL BE STARTED, on the relay, which needs none (board 926): the Publishing row stands
@@ -12191,6 +12187,7 @@
             + '<p class="lede" style="margin-top:12px" data-plain-folder>' + esc(T("Without a team, editions can also be published to a plain folder, in the clear: any desk that can read the folder opens them.")) + "</p>"
             + chooseFolderHtml("team")
           : chooseFolderHtml("team"))
+      + (d.folder ? "" : above || "")
       + (S.dkNote && S.dkNote.length ? '<p class="lede" style="margin-top:12px">' + S.dkNote.map(esc).join("<br>") + "</p>" : "");
   }
 
@@ -14610,7 +14607,7 @@
     const done = () => { if (el.querySelector(".pw-roll")) el.textContent = to; };
     if (a && a.finished) a.finished.then(done, done); else done();
   }
-  const prMarks = () => ({ tab: $("#tabs .tab.on .rev"), pub: $('#chrome [data-act="publish"] .count'), arch: $('#rail a[data-v="archive"] .num') });
+  const prMarks = () => ({ tab: $("#tabs .tab.on .rev"), arch: $('#rail a[data-v="archive"] .num') });
   function prLanded(r, was, line) {
     const now = prMarks();
     Object.keys(now).forEach((k) => prRoll(now[k], was[k]));
@@ -16834,6 +16831,13 @@
     if (box.hidden) { document.body.removeAttribute("data-discs"); return; }
     const list = reviewWaiting(), n = reviewCount(list);
     discBtn($("#discNew"), I("add"), T("New card"), true);
+    /* THE ROW'S TWO BUTTONS, AS DISCS (board 938, condition U1, for Publish: it is the main act from the first edit, and on a project
+       with no place it asks where the team meets). They join from the left of New card, Publish first, and keep the words they had:
+       Import into this catalog names where the file goes (board 539, frame B: this door lands the pile in THIS project as a
+       proposal; the projects screen keeps "Import catalog" for the file that becomes a new one), and Publish says the rev it makes. */
+    discBtn($("#discImport"), I("import"), T("Import into this catalog"), true);
+    const nextRev = S.open && S.open.project ? (S.open.project.rev | 0) + 1 : 1;
+    discBtn($("#discPublish"), I("publish"), T("Publish") + ", " + T("rev {REV}", { REV: nextRev }), true); /* plant:u1-publish-btn */
     /* A3: THE AUTHORING SPACE IS A CARD OPEN IN THE EDITOR, which is the cards section with one
        picked and nowhere else - not the cards table with nothing picked, and not the intents or
        the archive with a card still remembered. The engine's own door reacts to the room a
@@ -16859,7 +16863,7 @@
     /* THE TEAM SCREEN ENDS LEFT OF THE CORNER (board 994; the product designer's choice of 2026-11-12 07:36, "(a), the gutter"):
        its right padding is as wide as the discs standing, counted to the leftmost one shown, since a disc not shown keeps its
        place in the row (.disc.q is hidden, not removed): New card alone, Review with it, or the backup disc beyond. */
-    document.body.setAttribute("data-discs", String(bd ? 3 : n > 0 ? 2 : 1));
+    document.body.setAttribute("data-discs", String(bd ? 5 : n > 0 ? 4 : 3));
     if (bd && S.bdSeen != null && admitted > S.bdSeen) ringDisc($("#discBackup"), false);
     S.bdSeen = admitted;
   }
@@ -18224,7 +18228,7 @@
          the work and its row was the width of the window, so the spotlight was an 883px bar in
          the middle of a 560-tall window with nowhere for the panel to go, and the family put it
          over the very row it pointed at. Measured at 900x560 on the built tour, 2026-09-21. */
-      sel: () => document.querySelector('#chrome [data-act="import"]')
+      sel: () => document.querySelector("#discImport")
         || document.querySelector('#rail a[data-v="import"]'),
       title: "Bring in the replies you already have",
       body: "Point this at a spreadsheet or an export and Studio reads it here, on this computer."
@@ -18295,7 +18299,7 @@
     {
       key: "publish",
       sec: "cards",
-      sel: () => document.querySelector('#chrome [data-act="publish"]'),
+      sel: () => document.querySelector("#discPublish"),
       title: "Publishing writes a file",
       body: "Publish stamps the draft with the next rev, writes it into the folder your team reads"
         + " from, and keeps a copy in the catalog's own archive. Before it does, it shows you"
@@ -18696,11 +18700,10 @@
       const lang = el.getAttribute("data-l") || "";
       S.section = sec; S.q = ""; S.err = null; S.tagUse = null;
       S.sel = sec === "cards" ? id : S.sel;
-      /* A finding about the Polish of something, with the EN/PL control on EN, would land on a
-         field that is not on the screen. Both, then, which is the control's own answer to
-         wanting to see one language beside the other. */
-      if (lang && S.lang !== "both" && S.lang !== lang && langs().indexOf(lang) >= 0)
-        S.lang = "both";
+      /* A finding about the Polish of something, with the language control on English, would land on a
+         field that is not on the screen: the control goes to the finding's language. */
+      if (lang && S.lang !== lang && langs().indexOf(lang) >= 0)
+        S.lang = lang;
       paint();
       focusFinding(sec, id, field, lang);
     },

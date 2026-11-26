@@ -122,14 +122,15 @@ async function main(argv) {
     });
 
     /* Both languages, because a content change covers EN and PL together. The seg is on the
-       primary language, so the Polish fields are reached by asking for Both first - which is
-       also the thing the canvas put that control there to do. */
+       primary language, so the Polish fields are reached by choosing Polish, and English is chosen again after. */
     await put('input.field[data-f="title"][data-l="en"]', NEW_TITLE_EN);
     await put('textarea.ta[data-f="body"][data-l="en"]', NEW_BODY_EN);
-    await press('.seg span[data-act="lang"][data-v="both"]');
+    await press('.seg span[data-act="lang"][data-v="pl"]');
     await press('#main tr.sel');
     await put('input.field[data-f="title"][data-l="pl"]', NEW_TITLE_PL);
     await put('textarea.ta[data-f="body"][data-l="pl"]', NEW_BODY_PL);
+    await press('.seg span[data-act="lang"][data-v="en"]');
+    await press('#main tr.sel');
 
     const chips = await page.evaluate(() => Array.from(
       document.querySelectorAll('[data-chips="en"] .chip')).map(c => c.textContent + (c.classList.contains("err") ? "!" : "")));

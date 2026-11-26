@@ -79,7 +79,7 @@ async function main(argv) {
       "0a the window opens on an empty projects folder, naming it in place of a table ("
       + start.rows + " row)");
 
-    await press('[data-act="new"]', 500);
+    await press('[data-act="new-tab"]', 500);
     await settleOn(page, '!!(document.querySelector("#main .newcat h1") || {}).textContent', { bound: 30000 });
     const cover = JSON.parse(await page.evaluate(`JSON.stringify({
       up: document.querySelector("#scrim").hidden && !!document.querySelector("#main .newcat"),
@@ -139,7 +139,7 @@ async function main(argv) {
     await settleOn(page, 'Array.from(document.querySelectorAll("#main .newcat .ls .lsk")).some(p => p.textContent.indexOf("UK") >= 0)', { bound: 30000 });
     const beforeCancel = await field();
     await press('#main .newcat [data-act="close-screen"][data-v="new"]', 400);
-    await press('[data-act="new"]', 500);
+    await press('[data-act="new-tab"]', 500);
     const reopened = await field();
     check(beforeCancel.langs.join(",") === "EN,PL,UK" && reopened.langs.join(",") === "EN,PL",
       "1g a language added on a page closed by Cancel is gone when the page opens again: "
@@ -173,7 +173,7 @@ async function main(argv) {
        project's own bytes afterwards to say that nothing was written over it. */
     const was = fs.readFileSync(path.join(projects, FOLDER, DRAFT_FILE));
     await press('[data-act="to-projects"]', 500);
-    await press('[data-act="new"]', 400);
+    await press('[data-act="new-tab"]', 400);
     await type("#newName", NAME);
     await press('[data-act="do-new"]', 700);
     await settleOn(page, '((document.querySelector("#main .newcat .kv .n") || {}).textContent || "").indexOf("already a folder") >= 0', { bound: 30000 });
@@ -189,7 +189,7 @@ async function main(argv) {
     await press('#main .newcat [data-act="close-screen"][data-v="new"]', 400);
     const escaped = await page.evaluate(() => ({ up: !!document.querySelector("#main .newcat"),
       said: /already a folder/.test(document.body.innerText) }));
-    await press('[data-act="new"]', 400);
+    await press('[data-act="new-tab"]', 400);
     const fresh = await page.evaluate(() => document.querySelectorAll("#main .newcat .kv .n").length);
     check(!escaped.up && !escaped.said && fresh === 0,
       "2e2 Cancel closes the page and the refusal with it, on the screen and on the next page: "

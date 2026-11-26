@@ -78,7 +78,7 @@ export async function walkScreens(page, dir, visit) {
 
   await at("projects");
   /* New catalog is a page in its own tab since board 1019 (12); the walk keeps the name it had as a cover. */
-  await press('[data-act="new"]', 350);
+  await press('[data-act="new-tab"]', 350);
   await at("cover-new");
   await press('#main .newcat [data-act="close-screen"][data-v="new"]', 300);
   /* the Menu is a list since 2026-10-06 (S1): the list, Settings from it, and the About from Settings' About page; Settings

@@ -291,7 +291,7 @@ async function none(root, lang, missing) {
        then this leg held it to a band of 80px over the list at 900. tests/rail-left.mjs holds every screen headless. */
     check(seen[900].beside && seen[1280].beside,
       "6a " + lang + ": at 900x560 and 1280x880 the rail stands on the left beside the list, " + seen[900].rail + "px tall at 900");
-    await pressWhen(page, '#chrome [data-act="new"]', { who: "tests/projects-screen.mjs" });
+    await pressWhen(page, '.tab.add[data-act="new-tab"]', { who: "tests/projects-screen.mjs" });
     await settleOn(page, '!!(document.querySelector("#main .newcat h1") || {}).textContent', { bound: 30000 });
     const up = await page.evaluate(() => document.querySelector("#scrim").hidden
       && (document.querySelector("#main .newcat h1") || {}).textContent);

@@ -557,6 +557,20 @@ async function run() {
       && !/preload/.test(sb) && /will-navigate/.test(sb) && /bubbleGo\(/.test(sb),
       "tbs19 the bubble's page holds no script and its window no preload: its three presses are links the shell catches on navigation (the Don't show again button, OK, and the text)");
 
+    /* The bubble is Studio's own, so it is violet as every other bubble in Studio is (ui/index.html's --bub): the light theme's #5729a6, the dark
+       theme's lighter #6d3fc4, each with its glow in its own hue; the desk's blue #2563eb appears nowhere in its page. */
+    const docOf = (src, dark) => { try { return new Function("BUBBLE_W", "BUBBLE_PAD", fnOf(src, "bubbleDoc") + "\nreturn bubbleDoc;")(360, 20)(
+      { trayKeepsRunning: "k", trayBubbleBody: "b", trayBubbleOff: "o", trayBubbleOk: "ok" }, "above", 40, dark); } catch (err) { return "threw: " + err.message; } };
+    const fillOf = (d) => { const m = /--bub:(#[0-9a-f]{6});/i.exec(d); return m ? m[1].toLowerCase() : "none"; };
+    const glowOf = (d) => { const m = /--bub-shadow:(rgba\([^)]*\))/.exec(d); return m ? m[1] : "none"; };
+    const vl = docOf(mainText, false), vd = docOf(mainText, true);
+    check(fillOf(vl) === "#5729a6" && glowOf(vl) === "rgba(87,41,166,.32)" && fillOf(vd) === "#6d3fc4" && glowOf(vd) === "rgba(124,58,237,.30)"
+      && !/2563eb|37,99,235/i.test(vl + vd),
+      "tbs20 the tray bubble is violet, Studio's own: the light theme's fill #5729a6 with its glow, the dark theme's lighter #6d3fc4 with its glow, and the desk's blue nowhere in its page: "
+      + JSON.stringify([fillOf(vl), glowOf(vl), fillOf(vd), glowOf(vd)]));
+    check(/nativeTheme\.shouldUseDarkColors/.test(fnOf(mainText, "showTrayBubble")) && /bubbleDoc\(w, first\.side, first\.tip, dark\)/.test(fnOf(mainText, "showTrayBubble")),
+      "tbs21 the bubble is drawn in the theme Studio shows (the dark flag is read from nativeTheme where the window is made and passed to the document)");
+
     if (PLANTS_OFF) console.log("  NOT RUN tbs14 to tbs17, the bubble's plant proofs (ETIUDA_PLANTS=off)");
     else {
       const cutOf = (tag) => mainText.split("\n").filter((l) => l.indexOf("plant:" + tag) < 0).join("\n");
@@ -565,6 +579,7 @@ async function run() {
       check(mainText.includes("plant:bubble-once") && p2.on.log.bubble > 1, "tbs15 control: cutting plant:bubble-once shows it at every close: " + nsay(p2.on));
       check(mainText.includes("plant:bubble-key") && p3.offKey.on !== false, "tbs16 control: cutting plant:bubble-key leaves the bubble on after Off is written: " + nsay(p3.offKey));
       check(mainText.includes("plant:bubble-off-write") && p4.off.writes.join() !== '{"trayBubble":false}', "tbs17 control: cutting plant:bubble-off-write leaves Don't show again writing nothing: " + nsay(p4.off));
+      check(mainText.includes("plant:bubble-dark") && fillOf(docOf(cutOf("bubble-dark"), true)) !== "#6d3fc4", "tbs22 control: cutting plant:bubble-dark leaves the dark theme's bubble in the light violet: " + fillOf(docOf(cutOf("bubble-dark"), true)));
     }
   }
 

@@ -262,9 +262,9 @@ async function main(argv) {
     check(added.ids[3] === F.tagId(NEW_INTENT),
       "3b with the id the pinned format's own tagId gives its name: " + added.ids[3]);
 
-    await press('[data-act="lang"][data-v="both"]', 450);
     await type('input[data-tag="' + added.ids[3] + '"][data-l="en"]', RENAMED_EN);
     await sleep(700);
+    await press('[data-act="lang"][data-v="pl"]', 450);
     await type('input[data-tag="' + added.ids[3] + '"][data-l="pl"]', RENAMED_PL);
     await sleep(900);
     const renamed = await state(`{

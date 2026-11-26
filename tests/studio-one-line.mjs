@@ -433,7 +433,12 @@ async function runSuiteOnPage(browser, url, dpr) {
     await page.click("#btnAcct");
     await page.waitForSelector("#acctPop:not([hidden])");
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    /* The account panel hangs under its button in the toolbar row, over the page's own work (the row moved from the title band on
+       26 November). The rim's corner is a one-pixel line whose antialiased pixels blend with what lies behind it, so the scan reads
+       the panel over the page's plain ground, as it hung over the band's flat colour before. */
+    await page.evaluate(() => { document.getElementById("screen").style.visibility = "hidden"; });
     const sipopCap = await captureSurface(page, "sipop", "#acctPop", "dark", dpr);
+    await page.evaluate(() => { document.getElementById("screen").style.visibility = ""; });
     checkDarkEdge("sipop", sipopCap, dpr, {}, fails);
     await page.keyboard.press("Escape");
 

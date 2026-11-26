@@ -98,9 +98,9 @@ const blockOf = (html) => { const m = /<div class="(?:dashed )?none">/.exec(html
   P.page.paintRail();
   const chrome = P.node("#chrome").innerHTML;
   const rail = P.node("#rail").innerHTML;
-  check(/data-act="new"/.test(chrome) && !/data-act="bring"/.test(chrome) && !/data-act="pick-root"/.test(chrome)
+  check(!/data-act="new"/.test(chrome) && !/data-act="bring"/.test(chrome) && !/data-act="pick-root"/.test(chrome)
         && /data-act="bring"/.test(rail) && /data-act="pick-root"/.test(rail) && /id="q"/.test(chrome),
-    "1E CONTROL: the chrome above it keeps New catalog beside Search catalogs and the rail holds Bring in your replies and Open a folder");
+    "1E CONTROL: the chrome above it holds Search catalogs alone (the band's plus makes a catalog) and the rail holds Bring in your replies and Open a folder");
 
   const syncs = asked.filter((a) => a[0] === "sync");
   check(syncs.length === 4 && syncs.every((a) => a[1] === P.node("#main .projects>.none")),

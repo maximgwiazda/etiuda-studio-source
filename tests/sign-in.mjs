@@ -2776,15 +2776,18 @@ await leg("si53", async () => {
     + " the left column; in Account before the buttons at the card's full measure, 10 px below: " + Object.entries(parts).map(([k, v]) => k + "=" + v).join(" "));
 });
 
-/* ---- si54, the Team screen's panes stand one above the other to 2008px where the corner discs take 132 or 186px ------- */
+/* ---- si54, the Team screen's panes stand one above the other to 2008, 2062 or 2116px where the corner's discs take 186, 240 or 294px ------- */
 await leg("si54", async () => {
   const css = fs.readFileSync(path.join(ROOT, "ui", "index.html"), "utf8").replace(/\s+/g, " ");
-  /* The gutter is --disc-room, 78px with one disc and 132 or 186px with two or three, so the two-pane split at 1900px, measured
-     with one disc, needs up to 108px more with three: the panes stay stacked to 2008px there. */
-  const stacked = css.indexOf("@media (min-width:1900px) and (max-width:2007.98px){ body:is([data-discs=\"2\"],[data-discs=\"3\"]) .cols.team-cols{grid-template-columns:minmax(0,1fr)} }") >= 0;
-  const rooms = ["1", "2", "3"].map((n) => { const m = new RegExp('body\\[data-discs="' + n + '"\\]\\{--disc-room:(\\d+)px\\}').exec(css); return m ? Number(m[1]) : NaN; });
-  const enough = 1900 + (rooms[2] - rooms[0]) <= 2008;
-  check(stacked && enough, "si54 with two or three corner discs the Team screen's panes stand one above the other below 2008px, the 1900px split"
+  /* The gutter is --disc-room: 186, 240 or 294px with three, four or five discs (Import, Publish and New card always stand; Review and the
+     backup disc come and go), against the 78px of the one disc the two-pane split at 1900px was measured with: it needs 108, 162 or 216px
+     more window, so the panes stay stacked to 2008, 2062 or 2116px. */
+  const stacked = css.indexOf("@media (min-width:1900px) and (max-width:2007.98px){ body:is([data-discs=\"3\"],[data-discs=\"4\"],[data-discs=\"5\"]) .cols.team-cols{grid-template-columns:minmax(0,1fr)} }") >= 0
+    && css.indexOf("@media (min-width:1900px) and (max-width:2061.98px){ body:is([data-discs=\"4\"],[data-discs=\"5\"]) .cols.team-cols{grid-template-columns:minmax(0,1fr)} }") >= 0
+    && css.indexOf("@media (min-width:1900px) and (max-width:2115.98px){ body[data-discs=\"5\"] .cols.team-cols{grid-template-columns:minmax(0,1fr)} }") >= 0;
+  const rooms = ["3", "4", "5"].map((n) => { const m = new RegExp('body\\[data-discs="' + n + '"\\]\\{--disc-room:(\\d+)px\\}').exec(css); return m ? Number(m[1]) : NaN; });
+  const enough = [2008, 2062, 2116].every((w, i) => 1900 + (rooms[i] - 78) <= w);
+  check(stacked && enough, "si54 with three, four or five corner discs the Team screen's panes stand one above the other below 2008, 2062 and 2116px, the 1900px split"
     + " being measured with one disc's 78px: stacked=" + stacked + " rooms=" + JSON.stringify(rooms) + " enough=" + enough);
 });
 

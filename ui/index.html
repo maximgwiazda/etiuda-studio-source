@@ -113,9 +113,20 @@ body:not(.s-max) #winMax .win-g-restore,body.s-max #winMax .win-g-max{display:no
 .tab.add{max-width:34px;justify-content:center;padding:0;width:34px}
 
 /* ---- The header chrome, the row below the band, opaque as in the engine. ---- */
-.chrome{position:relative;z-index:2;flex:0 0 auto;background:var(--chrome);
+/* THE ROW'S BOX IS .topline, AND .chrome IS ITS PAINTED HALF (the search, the choices of the screen): the account, theme and menu buttons
+   are static in the row's right end (#tbtns), so a paint of .chrome never takes them down, and they stand on every screen, those with
+   no chrome of their own included. .chrome takes no box of its own, so its children are the row's items. */
+.topline{position:relative;z-index:2;flex:0 0 auto;background:var(--chrome);
   border-bottom:1px solid var(--line);padding:9px var(--app-pad);
-  display:flex;align-items:center;gap:10px;flex-wrap:nowrap}
+  display:flex;align-items:center;gap:10px;flex-wrap:nowrap;min-height:51px;box-sizing:border-box}
+.chrome{display:contents}
+.tbtns{display:flex;align-items:center;gap:6px;flex:0 0 auto;margin-left:auto}
+/* THE TOOLBAR'S BUTTONS ARE THE DESK'S (.btn.icbtn there): a faint grey ground, no edge, the corners of a control, and under the pointer
+   or the keyboard the accent in the glyph on its soft ground. The accent is Studio's violet. */
+.tbtn{height:32px;min-width:38px;padding:0 11px;border:1px solid transparent;border-radius:var(--radius-sm);
+  background:color-mix(in srgb,var(--ink) 4%,transparent);color:var(--ink);font:13px var(--sans);
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;cursor:default}
+.tbtn .ic{width:16px;height:16px}
 .field{height:32px;border:1px solid var(--field-line);border-bottom-color:var(--line-strong);
   border-radius:var(--radius-sm);background:var(--field);padding:0 10px;display:flex;
   align-items:center;color:var(--dim);font-size:13.5px;min-width:0}
@@ -379,7 +390,6 @@ span.cyc-n{color:#9aa4b2;font-size:12px;padding-top:2px}
 .menu-list .mi .ic{width:16px;height:16px;color:var(--dim);flex:0 0 auto}
 .menu-list .mi small{margin-left:auto;padding-left:14px;font:11.5px var(--mono);color:var(--dim)}
 .menu-list hr{border:0;border-top:1px solid var(--line);margin:3px 2px}
-#btnMenu[aria-expanded="true"]{background:rgba(var(--band-ink-rgb),.22)}
 /* AN OBJECT'S MENU (board 901) is the same list, hung at the pointer or under the object rather than under a button; a
    row with no glyph keeps the glyph's room so the words line up, and the key that does the same sits at the right. */
 .ctx-menu{min-width:220px;outline:none}
@@ -548,6 +558,7 @@ body.s-host .band button,body.s-host .band .tab,body.s-host .band input{
 .btn:hover,.btn:focus-visible{background:color-mix(in srgb,var(--ink) 6%,var(--panel))}
 .btn.solid:hover,.btn.solid:focus-visible{background:color-mix(in srgb,#fff 12%,var(--solid))}
 .bbtn:hover,.bbtn:focus-visible{background:rgba(var(--band-ink-rgb),.24)}
+.tbtn:hover,.tbtn:focus-visible,.tbtn[aria-expanded="true"]{color:var(--mark);background:var(--sx-sel-bg)}
 .wbtn:hover,.wbtn:focus-visible{background:rgba(var(--band-ink-rgb),.16)}
 .wbtn.x:hover,.wbtn.x:focus-visible{background:#c42b1c}
 .rail a:hover,.rail a:focus-visible{background:color-mix(in srgb,var(--ink) 5%,var(--chrome))}
@@ -1108,10 +1119,14 @@ stroke-dasharray='7 5'/></svg>")}
   font:12.5px var(--sans);color:var(--ink);white-space:nowrap;vertical-align:baseline}
 .path-chip svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linejoin:round;color:var(--dim)}
 /* THE COUNTING PERIOD (board 559). The band sits under the head. Presets take Settings' tint.
-   Handle and fill positions are percentages, set from the page. */
-.sp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 18px 10px;margin:12px 0 0;
+   Handle and fill positions are percentages, set from the page.
+   THE PANEL IS THE SECTION'S, NOT THE CLASS'S: "sp" is also the name four spacers and a line of text go by (the status bar's,
+   the update strip's, the publishing head's, a note's), and the panel's white ground, edge, corners and padding went to each of
+   them, so the status bar carried a white rounded band across all its free width, like the top of a window coming up from below.
+   The rule names the element it is for. */
+section.sp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 18px 10px;margin:12px 0 0; /* plant:sm18-panel */
   box-shadow:0 1px 2px rgba(15,23,42,.04)}
-:root[data-theme=dark] .sp{background:var(--panel-raised)}
+:root[data-theme=dark] section.sp{background:var(--panel-raised)}
 .sp-top{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;min-width:0}
 .sp-lbl{font:600 11.5px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);flex:0 0 auto}
 .sp-presets{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
@@ -1340,6 +1355,9 @@ table.map td.miss{overflow-wrap:anywhere}
   color:var(--ink)}
 /* A3, THE FIRST DISC'S EFFECT: nothing moves, nothing is added, the edge simply closes. */
 .disc.live{border-style:solid;border-color:var(--mark);color:var(--mark)}
+/* PUBLISH IS THE MAIN ACT, AS IT WAS THE ROW'S FILLED BUTTON: its disc is filled, the row's own button's ground and lettering. */
+.disc.solid{border:1px solid var(--solid);background:var(--solid);color:#fff}
+.disc.solid:hover,.disc.solid:focus-visible{background:color-mix(in srgb,#fff 12%,var(--solid));color:#fff}
 /* C1, WHAT A DISC THAT COMES AND GOES DOES WHEN IT IS NOT NEEDED: the engine's own answer for `.fab-clear`,
    its rule and its curve unchanged. Faded rather than display-toggled, so that a proposal
    arriving arrives; invisible it takes no focus and no click, which ui/app.js says a second
@@ -1367,7 +1385,7 @@ table.map td.miss{overflow-wrap:anywhere}
    need no such rule and were measured too: at seven of them nothing overlapped at all, and what
    a person scrolls under the corner they can scroll back out, which is the engine's own bargain
    with its `.fab`. */
-.row2.acts{padding-right:120px}
+.row2.acts{padding-right:228px}
 
 /* ---- retired cards, a card's history and the undo bar (board 834, step 6, C07) ----
    Claudia's sheet of 2026-09-29, C07-1 to C07-3: no new colour, the retired mark is the awaiting chip's dashed edge. */
@@ -1826,7 +1844,7 @@ input.vr-big{width:15em}
 .places .face{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:var(--bg);
   display:flex;flex-direction:column;pointer-events:none}
 .places .face>.work{flex:1 1 auto;min-height:0}
-.places .face.blank>.chrome{height:51px}
+.places .face.blank>.topline{height:51px}
 /* A project not visited since the launch is a plain window under its name, the name drawn to read at a place's scale. */
 .places .face.blank h1{font-size:64px;margin-top:24px;color:var(--dim)}
 .places .cap{position:absolute;display:grid;gap:3px;min-width:0;pointer-events:none}
@@ -2269,12 +2287,12 @@ html.carrying,html.carrying *{cursor:default!important;user-select:none!importan
    22 px from the edge, 44 px a disc with 10 px between, and 12 px more; the screen's own padding, both panes and the stacked
    form alike, so every row-end button ends left of the discs' column and text and tables end with it. paintDiscs counts the
    discs standing into body's data-discs; a disc not shown keeps its place, so the count runs to the leftmost one shown. */
-body[data-discs="1"]{--disc-room:78px}
-body[data-discs="2"]{--disc-room:132px}
 body[data-discs="3"]{--disc-room:186px}
+body[data-discs="4"]{--disc-room:240px}
+body[data-discs="5"]{--disc-room:294px}
 #main > .pad.desks-screen{padding-right:max(var(--app-pad),var(--disc-room,0px))}
-body.bd-on .row2.acts{padding-right:174px}
-body.bd-on .bulk{padding-right:calc(var(--app-pad) + 174px)}
+body.bd-on .row2.acts{padding-right:282px}
+body.bd-on .bulk{padding-right:calc(var(--app-pad) + 282px)}
 /* ---- THE PUBLISHING WINDOW: the press (decisions 2026-10-07 00:49, 22:15 and 23:49; Claudia's sheet and Claudia gamma's
    map, ui/app.js coverHtml and deskMap). A mode of the whole window under the band, carried by the cover's host: violet is
    the edition, the cobalt square a desk's, every neutral the sheet's, every length a tier. ---- */
@@ -2624,8 +2642,13 @@ a.sx-crumb:hover,a.sx-crumb:focus-visible{color:var(--ink);text-decoration-color
 .sx-crumb+h2{margin-top:10px}
 .sx-page h2{font:300 30px/1.15 var(--sans-display);margin:0 0 4px}
 .sx-page .lede{margin:0 0 20px;font-size:14px}
-.sx-all{display:flex;flex-direction:column;gap:26px}
-.sx-block{min-width:0}
+/* ALL SETTINGS STANDS IN COLUMNS WHERE THE WINDOW IS WIDE, as the desk's does: one below 1100 px of window, two
+   from there, three from 1700, by the window's width and not the page's, for the reason the desk gives: the columns' own width is
+   what a query on the page would measure. A section is never cut across a column. */
+.sx-all{display:block;columns:1;column-gap:28px;width:100%} /* plant:sm16-cols */
+@media (min-width:1100px){ .sx-all{columns:2} }
+@media (min-width:1700px){ .sx-all{columns:3} }
+.sx-block{min-width:0;break-inside:avoid;margin:0 0 26px}
 .sx-block>h3{font:600 15px/1.3 var(--sans);letter-spacing:0;text-transform:none;color:var(--ink);margin:0 0 10px;width:fit-content}
 .sx-block>h3 button{display:inline;font:inherit;color:inherit;border:0;padding:0;text-align:left;background:var(--bg);box-shadow:0 0 0 3px var(--bg);-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .sx-block>h3 button:hover,.sx-block>h3 button:focus-visible{color:var(--mark)}
@@ -2740,6 +2763,7 @@ a.sx-crumb:hover,a.sx-crumb:focus-visible{color:var(--ink);text-decoration-color
 :root[data-theme=light] .pane{filter:drop-shadow(0 1px 2px rgba(15,23,42,.05))}
 .cell-chip{display:inline-flex;align-items:center;padding:1px 9px;border-radius:7px;background:var(--chip);color:var(--chip-ink);font-size:12.5px;white-space:nowrap}
 .cell-chip.full{background:var(--chip-on);color:var(--mark);font-weight:600}
+.cell-chip .ic{width:14px;height:14px}
 .cell-chip.empty{background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--dim)}
 .chrome .seg{border-radius:9px}
 .chrome .seg span{border-radius:7px}
@@ -2903,7 +2927,6 @@ input.field.si-link-f{flex:1 1 auto;min-width:0;width:auto;height:28px;font:400 
 .si-pop .ln .ic{width:16px;height:16px}
 .si-pop .si-acts{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .si-pop .si-id code{display:block;font:12.5px var(--mono);color:var(--dim)}
-#btnAcct[aria-expanded="true"]{box-shadow:0 0 0 2px color-mix(in srgb,var(--band-ink) 40%,transparent)}
 /* A paid act on a Studio nobody signed in to: one sentence in the screen's own type, its first half in ink at 600 and the second
    dimmed, then Sign in. No colour, icon or box. */
 #main .si-paid{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap;margin:0 0 14px;font-size:13.5px;color:var(--dim)}
@@ -2951,9 +2974,11 @@ input.field.si-link-f{flex:1 1 auto;min-width:0;width:auto;height:28px;font:400 
    you publish stand one above the other until a pane can hold it: two panes only from 1900px. */
 .cols.team-cols{grid-template-columns:minmax(0,1fr)}
 @media (min-width:1900px){ .cols.team-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} }
-/* 1900px is measured with one corner disc's 78px; two or three take 132 or 186px (--disc-room), so there the panes stay stacked
-   to 2008px. */
-@media (min-width:1900px) and (max-width:2007.98px){ body:is([data-discs="2"],[data-discs="3"]) .cols.team-cols{grid-template-columns:minmax(0,1fr)} }
+/* 1900px was measured with one corner disc's 78px; the corner now always holds three discs or more (186, 240 or 294px of --disc-room: Import,
+   Publish and New card, Review beside them, the backup disc beyond), and the panes need that much more window, so they stay stacked to 2008, 2062 and 2116px. */
+@media (min-width:1900px) and (max-width:2007.98px){ body:is([data-discs="3"],[data-discs="4"],[data-discs="5"]) .cols.team-cols{grid-template-columns:minmax(0,1fr)} }
+@media (min-width:1900px) and (max-width:2061.98px){ body:is([data-discs="4"],[data-discs="5"]) .cols.team-cols{grid-template-columns:minmax(0,1fr)} }
+@media (min-width:1900px) and (max-width:2115.98px){ body[data-discs="5"] .cols.team-cols{grid-template-columns:minmax(0,1fr)} }
 #main .team-cols table.desks .ksig,#main .team-cols table.desks .ksig .mono,#main .team-cols table.desks th{white-space:normal}
 #main .team-cols table.desks td .btn{margin:2px 0}
 /* The key cell of Members never breaks, whatever the width; the headings and the other words still wrap between words. */
@@ -3026,9 +3051,6 @@ input.field.si-link-f{flex:1 1 auto;min-width:0;width:auto;height:28px;font:400 
     <button class="bbtn" id="btnPlaces" aria-haspopup="dialog" aria-expanded="false"></button>
     <div class="tabs" id="tabs"></div>
     <span class="spacer"></span>
-    <button class="bbtn" id="btnAcct" aria-haspopup="dialog" aria-expanded="false" hidden></button>
-    <button class="bbtn" id="btnTheme"></button>
-    <button class="bbtn" id="btnMenu" aria-haspopup="menu" aria-expanded="false"></button>
     <div class="wctl">
       <button class="wbtn" id="winMin">&#8212;</button>
       <button class="wbtn" id="winMax"><svg class="ic win-g-max" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="5.5" y="5.5" width="9" height="9" rx="1"/></svg><svg class="ic win-g-restore" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4.5" y="7.5" width="8" height="8" rx="1"/><path d="M7.5 5.5h6a1 1 0 0 1 1 1v6"/></svg></button>
@@ -3073,7 +3095,14 @@ input.field.si-link-f{flex:1 1 auto;min-width:0;width:auto;height:28px;font:400 
       <button type="button" class="btn sm primary" id="pressedArchive" data-act="pressed-archive"></button>
     </div>
   </div>
-  <div class="chrome" id="chrome"></div>
+  <div class="topline" id="topline">
+    <div class="chrome" id="chrome"></div>
+    <div class="tbtns" id="tbtns">
+      <button class="tbtn" id="btnAcct" aria-haspopup="dialog" aria-expanded="false" hidden></button>
+      <button class="tbtn" id="btnTheme"></button>
+      <button class="tbtn" id="btnMenu" aria-haspopup="menu" aria-expanded="false"></button>
+    </div>
+  </div>
   <div class="work">
     <nav class="rail" id="rail"></nav>
     <div class="main" id="main"></div>
@@ -3093,6 +3122,8 @@ input.field.si-link-f{flex:1 1 auto;min-width:0;width:auto;height:28px;font:400 
             tabindex="-1" aria-hidden="true"></button>
     <button type="button" class="disc q" id="discReview" data-act="disc-review"
             tabindex="-1" aria-hidden="true"></button>
+    <button type="button" class="disc" id="discImport" data-act="import"></button>
+    <button type="button" class="disc solid" id="discPublish" data-act="publish"></button>
     <button type="button" class="disc" id="discNew" data-act="card-new"></button>
   </div>
   <!-- THE MARKER PEN'S PANEL (board 604). Static, like the corner's discs and for the same reason:

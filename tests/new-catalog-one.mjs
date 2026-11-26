@@ -8,7 +8,7 @@
  * The page runs on tests/page-stand-in.mjs over the real verbs of src/studio.mjs on a scratch root, as tests/plus-tab.mjs
  * does; a press is the act the markup carries, called.
  *
- *   nco1  the Library carries exactly one New catalog press, beside Search catalogs, and its own bar none
+ *   nco1  the Library's row carries no New catalog press (the band's "+" is the one; it was beside Search catalogs until 26 November), and its own bar none
  *   nco2  New catalog opens a tab named New catalog, in front, with no cover and nothing on disk
  *   nco3  "+" opens the same tab, and the two never make two: pressed one after the other there is one such tab
  *   nco4  the page offers what the window offered: the heading, the lede, the name, the declared languages with the pin's
@@ -113,8 +113,8 @@ async function main(argv) {
   const chrome = home.node("#chrome").innerHTML, main1 = home.node("#main").innerHTML;
   const libActs = (/<div class="lib-bar-acts">([\s\S]*?)<\/div>/.exec(main1) || [])[1] || "";
   const nNew = count(chrome + main1, /data-act="new"/g);
-  check(nNew === 1 && /id="q"[\s\S]*data-act="new"/.test(chrome) && !/data-act="new"/.test(libActs) && /data-act="bring"/.test(libActs),
-    "nco1 the Library carries exactly one New catalog press, beside Search catalogs, and its own bar none: "
+  check(nNew === 0 && /id="q"/.test(chrome) && !/data-act="new"/.test(libActs) && /data-act="bring"/.test(libActs),
+    "nco1 the Library's row carries no New catalog press, the band's plus makes the catalog, and its own bar none: "
     + nNew + " in all, bar " + JSON.stringify((libActs.match(/data-act="[^"]+"/g) || []).join()));
 
   /* ---- 2. NEW CATALOG OPENS A TAB --------------------------------------------------------------- */

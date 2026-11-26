@@ -212,8 +212,9 @@ async function teamHome() {
   P.paint();
   const homeRail = home.node("#rail").innerHTML;
   const teamRailAt = homeRail.indexOf('data-act="home" data-v="team"');
-  const catGrpAt = homeRail.indexOf("Overview");
-  const hasHomeRow = teamRailAt >= 0 && catGrpAt > teamRailAt;
+  /* Overview is the rail's first row since 26 November, Team the second, the catalogs' own group (Library) after them. */
+  const catGrpAt = homeRail.indexOf("Library"), overviewAt = homeRail.indexOf('data-act="home" data-v="overview"');
+  const hasHomeRow = teamRailAt >= 0 && overviewAt >= 0 && overviewAt < teamRailAt && catGrpAt > teamRailAt;
   await P.ACTS.home({ getAttribute: (k) => (k === "data-v" ? "team" : null) });
   await new Promise((r) => setTimeout(r, 30));
   const oneHtml = home.node("#main").innerHTML;
@@ -247,7 +248,7 @@ async function teamHome() {
 
   const f = { hasHomeRow, noStripForOne, stripTwo, noDesksSection, oneRow, noSectionInMain, ledToTeam2 };
   check(Object.keys(f).every((k) => f[k]),
-    "teamHome Team is on the home tab above catalogs with no chooser for one team, a strip for two, and a catalog's sidebar keeps one row leading to its team: "
+    "teamHome Team is on the home tab under Overview and above the catalogs with no chooser for one team, a strip for two, and a catalog's sidebar keeps one row leading to its team: "
     + JSON.stringify(f));
 }
 
@@ -1216,13 +1217,13 @@ async function main(argv) {
   Object.assign(P.S, { open, projects: [{ id: catId, name: open.name, dir: open.dir, editions: open.editions, rev: open.project.rev }],
     screen: "projects", home: "team", teamDir: open.dir, lang: "en", host: { tour: { offered: true } } });
   const mainHtml = () => home.node("#main").innerHTML;
-  await leg("td4a the rail carries Team first on the home tab above Overview, its number the desks asking to join, and the"
+  await leg("td4a the rail carries Overview first on the home tab and Team under it, its number the desks asking to join, and the"
     + " screen reads the folder on the way in (red where there is no Team screen)", async () => {
     answer = facts({ requests: [ASKS] });
     await P.desksLoad();
     const rail = home.node("#rail").innerHTML;
     const i = rail.indexOf('data-v="team"'), j = rail.indexOf('data-v="overview"');
-    return i > 0 && j > i && /data-v="team"[^>]*><span class="rl">.*?Team<\/span><span class="num">1</.test(rail)
+    return i > 0 && j >= 0 && j < i && /data-v="team"[^>]*><span class="rl">.*?Team<\/span><span class="num">1</.test(rail)
       && asked.some(a => a[0] === "desks" && a[1] === open.dir);
   });
   await leg("td4b the screen names the folder, lists the roster by the names the lead gave with each desk's own beneath and"

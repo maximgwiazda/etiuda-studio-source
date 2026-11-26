@@ -120,8 +120,9 @@ if (want("wlf2")) {
     h.page.paintTabs();
     return textOf(h.node("#tabs").innerHTML);
   };
-  const saysEn = tab("en", "team").startsWith("Team") && tab("en", "library").startsWith("Library") && tab("en", "overview").startsWith("Overview");
-  const saysPl = tab("pl", "team").startsWith("Zespół") && tab("pl", "library").startsWith("Biblioteka") && tab("pl", "overview").startsWith("Przegląd");
+  /* The home tab keeps the name Overview whichever of its three places is chosen (Max, 26 November); the rail names the place. */
+  const saysEn = ["team", "library", "overview"].every((h) => tab("en", h).startsWith("Overview"));
+  const saysPl = ["team", "library", "overview"].every((h) => tab("pl", h).startsWith("Przegląd"));
   check(same && undeclared.length === 0 && saysEn && saysPl,
     "wlf2 no T() of ui/app.js has an argument the language scan cannot read but the twenty polish.mjs 4a names, every literal is a pair, and the first tab says its screen in both languages",
     { indirectNow: lit.indirect.filter((x) => INDIRECT.indexOf(x) < 0), undeclared: undeclared.slice(0, 3), saysEn, saysPl });

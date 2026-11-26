@@ -185,7 +185,7 @@ async function walkEverything(page, projectDir) {
 
   await grab("projects");
   /* New catalog is a page in its own tab since board 1019 (12); the walk keeps the name it had as a cover. */
-  await press('[data-act="new"]', 350);
+  await press('[data-act="new-tab"]', 350);
   await settleOn(page, '!!document.querySelector("#main .newcat")', { bound: 30000 });
   await grab("cover-new");
   await press('#main .newcat [data-act="close-screen"][data-v="new"]', 300);

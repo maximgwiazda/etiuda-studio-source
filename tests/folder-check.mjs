@@ -136,7 +136,10 @@ async function main() {
   open.project = Object.assign({}, open.project, { folder: null });
   Object.assign(P.S, { open, screen: "project", section: "cards", lang: "en" });
   P.paintChrome();
+  P.paintDiscs();
   const chrome = node("#chrome").innerHTML;
+  /* Publish is an action button since 26 November: its disc says Publish and the rev it makes. */
+  const discPub = node("#discPublish").attrs["aria-label"] || "";
   P.S.screen = "projects"; P.S.home = "team"; P.S.teamDir = dir; P.S.desks = { folder: null, signing: "", file: "none", inside: false, team: null, requests: [] };
   P.paintMain();
   const desksHtml = node("#main").innerHTML;
@@ -156,12 +159,12 @@ async function main() {
   Object.assign(PA.S, { open: await S.openProject(dir), screen: "project", section: "cards", lang: "en", stats: { folder: "x" }, desks: { folder: "x" } });
   try { await PA.ACTS["settings-folder"](); } catch { /* a repaint the stand-in cannot finish; the state is what is read */ }
   const reread = [PA.S.stats, PA.S.desks];
-  check(/<button class="btn solid" data-act="publish">[^]*?Publish/.test(chrome) && !/data-act="settings-folder"/.test(chrome)
+  check(/^Publish/.test(discPub) && !/data-act="publish"/.test(chrome) && !/data-act="settings-folder"/.test(chrome)
         && /no folder chosen yet/.test(desksHtml)
         && /<button class="btn sm" data-act="settings-folder">[^]*?Choose the folder your team reads from/.test(desksHtml)
         && /Teammates, and what each one holds, appear here once the catalog has a folder they read from/.test(desksHtml)
         && statsHtml.join(",") === "true,true,true" && reread[0] === null && reread[1] === null,
-    "fc5 with no folder the main button is Publish, the Desks screen's dead end and each of"
+    "fc5 with no folder the main action button is Publish, the Desks screen's dead end and each of"
     + " Statistics' views still offer the folder press, and a folder chosen sends both screens to be read again: " + JSON.stringify([statsHtml, reread]));
 
   const STATS_EMPTY = "Statistics counts what teammates' desks report through the team's folder. Once the folder is chosen, the counting period appears here, and the figures with the first answers.";

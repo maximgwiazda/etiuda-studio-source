@@ -184,7 +184,8 @@ async function main() {
     h.page.paint();
     /* Since board 902 the chip may carry its dated edition in a title. */
     const tab = (/<span class="rev"[^>]*>([^<]*)<\/span>/.exec(h.node("#tabs").innerHTML) || [])[1];
-    const pub = (/<span class="count">([^<]*)<\/span>/.exec(h.node("#chrome").innerHTML) || [])[1];
+    /* the Publish disc says "Publish, rev N" in either language: the rev is what follows the comma */
+    const pub = (/^[^,]+, (.*)$/.exec(h.node("#discPublish").attrs["aria-label"] || "") || [])[1];
     return { tab, pub };
   };
   const en = chips("en"), pl = chips("pl");
